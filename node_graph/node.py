@@ -52,7 +52,7 @@ class Node:
     node_type: str = "Normal"
     inner_id: int = 0
     nodetree_uuid: str = ""
-    platform: str = "scinode"
+    platform: str = "node_graph"
     catalog: str = "Node"
     args = []
     kwargs = []
@@ -236,7 +236,7 @@ class Node:
             ctrl_output_sockets = self.ctrl_output_sockets_to_dict()
             executor = self.executor_to_dict()
             data = {
-                "version": "scinode@{}".format(__version__),
+                "version": "node_graph@{}".format(__version__),
                 "uuid": self.uuid,
                 "name": self.name,
                 "inner_id": self.inner_id,
