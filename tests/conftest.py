@@ -52,23 +52,17 @@ def decorated_myadd_group(decorated_myadd):
     """Generate a decorated node group for test."""
     myadd = decorated_myadd
 
-    @node.group(identifier="MyAddGroup")
-    def myaddgroup():
+    @node.group(identifier="MyAddGroup", outputs=[("add3.result", "result")])
+    def myaddgroup(x, y):
         nt = NodeGraph()
         add1 = nt.nodes.new(myadd, "add1")
-        add1.set({"t": 3, "y": 2})
+        add1.set({"t": 3, "x": x, "y": 2})
         add2 = nt.nodes.new(myadd, "add2")
-        add2.set({"y": 3})
+        add2.set({"x": y, "y": 3})
         add3 = nt.nodes.new(myadd, "add3")
         add3.set({"t": 2})
         nt.links.new(add1.outputs[0], add3.inputs[0])
         nt.links.new(add2.outputs[0], add3.inputs[1])
-        nt.group_properties = [
-            ("add1.t", "t1"),
-            ("add2.t", "t2"),
-        ]
-        nt.group_inputs = [("add1.x", "x"), ("add2.x", "y")]
-        nt.group_outputs = [("add3.result", "result")]
         return nt
 
     return myaddgroup
