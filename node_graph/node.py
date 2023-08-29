@@ -43,6 +43,7 @@ class Node:
     >>> nt.nodes.append(node)
     """
 
+    node_entry="node_graph.node"
     socket_entry = "node_graph.socket"
     property_entry = "node_graph.property"
     
@@ -415,63 +416,16 @@ class Node:
                     self.outputs[i].uuid = data["outputs"][i]["uuid"]
 
     @classmethod
-    def update_from_yaml(cls, filename=None, string=None):
-        """update db node from yaml file.
-
-        Args:
-            filename (str, optional): _description_. Defaults to None.
-            string (str, optional): _description_. Defaults to None.
-
-        Returns:
-            node: _description_
-        """
-        import yaml
-        from node_graph.utils.node import yaml_to_dict
-        from pprint import pprint
-
-        # load data
-        if filename:
-            with open(filename, "r") as f:
-                ndata = yaml.safe_load(f)
-        elif string:
-            ndata = yaml.safe_load(string)
-        else:
-            raise Exception("Please specific a filename or yaml string.")
-        ndata = yaml_to_dict(ndata)
-        nt = cls.load(ndata["uuid"])
-        return nt
-
-    @classmethod
     def load(cls, uuid):
         """Load Node data from database."""
-        from node_graph.utils.node import get_node_data
-
-        if "-" in str(uuid):
-            ndata = get_node_data({"uuid": uuid})
-        else:
-            ndata = get_node_data({"index": uuid})
-        # cls.pre_load(ndata)
-        node = cls.from_dict(ndata)
-        return node
+        
 
     @classmethod
-    def new(cls, identifier, name=None, node_entry="node_graph.node"):
+    def new(cls, identifier, name=None):
         """Create a node from a identifier."""
-        import difflib
-        from node_graph.utils import get_entries
-        node_pool = get_entries(node_entry)
-
-        if identifier not in node_pool:
-            items = difflib.get_close_matches(identifier, node_pool)
-            if len(items) == 0:
-                msg = "Identifier: {} is not defined.".format(identifier)
-            else:
-                msg = "Identifier: {} is not defined. Do you mean {}".format(
-                    identifier, ", ".join(items)
-                )
-            raise Exception(msg)
-        NodeClass = node_pool[identifier]
-        node = NodeClass(name=name)
+        from node_graph.utils import get_entry_by_identifier
+        ItemClass = get_entry_by_identifier(identifier, cls.node_entry)
+        node = ItemClass(name=name)
         return node
 
     def copy(self, name=None, nodetree=None, is_ref=False):

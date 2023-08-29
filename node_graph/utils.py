@@ -21,6 +21,20 @@ def get_entries(entry_point_name):
         register(pool, new_entries)
     return pool
 
+def get_entry_by_identifier(identifier, entry_point):
+    import difflib
+    node_pool = get_entries(entry_point)
+    if identifier not in node_pool:
+        items = difflib.get_close_matches(identifier, node_pool)
+        if len(items) == 0:
+            msg = "Identifier: {} is not defined.".format(identifier)
+        else:
+            msg = "Identifier: {} is not defined. Do you mean {}".format(
+                identifier, ", ".join(items)
+            )
+        raise Exception(msg)
+    NodeClass = node_pool[identifier]
+    return NodeClass
 
 def yaml_to_dict(data):
     """Convert yaml data into dict."""

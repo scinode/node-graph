@@ -153,7 +153,6 @@ def decorator_check_identifier_name(func):
         import difflib
 
         identifier = args[1]
-        # print("identifier: ", identifier)
         if isinstance(identifier, str) and identifier not in args[0].pool:
             items = difflib.get_close_matches(identifier, args[0].pool)
             if len(items) == 0:
@@ -202,7 +201,7 @@ class NodeCollection(Collection):
             ItemClass = identifier.node
         else:
             raise Exception(f"Identifier {identifier} is not a node or node name.")
-        item = ItemClass(inner_id, name=name, uuid=uuid)
+        item = ItemClass(inner_id=inner_id, name=name, uuid=uuid)
         self.append(item)
         item.set(kwargs)
         return item
@@ -228,8 +227,6 @@ class PropertyCollection(Collection):
 
     def __init__(self, parent=None, entry_point = "node_graph.property") -> None:
         self.pool = get_entries(entry_point_name=entry_point)
-        print("pool: ", self.pool)
-        print("entry_point: ", entry_point)
         super().__init__(parent)
 
     @decorator_check_identifier_name

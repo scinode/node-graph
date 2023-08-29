@@ -1,14 +1,9 @@
 class NodeProperty:
     """Node property.
 
-    When variable is saved to a database, the type of the variable will
-    be lost. We use this Property Class to label the type of the data,
-    thus we can restore the data from database.
-
-    The identifier is also helpful for the Editor to show the data in the
-    GUI.
+    Property is the data which can be shown in the GUI.
     """
-
+    property_entry="node_graph.property"
     identifier = "NodeProperty"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -78,22 +73,11 @@ class NodeProperty:
         return p
 
     @classmethod
-    def new(cls, identifier, name=None, property_entry="node_graph.property", data={}):
+    def new(cls, identifier, name=None, property_entry=None, data={}):
         """Create a node from a identifier."""
-        from node_graph.utils import get_entries
-        import difflib
-        property_pool = get_entries(property_entry)
-
-        if identifier not in property_pool:
-            items = difflib.get_close_matches(identifier, property_pool)
-            if len(items) == 0:
-                msg = "Identifier: {} is not defined.".format(identifier)
-            else:
-                msg = "Identifier: {} is not defined. Do you mean {}".format(
-                    identifier, ", ".join(items)
-                )
-            raise Exception(msg)
-        ItemClass = property_pool[identifier]
+        from node_graph.utils import get_entry_by_identifier
+        property_entry = property_entry if property_entry else cls.property_entry
+        ItemClass = get_entry_by_identifier(identifier, property_entry)
         item = ItemClass(name, **data)
         return item
 

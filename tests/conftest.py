@@ -1,8 +1,6 @@
 import pytest
-from node_graph import node
+from node_graph.decorator import node
 from node_graph import NodeGraph
-
-
 
 @pytest.fixture
 def nt():
@@ -14,8 +12,6 @@ def nt():
     nt.links.new(float1.outputs[0], add1.inputs["y"])
     nt.links.new(add1.outputs[0], add2.inputs["y"])
     return nt
-
-
 
 @pytest.fixture
 def nt_group():
@@ -57,20 +53,20 @@ def decorated_myadd_group(decorated_myadd):
     @node.group(identifier="MyAddGroup")
     def myaddgroup():
         nt = NodeGraph()
-        add1 = nt.nodes.new(myadd.identifier, "add1")
+        add1 = nt.nodes.new(myadd, "add1")
         add1.set({"t": 3, "y": 2})
-        add2 = nt.nodes.new(myadd.identifier, "add2")
+        add2 = nt.nodes.new(myadd, "add2")
         add2.set({"y": 3})
-        add3 = nt.nodes.new(myadd.identifier, "add3")
+        add3 = nt.nodes.new(myadd, "add3")
         add3.set({"t": 2})
         nt.links.new(add1.outputs[0], add3.inputs[0])
         nt.links.new(add2.outputs[0], add3.inputs[1])
         nt.group_properties = [
-            ("add1", "t", "t1"),
-            ("add2", "t", "t2"),
+            ("add1.t", "t1"),
+            ("add2.t", "t2"),
         ]
-        nt.group_inputs = [("add1", "x", "x"), ("add2", "x", "y")]
-        nt.group_outputs = [("add3", "result", "result")]
+        nt.group_inputs = [("add1.x", "x"), ("add2.x", "y")]
+        nt.group_outputs = [("add3.result", "result")]
         return nt
 
     return myaddgroup
@@ -82,28 +78,28 @@ def node_with_decorated_node(decorated_myadd):
 
     @node(
         identifier="node_with_decorated_node",
-        args=["x", "y"],
         inputs=[["Float", "x"], ["Float", "y"]],
         outputs=[["General", "result"]],
     )
     def node_with_decorated_node(x, y):
         nt = NodeGraph("node_in_decorated_node")
-        add1 = nt.nodes.new(decorated_myadd.identifier, x=x)
-        add2 = nt.nodes.new(decorated_myadd.identifier, y=y)
+        add1 = nt.nodes.new(decorated_myadd, x=x)
+        add2 = nt.nodes.new(decorated_myadd, y=y)
         nt.links.new(add1.outputs[0], add2.inputs[0])
         nt.launch(wait=True)
         return add2.results[0]["value"]
 
+    return node_with_decorated_node
 
 @pytest.fixture
 def nt_decorator(decorated_myadd):
     """A test node_graph."""
     nt = NodeGraph(name="test_decorator_node")
     float1 = nt.nodes.new("TestFloat", "float1", value=3.0)
-    add1 = nt.nodes.new(decorated_myadd.identifier, "add1", x=2)
-    add2 = nt.nodes.new(decorated_myadd.identifier, "add2", x=2)
-    math3 = nt.nodes.new("TestSqrt", "sqrt1")
+    add1 = nt.nodes.new(decorated_myadd, "add1", x=2)
+    add2 = nt.nodes.new(decorated_myadd, "add2", x=2)
+    add3 = nt.nodes.new("TestAdd", "add3")
     nt.links.new(float1.outputs[0], add1.inputs["y"])
     nt.links.new(add1.outputs[0], add2.inputs["y"])
-    nt.links.new(add2.outputs[0], math3.inputs[0])
+    nt.links.new(add2.outputs[0], add3.inputs[0])
     return nt

@@ -1,12 +1,10 @@
-import time
-from nodegraph import NodeGraph
+from node_graph import NodeGraph
+from node_graph.node import Node
 
 def test_base_node():
     """Create a node.
     Append it to a nodetree.
     """
-    from nodegraph.node import Node
-
     nt = NodeGraph(name="test_base_node")
     n = Node.new("TestFloat")
     # added to nodetree
@@ -68,40 +66,3 @@ def test_copy():
     #
     nt.nodes.append(math1)
     assert len(nt.nodes) == 2
-
-
-def test_load(nt):
-    """Load node from database."""
-    from nodegraph.node import Node
-
-    nt.name = "test_load"
-    nt.nodes["add1"].properties[0].value = 5
-    nt.save()
-    add1 = Node.load(nt.nodes["add1"].uuid)
-    assert len(add1.inputs) == len(nt.nodes["add1"].inputs)
-    assert len(add1.outputs) == len(nt.nodes["add1"].outputs)
-    assert add1.properties[0].value == nt.nodes["add1"].properties[0].value
-    assert len(add1.inputs[0].links) == 0
-
-
-def test_load_edit(nt):
-    """Load node from database."""
-    from nodegraph.node import Node
-
-    nt.name = "test_load_edit"
-    nt.save()
-    nt.launch()
-    nt.wait()
-    assert nt.nodes["add1"].state == "FINISHED"
-    # edit node
-    add1 = Node.load(nt.nodes["add1"].uuid)
-    add1.properties[0].value = 5
-    add1.save()
-    time.sleep(5)
-    nt.update()
-    assert nt.nodes["add1"].state == "CREATED"
-    assert len(add1.inputs) == len(nt.nodes["add1"].inputs)
-    assert len(add1.outputs) == len(nt.nodes["add1"].outputs)
-    assert len(add1.inputs[0].links) == 0
-    add1 = Node.load(nt.nodes["add1"].uuid)
-    assert add1.properties[0].value == 5

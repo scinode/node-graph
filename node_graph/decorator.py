@@ -98,12 +98,12 @@ def create_node(ndata):
         _type_: _description_
     """
     from node_graph.node import Node
+    Node = ndata.get("node_class", Node)
 
     class MyNode(Node):
         identifier: str = ndata["identifier"]
-        node_type: str = ndata["node_type"]
+        node_type: str = ndata.get("node_type", "NORMAL")
         catalog = ndata.get("catalog", "Others")
-        register_path = ndata.get("register_path", "")
 
         def create_properties(self):
             for prop in ndata.get("properties", []):
@@ -114,7 +114,6 @@ def create_node(ndata):
             for input in ndata.get("inputs", []):
                 inp = self.inputs.new(input[0], input[1])
                 setting = input[2] if len(input) > 2 else {}
-                # print("input: ", input, "setting: ", setting)
                 prop = setting.get("property", None)
                 if prop is not None:
                     kwargs = prop[1] if len(prop) > 1 else {}
@@ -145,19 +144,18 @@ def create_node_group(ngdata):
         _type_: _description_
     """
     from node_graph.node import Node
+    Node = ngdata.get("node_class", Node)
 
     class MyNodeGroup(Node):
         identifier: str = ngdata["identifier"]
         node_type: str = "GROUP"
         catalog = ngdata.get("catalog", "Others")
-        register_path = ngdata.get("register_path", "")
 
         def get_default_node_group(self):
             nt = ngdata["nt"]
             nt.name = self.name
             nt.uuid = self.uuid
             nt.parent_node = self.uuid
-            nt.worker_name = self.worker_name
             return ngdata["nt"]
 
     return MyNodeGroup
@@ -183,6 +181,8 @@ def decorator_node(
         inputs (list): node inputs
         outputs (list): node outputs
     """
+    from node_graph.node import Node
+    
     properties = properties or []
     inputs = inputs or []
     outputs = outputs or []
@@ -207,6 +207,7 @@ def decorator_node(
             func, inputs, properties
         )
         ndata = {
+            "node_class": Node,
             "identifier": identifier,
             "node_type": node_type,
             "args": args,
@@ -234,17 +235,17 @@ def decorator_node_group(identifier, catalog="Others", executor_path=None):
     Attributes:
         indentifier (str): node identifier
     """
+    from node_graph.node import Node
+    
 
     def decorator(func):
-        import cloudpickle as pickle
-
-        # use cloudpickle to serialize function
-        executor = {
-            "executor": pickle.dumps(func),
-            "type": "pickle",
-        }
         nt = func()
-        node = create_node_group(identifier, nt, catalog=catalog)
+        ngdata = {"identifier": identifier,
+                  "nt": nt,
+                  "catalog": catalog,
+                  "node_class": Node,
+                  }
+        node = create_node_group(ngdata)
         return node
 
     return decorator
