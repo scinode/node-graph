@@ -9,26 +9,13 @@ NodeGraph is an open-source platform for designing node-based workflows.
 
 .. code-block:: python
 
-    from scinode import NodeTree
-    nt = NodeTree(name="my_first_nodetree")
+    from node_graph import NodeGraph
+    nt = NodeGraph(name="my_first_nodegraph")
     float1 = nt.nodes.new("Float", value=2.0)
     float2 = nt.nodes.new("Float", value=3.0)
     add1 = nt.nodes.new("Operator", operator="+")
     nt.links.new(float1.outputs[0], add1.inputs[0])
     nt.links.new(float2.outputs[0], add1.inputs[1])
-
-Getting Started
-==================
-
-   .. container::
-
-         :doc:`install/index`
-
-         :doc:`get_started/index`
-
-         :doc:`tutorial/index`
-
-
 
 
 .. toctree::
@@ -36,15 +23,10 @@ Getting Started
    :caption: Contents:
 
    install/index
-   get_started/index
-   nodetree
-   node/index
-   collection
-   property
-   socket
+   quick_start
+   concepts/index
    yaml
-   develop/index
-   faqs
+   customize
 
 
 Indices and tables

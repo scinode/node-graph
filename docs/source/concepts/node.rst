@@ -50,44 +50,16 @@ Finally, the main entry point is the executor. An executor is a Python class/fun
    One can run nodetree inside a executor, and in this way, one can create nodes dynamically base on the results of other nodes.
 
 
-Classification
-==================
-
-According to the purpose of the node:
-
-- Data
-- Process
-- Control
-
-In principle, a node is unit which process input data and output results. However, base on the purpose of the node, we can define some node ase “data” node.
-Data node is the node for a data type, e.g. int, float, list, dict. It should has a Input socket. If there is not link to the input, the value of the property of the socket will be used.
-
-
-According to the state of the node:
-
-- Normal
-- Reference
-- Copy
-- Group
-
-According to the execution:
-
-- Passive
-- Active. An active node has a control loop that runs in its own process or thread.
-
-
-
-
 Use Node
 ==================
-Create a Node inside a NodeTree
+Create a Node inside a NodeGraph
 
 .. code-block:: python
 
-   from scinode import NodeTree
+   from node_graph import NodeGraph
 
    # create a nodetree
-   nt = NodeTree(name="test_node")
+   nt = NodeGraph(name="test_node")
    # create a node using the Node identifier, e.g. TestFloat
    float1 = nt.nodes.new("TestFloat")
    # set node properties
@@ -101,7 +73,7 @@ Load node from database
 
 .. code-block:: python
 
-   from scinode.core.node import Node
+   from node_graph.core.node import Node
 
    # load a Node from database
    uuid = "xxx"
@@ -109,7 +81,7 @@ Load node from database
 
 .. note::
 
-   One can not edit the node and save it to database directly. All the changes should be saved using the `NodeTree` object.
+   One can not edit the node and save it to database directly. All the changes should be saved using the `NodeGraph` object.
 
    >>> nt.save()
 
@@ -121,16 +93,14 @@ Decorator
 ------------
 One can use a decorator to register a function as a `Node`. The decorator will automatically create a `Node` which uses the function as its executor, and then add the created `Node` to the node list.
 
-In your `~/.scinode/custom_node/custom_node.py` file, add the following code:
 
 .. code-block:: python
 
-   from scinode.utils.decorator import node
+   from node_graph.utils.decorator import node
    # register a function as a node.
    # One need to specify the identifier, args, properties, inputs, outputs
    @node(
       identifier="MyAdd",
-      args=["t", "x", "y"],
       properties=[["Float", "t", {"default": 2}]],
       inputs=[
          ["Float", "x", ["Float", {"default": 2}]],
@@ -143,30 +113,22 @@ In your `~/.scinode/custom_node/custom_node.py` file, add the following code:
       time.sleep(t)
       return x + y
 
-.. note::
-
-   The decorator will only register the function to the `Node` list when the module containing the decorator is imported. It will not automatically search all Python packages. If the decorator is used in multiple modules or packages, it will only register the function in the module where it is actually imported and used.
-
-Restart your daemon, and then you can use the node in a nodetree:
+then you can use the node in a nodetree:
 
 .. code-block:: python
 
    # then one can use the node in a nodetree
-   from scinode import NodeTree
+   from node_graph import NodeGraph
    from custom_node import myadd
    import time
 
-   nt = NodeTree(name="test_decorator")
-   # here we use the myadd.identifier to specify the node type
-   add1 = nt.nodes.new(myadd.identifier, "add1")
+   nt = NodeGraph(name="test_decorator")
+   # here we use the myadd
+   add1 = nt.nodes.new(myadd, "add1")
    add1.set({"x": 8})
    nt.launch()
    time.sleep(5)
    print("add1.result: ", add1.results[0]["value"])
-
-.. note::
-
-   Unfortunately, both builtin daemon and the Celery work does not suport the auto-reload option. Therefore, one has to restart the daemon manually when you add new nodes using decorator or change the code of the decoratored nodes.
 
 
 class
@@ -212,5 +174,5 @@ One can define a new node by extend the `Node` class.
 List of all Methods
 ===================
 
-.. autoclass:: scinode.core.node.Node
+.. autoclass:: node_graph.node.Node
    :members:

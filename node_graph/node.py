@@ -460,12 +460,6 @@ class Node:
     def get_executor(self):
         """Get the default executor."""
         executor = {"path": "", "name": ""}
-        if self.node_type.upper() == "GROUP":
-            executor = {
-                "path": "scinode.executors.built_in",
-                "name": "NodeGroup",
-                "type": "class",
-            }
         return executor
 
     def get_results(self):

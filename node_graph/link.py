@@ -42,8 +42,6 @@ class NodeLink:
             self.to_socket.links.append(self)
         else:
             # handle multi-link here
-            print("\n\nLink: ")
-            print(self.to_socket, self.to_socket.link_limit)
             raise Exception(
                 "Socket {}: number of links {} larger than the link limit {}.".format(
                     self.to_socket.name,

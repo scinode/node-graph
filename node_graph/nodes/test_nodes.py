@@ -155,9 +155,9 @@ class TestAddGroup(Node):
     node_type: str = "GROUP"
 
     def get_default_node_group(self):
-        from scinode import NodeTree
+        from node_graph import NodeGraph
 
-        nt = NodeTree(
+        nt = NodeGraph(
             name=self.name,
             uuid=self.uuid,
             parent_node=self.uuid,

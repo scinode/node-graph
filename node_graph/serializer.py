@@ -1,11 +1,11 @@
 class SerializeNone:
     def get_serialize(self):
-        serialize = {"path": "scinode.serialization.built_in", "name": "serialize_none"}
+        serialize = {"path": "node_graph.serializer", "name": "serialize_none"}
         return serialize
 
     def get_deserialize(self):
         deserialize = {
-            "path": "scinode.serialization.built_in",
+            "path": "node_graph.serializer",
             "name": "deserialize_none",
         }
         return deserialize
@@ -14,14 +14,14 @@ class SerializeNone:
 class SerializeJson:
     def get_serialize(self):
         serialize = {
-            "path": "scinode.serialization.built_in",
+            "path": "node_graph.serializer",
             "name": "serialize_json",
         }
         return serialize
 
     def get_deserialize(self):
         deserialize = {
-            "path": "scinode.serialization.built_in",
+            "path": "node_graph.serializer",
             "name": "deserialize_json",
         }
         return deserialize
@@ -30,14 +30,14 @@ class SerializeJson:
 class SerializePickle:
     def get_serialize(self):
         serialize = {
-            "path": "scinode.serialization.built_in",
+            "path": "node_graph.serializer",
             "name": "serialize_pickle",
         }
         return serialize
 
     def get_deserialize(self):
         deserialize = {
-            "path": "scinode.serialization.built_in",
+            "path": "node_graph.serializer",
             "name": "deserialize_pickle",
         }
         return deserialize

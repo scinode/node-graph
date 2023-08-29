@@ -2,13 +2,8 @@
 Installation
 ===========================================
 
-There are serveral ways to setting up a working SciNode environment.
+The simplest way to install node_graph is to use pip.
 
+.. code-block:: console
 
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Contents:
-
-   system
-   docker
+    pip install --upgrade --user node_graph

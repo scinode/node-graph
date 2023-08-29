@@ -15,14 +15,14 @@ Data type
 
 Property can have different data type:
 
-- :class:`~scinode.core.property.FloatProperty`
-- :class:`~scinode.core.property.IntProperty`
-- :class:`~scinode.core.property.BoolProperty`
-- :class:`~scinode.core.property.StringProperty`
-- :class:`~scinode.core.property.EnumProperty`
-- :class:`~scinode.core.property.FloatVectorProperty`
-- :class:`~scinode.core.property.IntVectorProperty`
-- :class:`~scinode.core.property.BoolVectorProperty`
+- :class:`~node_graph.property.FloatProperty`
+- :class:`~node_graph.property.IntProperty`
+- :class:`~node_graph.property.BoolProperty`
+- :class:`~node_graph.property.StringProperty`
+- :class:`~node_graph.property.EnumProperty`
+- :class:`~node_graph.property.FloatVectorProperty`
+- :class:`~node_graph.property.IntVectorProperty`
+- :class:`~node_graph.property.BoolVectorProperty`
 
 One can extend the property type by designing a custom property. Please read :ref:`custom_property` page for how to create a custom property type.
 
@@ -89,8 +89,8 @@ It can be useful to create a dynamic socket based on a property's value.
 List of all Methods
 ----------------------
 
-.. automodule:: scinode.core.property
+.. automodule:: node_graph.property
    :members:
 
-.. automodule:: scinode.properties.built_in
+.. automodule:: node_graph.properties.built_in
    :members:

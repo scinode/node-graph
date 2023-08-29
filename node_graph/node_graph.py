@@ -8,18 +8,18 @@ class NodeGraph:
     Attributes:
 
     uuid: str
-        uuid of this nodetree.
+        uuid of this nodegraph.
     state: str
-        state of this nodetree.
+        state of this nodegraph.
     action: str
-        action of this nodetree.
+        action of this nodegraph.
     platform: str
-        platform that used to creat this nodetree.
+        platform that used to creat this nodegraph.
 
     Examples:
 
     >>> from node_graph import NodeGraph
-    >>> nt = NodeGraph(name="my_first_nodetree")
+    >>> nt = NodeGraph(name="my_first_nodegraph")
 
     add nodes:
 
@@ -53,9 +53,9 @@ class NodeGraph:
         """_summary_
 
         Args:
-            name (str, optional): name of the nodetree.
+            name (str, optional): name of the nodegraph.
                 Defaults to "NodeGraph".
-            uuid (str, optional): uuid of the nodetree.
+            uuid (str, optional): uuid of the nodegraph.
                 Defaults to None.
         """
         self.name = name
@@ -70,16 +70,16 @@ class NodeGraph:
         self.log = ""
 
     def launch(self):
-        """Launch the nodetree."""
+        """Launch the nodegraph."""
 
     def save(self):
-        """Save nodetree to database."""
+        """Save nodegraph to database."""
 
     def to_dict(self, short=False):
         """To dict
 
         Returns:
-            dict: nodetree data
+            dict: nodegraph data
         """
         from node_graph.version import __version__
 
@@ -164,18 +164,18 @@ class NodeGraph:
 
     @classmethod
     def from_dict(cls, ntdata):
-        """Rebuild nodetree from dict ntdata.
+        """Rebuild nodegraph from dict ntdata.
 
         Args:
-            ntdata (dict): data of the nodetree.
+            ntdata (dict): data of the nodegraph.
 
         Returns:
-            Nodedtree: a nodetree
+            Nodedtree: a nodegraph
         """
         import cloudpickle as pickle
         from node_graph.utils import get_entries
 
-        # subnodetree
+        # subnodegraph
         nt = cls(
             name=ntdata["name"],
             uuid=ntdata.get("uuid"),
@@ -221,7 +221,7 @@ class NodeGraph:
 
     @classmethod
     def from_yaml(cls, filename=None, string=None):
-        """Build nodetree from yaml file.
+        """Build nodegraph from yaml file.
 
         Args:
             filename (str, optional): _description_. Defaults to None.
@@ -232,7 +232,6 @@ class NodeGraph:
         """
         import yaml
         from node_graph.utils import yaml_to_dict
-        from pprint import pprint
 
         # load data
         if filename:
@@ -247,14 +246,14 @@ class NodeGraph:
         return nt
 
     def copy(self, name=None):
-        """Copy nodetree.
+        """Copy nodegraph.
 
         The nodes and links are copied.
 
         """
         name = f"{self.name}_copy" if name is None else name
         nt = self.__class__(name=name, uuid=None)
-        # should pass the nodetree to the nodes as parent
+        # should pass the nodegraph to the nodes as parent
         nt.nodes = self.nodes.copy(parent=nt)
         # create links
         for link in self.links:
@@ -265,35 +264,35 @@ class NodeGraph:
         return nt
 
     def copy_using_dict(self):
-        """Copy nodetree using dict data.
+        """Copy nodegraph using dict data.
 
-        Fist export the nodetree to dict data.
-        Then reset uuid of nodetree and nodes.
-        Finally, rebuild the nodetree from dict data.
+        Fist export the nodegraph to dict data.
+        Then reset uuid of nodegraph and nodes.
+        Finally, rebuild the nodegraph from dict data.
         """
         ntdata = self.to_dict()
         # copy nodes
-        # reset uuid for nodetree
+        # reset uuid for nodegraph
         ntdata["uuid"] = str(uuid1())
         # reset uuid for nodes
         for name, node in ntdata["nodes"].items():
             node["uuid"] = str(uuid1())
-        nodetree = self.from_dict(ntdata)
+        nodegraph = self.from_dict(ntdata)
         # copy links
         # TODO the uuid of the socket inside the links should be udpated.
-        # print("copy nodetree: ", nodetree)
-        return nodetree
+        # print("copy nodegraph: ", nodegraph)
+        return nodegraph
 
     @classmethod
     def load(cls, uuid):
         """Load data from database."""
 
     def copy_subset(self, node_list, name=None, add_ref=True):
-        """Copy a subset of a nodetree.
+        """Copy a subset of a nodegraph.
 
         Args:
             node_list (list of string): names of the nodes to be copied.
-            name (str, optional): name of the new nodetree. Defaults to None.
+            name (str, optional): name of the new nodegraph. Defaults to None.
 
         Returns:
             NodeGraph: A new NodeGraph
@@ -301,19 +300,19 @@ class NodeGraph:
 
         nt = self.__class__(name=name, uuid=None)
         for node in node_list:
-            nt.nodes.append(self.nodes[node].copy(nodetree=nt))
+            nt.nodes.append(self.nodes[node].copy(nodegraph=nt))
         # copy links
         for link in self.links:
-            # create ref node for input node that is not in the new nodetree
+            # create ref node for input node that is not in the new nodegraph
             if (
                 add_ref
                 and link.from_node.name not in nt.nodes.keys()
                 and link.to_node.name in nt.nodes.keys()
             ):
                 nt.nodes.append(
-                    self.nodes[link.from_node.name].copy(nodetree=nt, is_ref=True)
+                    self.nodes[link.from_node.name].copy(nodegraph=nt, is_ref=True)
                 )
-            # add link if both nodes are in the new nodetree
+            # add link if both nodes are in the new nodegraph
             if (
                 link.from_node.name in nt.nodes.keys()
                 and link.to_node.name in nt.nodes.keys()
@@ -325,7 +324,7 @@ class NodeGraph:
         return nt
 
     def __getitem__(self, keys):
-        """Get a sub-nodetree by the names of nodes."""
+        """Get a sub-nodegraph by the names of nodes."""
         nt = self.copy_subset(keys)
         return nt
 
@@ -340,7 +339,7 @@ class NodeGraph:
         return self
 
     def __add__(self, other):
-        """Sum of two nodetree."""
+        """Sum of two nodegraph."""
         self += other
         return self
 
@@ -361,7 +360,7 @@ class NodeGraph:
             self.nodes.delete(name)
 
     def wait(self, timeout=50):
-        """Wait for nodetree to finish."""
+        """Wait for nodegraph to finish."""
         import time
 
         start = time.time()

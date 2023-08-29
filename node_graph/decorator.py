@@ -188,7 +188,7 @@ def decorator_node(
 
     properties = properties or []
     inputs = inputs or []
-    outputs = outputs or []
+    outputs = outputs or [["General", "result"]]
 
     def decorator(func):
         import cloudpickle as pickle
@@ -231,25 +231,70 @@ def decorator_node(
     return decorator
 
 
-# decorator with arguments indentifier, args, kwargs, properties, inputs, outputs, executor
-def decorator_node_group(identifier, catalog="Others", executor_path=None):
-    """Generate a decorator that register a function as a NodeGraph node.
+def decorator_node_group(
+    identifier=None,
+    properties=None,
+    inputs=None,
+    outputs=None,
+    catalog="Others",
+    executor_type="function",
+):
+    """Generate a decorator that register a node group as a node.
 
     Attributes:
         indentifier (str): node identifier
+        catalog (str): node catalog
+        properties (list): node properties
+        inputs (list): node inputs
+        outputs (list): node outputs
     """
     from node_graph.node import Node
 
+    properties = properties or []
+    inputs = inputs or []
+    outputs = outputs or []
+
     def decorator(func):
-        nt = func()
-        ngdata = {
-            "identifier": identifier,
-            "nt": nt,
-            "catalog": catalog,
-            "node_class": Node,
+        import cloudpickle as pickle
+
+        nonlocal identifier, inputs, outputs
+
+        if identifier is None:
+            identifier = func.__name__
+        # use cloudpickle to serialize function
+        func.identifier = identifier
+        func.group_outputs = outputs
+        executor = {
+            "executor": pickle.dumps(func),
+            "type": executor_type,
+            "is_pickle": True,
         }
-        node = create_node_group(ngdata)
-        return node
+        # Get the args and kwargs of the function
+        args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
+            func, inputs, properties
+        )
+        node_outputs = [["General", output[1]] for output in outputs]
+        #
+        node_type = "worktree"
+        ndata = {
+            "node_class": Node,
+            "identifier": identifier,
+            "args": args,
+            "kwargs": kwargs,
+            "var_args": var_args,
+            "var_kwargs": var_kwargs,
+            "node_type": node_type,
+            "properties": properties,
+            "inputs": _inputs,
+            "outputs": node_outputs,
+            "executor": executor,
+            "catalog": catalog,
+        }
+        node = create_node(ndata)
+        node.group_inputs = inputs
+        node.group_outputs = outputs
+        func.node = node
+        return func
 
     return decorator
 
