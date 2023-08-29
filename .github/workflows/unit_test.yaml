@@ -35,10 +35,6 @@ jobs:
       - name: Build
         run: |
           python3 setup.py install
-      - name: Add profile
-        run: |
-          scinode profile add --file tests/datas/profile_${{ matrix.profile }}.json
-          scinode profile use ${{ matrix.profile }}
       - name: Test with pytest
         run: |
           cd tests
