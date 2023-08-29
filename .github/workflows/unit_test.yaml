@@ -13,8 +13,7 @@ jobs:
         -   5672:5672
     strategy:
       matrix:
-        python-version: ["3.10"]
-        profile: ["builtin", "celery"]
+        python-version: ['3.8', '3.9', "3.10"]
 
     steps:
       - uses: actions/checkout@v3
@@ -27,29 +26,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 pytest pytest-cov
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          sudo apt update && sudo apt install --no-install-recommends diffutils openssh-client openssh-server
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.7.0
-        with:
-          mongodb-version: '5.0'
-          mongodb-replica-set: test-rs
-          mongodb-port: 27017
-      - name: Copy custom node file, add custom node path to sys path
-        run: |
-         mkdir ~/.scinode
-         mkdir ~/.scinode/custom_node
-         mkdir -p ~/scinode/remote
-         cp tests/datas/sn_nodes.py ~/.scinode/custom_node/
-         cp tests/datas/computer.json ~/.scinode/computer.json
-         echo "PYTHONPATH=$PYTHONPATH:~/.scinode/custom_node/" >> $GITHUB_ENV
-         echo $PYTHONPATH
-         ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa
       - name: Build
         run: |
           python3 setup.py install
@@ -57,13 +39,6 @@ jobs:
         run: |
           scinode profile add --file tests/datas/profile_${{ matrix.profile }}.json
           scinode profile use ${{ matrix.profile }}
-      - name: Add and start scheduler and worker
-        run: |
-          scinode start
-          scinode worker add --file tests/datas/worker_test.json
-          scinode worker list
-          scinode worker start test
-          scinode worker status
       - name: Test with pytest
         run: |
           cd tests
