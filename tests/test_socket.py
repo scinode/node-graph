@@ -56,9 +56,10 @@ def test_base_socket_type_validation(id, data):
 
 
 def test_general_socket_property():
+    from node_graph.node import Node
 
     nt = NodeGraph(name="test_base_socket_type")
-    n = nt.nodes.new("TestAdd", "test")
+    n = nt.nodes.new(Node, "test")
     socket = n.inputs.new("General", "test")
     socket.property.value = np.ones((3, 3))
     assert np.isclose(socket.property.value, np.ones((3, 3))).all()

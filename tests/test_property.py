@@ -1,4 +1,5 @@
 import pytest
+from node_graph import NodeGraph
 
 
 @pytest.mark.parametrize(
@@ -49,9 +50,8 @@ def test_base_type_validation(id, data):
 
 def test_enum_type():
     """Test simple math."""
-    from scinode import NodeTree
 
-    nt = NodeTree(name="test_enum_type")
+    nt = NodeGraph(name="test_enum_type")
     nd = nt.nodes.new("TestEnum")
     assert nd.properties["function"].content == "test_add"
     nd.properties["function"].value = "sqrt"
@@ -60,9 +60,8 @@ def test_enum_type():
 
 def test_enum_update_type():
     """Test simple math."""
-    from scinode import NodeTree
 
-    nt = NodeTree(name="test_enum_update_type")
+    nt = NodeGraph(name="test_enum_update_type")
     nd = nt.nodes.new("TestEnumUpdate")
     assert nd.properties["function"].content == "test_add"
     assert len(nd.inputs) == 2
@@ -85,15 +84,14 @@ def test_enum_update_type():
 )
 def test_vector(id, size, default, data):
     """Test simple math."""
-    from scinode import NodeTree
+    from node_graph.node import Node
 
-    nt = NodeTree(name="test_vector")
-    nd = nt.nodes.new("ScinodeNode")
+    nt = NodeGraph(name="test_vector")
+    nd = nt.nodes.new(Node)
     nd.executor = {"path": "numpy.sqrt"}
     nd.args = ["x"]
     nd.properties.new(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
-    nd.outputs.new("General", "result")
     print(nd.properties[0].value)
     assert nd.properties[0].value == data
     # copy
