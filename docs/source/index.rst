@@ -18,11 +18,20 @@ NodeGraph is an open-source platform for designing node-based workflows.
     nt.links.new(float2.outputs[0], add1.inputs[1])
 
 
+Installation
+===========================================
+
+The simplest way to install node_graph is to use pip.
+
+.. code-block:: console
+
+    pip install --upgrade --user node_graph
+
+
 .. toctree::
    :maxdepth: 1
    :caption: Contents:
 
-   install/index
    quick_start
    concept/index
    yaml

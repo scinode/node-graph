@@ -207,8 +207,6 @@ class Node:
         import hashlib
         import cloudpickle as pickle
 
-        self.pre_save()
-
         if short:
             data = {
                 "name": self.name,

@@ -4,16 +4,16 @@ from node_graph.node import Node
 
 def test_base_node():
     """Create a node.
-    Append it to a nodetree.
+    Append it to a nodegraph.
     """
     nt = NodeGraph(name="test_base_node")
     n = Node.new("TestFloat")
-    # added to nodetree
+    # added to nodegraph
     nt.nodes.append(n)
-    assert n.nodetree == nt
+    assert n.parent == nt
     # copy
     n1 = n.copy(name="n1")
-    assert n1.nodetree == nt
+    assert n1.parent == nt
     assert n1.name == "n1"
 
 
@@ -62,7 +62,7 @@ def test_copy():
     math1 = math.copy()
     assert math1.properties["t"].value == 5
     assert math1.inputs["x"].property.value == 2
-    assert math1.nodetree.uuid == nt.uuid
+    assert math1.parent.uuid == nt.uuid
     assert math1.name == f"{math.name}_copy"
     #
     nt.nodes.append(math1)
