@@ -30,7 +30,7 @@ setup(
     packages=find_packages(),
     entry_points={
         "node_graph.node": [
-            "test = node_graph.plugins.test_nodes:node_list",
+            "test = node_graph.nodes.test_nodes:node_list",
         ],
         "node_graph.socket": [
             "built_in = node_graph.sockets.builtin:socket_list",
@@ -40,6 +40,7 @@ setup(
         ],
     },
     install_requires=[
+        "numpy",
         "click",
         "pyyaml",
         "colorama",
