@@ -77,6 +77,7 @@ class TestAdd(Node):
             "name": "test_add",
         }
 
+
 class TestEnum(Node):
 
     identifier: str = "TestEnum"
@@ -178,6 +179,7 @@ class TestAddGroup(Node):
         ]
         nt.group_outputs = [("add3.result", "result")]
         return nt
+
 
 node_list = [
     TestFloat,

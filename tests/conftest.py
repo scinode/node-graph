@@ -2,6 +2,7 @@ import pytest
 from node_graph.decorator import node
 from node_graph import NodeGraph
 
+
 @pytest.fixture
 def nt():
     """A test node_graph."""
@@ -12,6 +13,7 @@ def nt():
     nt.links.new(float1.outputs[0], add1.inputs["y"])
     nt.links.new(add1.outputs[0], add2.inputs["y"])
     return nt
+
 
 @pytest.fixture
 def nt_group():
@@ -90,6 +92,7 @@ def node_with_decorated_node(decorated_myadd):
         return add2.results[0]["value"]
 
     return node_with_decorated_node
+
 
 @pytest.fixture
 def nt_decorator(decorated_myadd):

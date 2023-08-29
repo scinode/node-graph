@@ -7,6 +7,7 @@ def test_to_dict(nt):
     assert len(ntdata["nodes"]) == 3
     assert len(ntdata["links"]) == 2
 
+
 def test_from_dict(nt_decorator):
     """Export NodeGraph to dict."""
     ntdata = nt_decorator.to_dict()

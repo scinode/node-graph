@@ -1,6 +1,7 @@
 import importlib
 from node_graph.utils import get_entries
 
+
 class Collection:
     """Collection of instances of a property.
     Like an extended list, with the functions: new, find, delete, clear.
@@ -176,13 +177,12 @@ def decorator_check_identifier_name(func):
     return wrapper_func
 
 
-
 class NodeCollection(Collection):
     """Node colleciton"""
-    
+
     parent_name = "nodetree"
 
-    def __init__(self, parent=None, entry_point = "node_graph.node") -> None:
+    def __init__(self, parent=None, entry_point="node_graph.node") -> None:
         self.pool = get_entries(entry_point_name=entry_point)
         super().__init__(parent)
 
@@ -225,7 +225,7 @@ class PropertyCollection(Collection):
 
     parent_name = "node"
 
-    def __init__(self, parent=None, entry_point = "node_graph.property") -> None:
+    def __init__(self, parent=None, entry_point="node_graph.property") -> None:
         self.pool = get_entries(entry_point_name=entry_point)
         super().__init__(parent)
 
@@ -251,7 +251,7 @@ class InputSocketCollection(Collection):
 
     parent_name = "node"
 
-    def __init__(self, parent=None, entry_point = "node_graph.socket") -> None:
+    def __init__(self, parent=None, entry_point="node_graph.socket") -> None:
         self.pool = get_entries(entry_point_name=entry_point)
         super().__init__(parent)
 
@@ -292,7 +292,7 @@ class OutputSocketCollection(Collection):
 
     parent_name = "node"
 
-    def __init__(self, parent=None, entry_point = "node_graph.socket") -> None:
+    def __init__(self, parent=None, entry_point="node_graph.socket") -> None:
         self.pool = get_entries(entry_point_name=entry_point)
         super().__init__(parent)
 

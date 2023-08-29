@@ -35,6 +35,7 @@ class NodeGraph:
     >>> nt.to_dict()
 
     """
+
     node_entry = "node_graph.node"
     platform: str = "node_graph"
     uuid: str = ""
@@ -285,9 +286,7 @@ class NodeGraph:
 
     @classmethod
     def load(cls, uuid):
-        """Load data from database.
-        """
-        
+        """Load data from database."""
 
     def copy_subset(self, node_list, name=None, add_ref=True):
         """Copy a subset of a nodetree.
@@ -377,4 +376,3 @@ class NodeGraph:
         s = ""
         s += 'NodeGraph(name="{}, uuid="{}")\n'.format(self.name, self.uuid)
         return s
-

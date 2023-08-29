@@ -5,6 +5,7 @@ from node_graph.collection import (
 )
 from uuid import uuid1
 
+
 class Node:
     """Base class for Node.
 
@@ -43,10 +44,10 @@ class Node:
     >>> nt.nodes.append(node)
     """
 
-    node_entry="node_graph.node"
+    node_entry = "node_graph.node"
     socket_entry = "node_graph.socket"
     property_entry = "node_graph.property"
-    
+
     identifier: str = "Node"
     node_type: str = "Normal"
     inner_id: int = 0
@@ -165,7 +166,6 @@ class Node:
 
     def reset(self):
         """Reset this node and all its child nodes to "CREATED"."""
-        
 
     def pre_save(self):
         """Pre action before save data to database.
@@ -217,7 +217,6 @@ class Node:
         import json
         import hashlib
         import cloudpickle as pickle
-
 
         self.pre_save()
 
@@ -372,11 +371,10 @@ class Node:
             node_class = pickle.loads(data["node_class"])
         else:
             from node_graph.utils import get_entries
+
             node_pool = get_entries("node_graph.node")
             node_class = node_pool[data["metadata"]["identifier"]]
-        node = node_class(
-            name=data["name"], uuid=data["uuid"]
-        )
+        node = node_class(name=data["name"], uuid=data["uuid"])
         # load properties
         node.update_from_dict(data)
         return node
@@ -418,12 +416,12 @@ class Node:
     @classmethod
     def load(cls, uuid):
         """Load Node data from database."""
-        
 
     @classmethod
     def new(cls, identifier, name=None):
         """Create a node from a identifier."""
         from node_graph.utils import get_entry_by_identifier
+
         ItemClass = get_entry_by_identifier(identifier, cls.node_entry)
         node = ItemClass(name=name)
         return node
@@ -449,8 +447,7 @@ class Node:
             # copy node inside the same nodetree, change the name
             nodetree = self.nodetree
             name = f"{self.name}_copy" if name is None else name
-        node = self.__class__(
-            name=name, uuid=None, nodetree=nodetree)
+        node = self.__class__(name=name, uuid=None, nodetree=nodetree)
         # becareful when copy the properties, the value should be copied
         # it will update the sockets, so we copy the properties first
         # then overwrite the sockets
@@ -472,9 +469,7 @@ class Node:
         return executor
 
     def get_results(self):
-        """Item data from database
-        """
-        
+        """Item data from database"""
 
     def update(self):
         """Update node state."""
@@ -482,7 +477,6 @@ class Node:
     @property
     def results(self):
         return self.get_results()
-
 
     def __repr__(self) -> str:
         s = ""

@@ -14,6 +14,7 @@ class NodeSocket:
         property (unknown):
         link_limit (int): maxminum number of link.
     """
+
     property_entry = "node_graph.property"
 
     identifier: str = "NodeSocket"
@@ -83,9 +84,9 @@ class NodeSocket:
         if name is None:
             name = self.name
 
-        self.property = NodeProperty.new(identifier, name=name,
-                                         property_entry=self.property_entry, 
-                                         data=kwargs)
+        self.property = NodeProperty.new(
+            identifier, name=name, property_entry=self.property_entry, data=kwargs
+        )
 
     @classmethod
     def from_dict(cls, data):

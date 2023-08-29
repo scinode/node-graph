@@ -29,8 +29,9 @@ def create_test_node_group():
 
 
 MyTestAddGroup = create_node_group(
-    {"identifier": "MyTestAddGroup",
-     "nt": create_test_node_group(),
+    {
+        "identifier": "MyTestAddGroup",
+        "nt": create_test_node_group(),
     }
 )
 

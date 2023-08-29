@@ -1,6 +1,7 @@
 from node_graph import NodeGraph
 from node_graph.node import Node
 
+
 def test_base_node():
     """Create a node.
     Append it to a nodetree.

@@ -3,7 +3,8 @@ class NodeProperty:
 
     Property is the data which can be shown in the GUI.
     """
-    property_entry="node_graph.property"
+
+    property_entry = "node_graph.property"
     identifier = "NodeProperty"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -76,6 +77,7 @@ class NodeProperty:
     def new(cls, identifier, name=None, property_entry=None, data={}):
         """Create a node from a identifier."""
         from node_graph.utils import get_entry_by_identifier
+
         property_entry = property_entry if property_entry else cls.property_entry
         ItemClass = get_entry_by_identifier(identifier, property_entry)
         item = ItemClass(name, **data)

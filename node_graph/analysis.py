@@ -1,4 +1,3 @@
-
 def get_nt_short_data(ntdata):
     from copy import deepcopy
 
@@ -16,6 +15,7 @@ def get_nt_short_data(ntdata):
             "action": node["action"],
         }
     return ntdata_short
+
 
 class NodetreeAnalysis:
     """Analyze the nodetree."""

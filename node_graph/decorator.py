@@ -98,6 +98,7 @@ def create_node(ndata):
         _type_: _description_
     """
     from node_graph.node import Node
+
     Node = ndata.get("node_class", Node)
 
     class MyNode(Node):
@@ -144,6 +145,7 @@ def create_node_group(ngdata):
         _type_: _description_
     """
     from node_graph.node import Node
+
     Node = ngdata.get("node_class", Node)
 
     class MyNodeGroup(Node):
@@ -159,6 +161,7 @@ def create_node_group(ngdata):
             return ngdata["nt"]
 
     return MyNodeGroup
+
 
 # decorator with arguments indentifier, args, kwargs, properties, inputs, outputs, executor
 def decorator_node(
@@ -182,7 +185,7 @@ def decorator_node(
         outputs (list): node outputs
     """
     from node_graph.node import Node
-    
+
     properties = properties or []
     inputs = inputs or []
     outputs = outputs or []
@@ -236,15 +239,15 @@ def decorator_node_group(identifier, catalog="Others", executor_path=None):
         indentifier (str): node identifier
     """
     from node_graph.node import Node
-    
 
     def decorator(func):
         nt = func()
-        ngdata = {"identifier": identifier,
-                  "nt": nt,
-                  "catalog": catalog,
-                  "node_class": Node,
-                  }
+        ngdata = {
+            "identifier": identifier,
+            "nt": nt,
+            "catalog": catalog,
+            "node_class": Node,
+        }
         node = create_node_group(ngdata)
         return node
 
