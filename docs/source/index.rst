@@ -24,7 +24,7 @@ NodeGraph is an open-source platform for designing node-based workflows.
 
    install/index
    quick_start
-   concepts/index
+   concept/index
    yaml
    customize
 

@@ -180,7 +180,7 @@ def decorator_check_identifier_name(func):
 class NodeCollection(Collection):
     """Node colleciton"""
 
-    parent_name = "nodetree"
+    parent_name = "node_graph"
 
     def __init__(self, parent=None, entry_point="node_graph.node") -> None:
         self.pool = get_entries(entry_point_name=entry_point)
@@ -208,13 +208,13 @@ class NodeCollection(Collection):
 
     def copy(self, parent=None):
         coll = self.__class__(parent=parent)
-        coll._items = [item.copy(nodetree=parent) for item in self._items]
+        coll._items = [item.copy(parent=parent) for item in self._items]
         return coll
 
     def __repr__(self) -> str:
         s = ""
-        nodetree_name = self.parent.name if self.parent else ""
-        s += f'NodeCollection(nodetree = "{nodetree_name}", nodes = ['
+        parent_name = self.parent.name if self.parent else ""
+        s += f'NodeCollection(parent = "{parent_name}", nodes = ['
         s += ", ".join([f'"{x}"' for x in self.keys()])
         s += "])"
         return s
@@ -329,7 +329,6 @@ class LinkCollection(Collection):
 
         item = NodeLink(input, output)
         self.append(item)
-        return item
 
     def __delitem__(self, index):
         """Delete link from this collection.

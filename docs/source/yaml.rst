@@ -15,7 +15,7 @@ Create a `test.yaml` file, here is the content:
 .. code-block:: yaml
 
   name: test_yaml
-  description: 'This is a test to run SciNode using yaml file.'
+  description: 'This is a test to build a workflow using yaml file.'
   meta:
     version: node_graph@0.1.0
     platform: node_graph
@@ -49,9 +49,9 @@ Then, one can build a workflow from the `test.yaml` file by:
     ng = NodeGraph.from_yaml("test_yaml.yaml")
 
 
-Export nodetree to YAML file
+Export node graph to YAML file
 ====================================
-One can export a nodetree to a YAML file by:
+One can export a node graph to a YAML file by:
 
 .. code-block:: python
 

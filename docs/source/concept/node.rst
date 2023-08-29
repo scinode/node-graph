@@ -16,7 +16,7 @@ A node can have the following features:
 - input and output sockets (optional)
 - control input and output sockets (optional)
 - executor: a function (class) to process node data.
-- belong to a `Nodetree`
+- belong to a `Nodegraph`
 
 
 Metadata
@@ -47,7 +47,7 @@ Finally, the main entry point is the executor. An executor is a Python class/fun
 
 .. note::
 
-   One can run nodetree inside a executor, and in this way, one can create nodes dynamically base on the results of other nodes.
+   One can run nodegraph inside a executor, and in this way, one can create nodes dynamically base on the results of other nodes.
 
 
 Use Node
@@ -58,7 +58,7 @@ Create a Node inside a NodeGraph
 
    from node_graph import NodeGraph
 
-   # create a nodetree
+   # create a nodegraph
    nt = NodeGraph(name="test_node")
    # create a node using the Node identifier, e.g. TestFloat
    float1 = nt.nodes.new("TestFloat")
@@ -66,7 +66,7 @@ Create a Node inside a NodeGraph
    float1.set({"Float": 8})
    # copy a node
    float2 = float1.copy()
-   # append a node to the nodetree
+   # append a node to the nodegraph
    nt.nodes.append(float2)
 
 Load node from database
@@ -113,11 +113,11 @@ One can use a decorator to register a function as a `Node`. The decorator will a
       time.sleep(t)
       return x + y
 
-then you can use the node in a nodetree:
+then you can use the node in a nodegraph:
 
 .. code-block:: python
 
-   # then one can use the node in a nodetree
+   # then one can use the node in a nodegraph
    from node_graph import NodeGraph
    from custom_node import myadd
    import time

@@ -19,35 +19,31 @@ Define a node group
 In order to define a new node group, one need to give the following informations:
 
 - identifier.
-- nodetree. The data of node group is just like the data of a NodeTree.
+- nodegraph. The data of node group is just like the data of a NodeGraph.
 - exposing input and output sockets. When a node group is created, the group inputs and group outputs need to be defined to represent the data flow into and out of the group. This is done by defining the group inputs and outputs in the `inputs` and `outputs` fields of the node group data.
 - exposing properties. The properties can also be exposed.
 
 Decorator
 -----------
-One can define a node group using the `node.group` decorator. In the definition of the nodetree, one can also set the default value for the node property.
+One can define a node group using the `node.group` decorator. In the definition of the nodegraph, one can also set the default value for the node property.
 
 .. code-block:: python
 
-    from scinode.utils.decorator import node
+    from node_graph.decorator import node
 
-    @node.group(identifier="MyAddGroup")
-    def myaddgroup():
-        from scinode import NodeTree
-        nt = NodeTree(name=self.name, uuid=self.uuid,
-                    parent_node=self.uuid,
-                    daemon_name=self.daemon_name)
+    @node.group(identifier="MyAddGroup",
+                outputs = [("add1.Result", "Result")],
+    )
+    def myaddgroup(x, y):
+        from node_graph import NodeGraph
+        nt = NodeGraph(name="NodeGroup")
         sqrt1 = nt.nodes.new("TestSqrt", "sqrt1")
-        sqrt1.set({"t":2})
+        sqrt1.set({"t":2, "x": x})
         sqrt2 = nt.nodes.new("TestSqrt", "sqrt2")
+        sqrt2.set({"x": y})
         add1 = nt.nodes.new("TestAdd", "add1")
         nt.links.new(sqrt1.outputs[0], add1.inputs[0])
         nt.links.new(sqrt2.outputs[0], add1.inputs[1])
-        nt.group_properties = [("sqrt1", "t", "t1"),
-                                ("add1", "t", "t2"),]
-        nt.group_inputs = [("sqrt1", "x", "x"),
-                        ("sqrt2", "x", "y"),]
-        nt.group_outputs = [("add1", "Result", "Result")]
         return nt
 
 
@@ -65,8 +61,8 @@ One can define a nodegroup use a Node class, and specify the `node_type` to `GRO
         node_type: str = "GROUP"
 
         def get_default_node_group(self):
-            from scinode import NodeTree
-            nt = NodeTree(name=self.name, uuid=self.uuid,
+            from node_graph import NodeGraph
+            nt = NodeGraph(name=self.name, uuid=self.uuid,
                         parent_node=self.uuid,
                         daemon_name=self.daemon_name)
             sqrt1 = nt.nodes.new("TestSqrt", "sqrt1")
@@ -84,4 +80,4 @@ One can define a nodegroup use a Node class, and specify the `node_type` to `GRO
 
 Execution
 ===============
-A `node group` use a builtin executor. Run a `node group` will launch a new nodetree use the data of the `node group`. The nodetree's uuid is the same as the uuid of the `node group`. Some reference node will be added based on the group inputs. The results will be saved based on the group outputs.
+A `node group` use a builtin executor. Run a `node group` will launch a new nodegraph use the data of the `node group`. The nodegraph's uuid is the same as the uuid of the `node group`. Some reference node will be added based on the group inputs. The results will be saved based on the group outputs.

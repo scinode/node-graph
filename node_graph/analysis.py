@@ -1,12 +1,12 @@
-def get_nt_short_data(ntdata):
+def get_nt_short_data(ngdata):
     from copy import deepcopy
 
-    ntdata_short = deepcopy(ntdata)
-    for name, node in ntdata["nodes"].items():
+    ngdata_short = deepcopy(ngdata)
+    for name, node in ngdata["nodes"].items():
         if node["metadata"]["node_type"] in ["REF"]:
             node["state"] = "FINISHED"
             node["action"] = "NONE"
-        ntdata_short["nodes"][name] = {
+        ngdata_short["nodes"][name] = {
             "name": node["name"],
             "identifier": node["metadata"]["identifier"],
             "node_type": node["metadata"]["node_type"],
@@ -14,21 +14,21 @@ def get_nt_short_data(ntdata):
             "state": node["state"],
             "action": node["action"],
         }
-    return ntdata_short
+    return ngdata_short
 
 
-class NodetreeAnalysis:
-    """Analyze the nodetree."""
+class NodeGraphAnalysis:
+    """Analyze the node graph."""
 
-    def __init__(self, ntdata=None) -> None:
+    def __init__(self, ngdata=None) -> None:
         """
         Args:
-            ntdata (dict): nodetree ntdata
+            ngdata (dict): node graph ngdata
         """
-        if ntdata is not None:
-            self.links = ntdata["links"]
-            self.ctrl_links = ntdata["ctrl_links"]
-            self.nodes = ntdata["nodes"]
+        if ngdata is not None:
+            self.links = ngdata["links"]
+            self.ctrl_links = ngdata["ctrl_links"]
+            self.nodes = ngdata["nodes"]
             self.nnode = len(self.nodes)
             self.set_node_index()
             self.get_input_output()
@@ -85,23 +85,23 @@ class NodetreeAnalysis:
         self.ctrl_output_links = ctrl_output_links
 
 
-class ConnectivityAnalysis(NodetreeAnalysis):
-    """Analyze the nodetree based on sparse matrix representations.
+class ConnectivityAnalysis(NodeGraphAnalysis):
+    """Analyze the node graph based on sparse matrix representations.
     1) child nodes
     2) input nodes
 
     Args:
-        NodetreeAnalysis (_type_): _description_
+        NodeGraphAnalysis (_type_): _description_
     """
 
-    def __init__(self, ntdata=None) -> None:
-        if not self.is_short_data(ntdata):
-            ntdata = get_nt_short_data(ntdata)
-        super().__init__(ntdata)
+    def __init__(self, ngdata=None) -> None:
+        if not self.is_short_data(ngdata):
+            ngdata = get_nt_short_data(ngdata)
+        super().__init__(ngdata)
 
-    def is_short_data(self, ntdata):
+    def is_short_data(self, ngdata):
         flag = True
-        for name, node in ntdata["nodes"].items():
+        for name, node in ngdata["nodes"].items():
             if node.get("metadata"):
                 flag = False
                 break
@@ -252,7 +252,7 @@ class ConnectivityAnalysis(NodetreeAnalysis):
 
 
 class DifferenceAnalysis:
-    """Analyze the difference between two nodetrees.
+    """Analyze the difference between two node graphs.
     1) new nodes
     2) change node input socket
 
@@ -263,8 +263,8 @@ class DifferenceAnalysis:
     def __init__(self, nt1=None, nt2=None) -> None:
         """
         Args:
-            nt1 (dict): NodeTree data
-            nt2 (dict): NodeTree data
+            nt1 (dict): NodeGraph data
+            nt2 (dict): NodeGraph data
         """
         self.nt1 = nt1
         self.nt2 = nt2

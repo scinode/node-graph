@@ -16,9 +16,9 @@ class Node:
     node_type: str
         type of this node. "Normal", "REF", "GROUP".
     inner_id: int
-        node id inside the nodetree.
-    nodetree_uuid: str
-        uuid of the nodetree this node belongs to.
+        node id inside the node graph.
+    parent_uuid: str
+        uuid of the node graph this node belongs to.
     args: list
         postional arguments of the exector.
     kwargs: list
@@ -39,7 +39,7 @@ class Node:
 
     >>> n = node.copy(name="new_name")
 
-    append node to nodetree:
+    append node to node graph:
 
     >>> nt.nodes.append(node)
     """
@@ -51,7 +51,7 @@ class Node:
     identifier: str = "Node"
     node_type: str = "Normal"
     inner_id: int = 0
-    nodetree_uuid: str = ""
+    parent_uuid: str = ""
     platform: str = "node_graph"
     catalog: str = "Node"
     args = []
@@ -66,12 +66,12 @@ class Node:
         inner_id=0,
         name=None,
         uuid=None,
-        nodetree=None,
+        parent=None,
     ) -> None:
         self.inner_id = inner_id
         self.name = name or "{}{}".format(self.identifier, inner_id)
         self.uuid = uuid or str(uuid1())
-        self.nodetree = nodetree
+        self.parent = parent
         self.properties = PropertyCollection(self, entry_point=self.property_entry)
         self.inputs = InputSocketCollection(self, entry_point=self.socket_entry)
         self.outputs = OutputSocketCollection(self, entry_point=self.socket_entry)
@@ -167,14 +167,6 @@ class Node:
     def reset(self):
         """Reset this node and all its child nodes to "CREATED"."""
 
-    def pre_save(self):
-        """Pre action before save data to database.
-        If this node is a group node, save the nodetree group.
-        """
-
-    def pre_load(self):
-        """Pre action before load data from database."""
-
     @property
     def group_properties(self):
         return self.ng.group_properties if self.ng else []
@@ -209,10 +201,7 @@ class Node:
         return nt
 
     def to_dict(self, short=False):
-        """Save all datas, include properties, input and output sockets.
-
-        This will be called when execute nodetree
-        """
+        """Save all datas, include properties, input and output sockets."""
         from node_graph.version import __version__
         import json
         import hashlib
@@ -271,8 +260,7 @@ class Node:
                 ).hexdigest()
             else:
                 data["metadata"]["hash"] = str(uuid1())
-                # we pickle the class and save it to database
-                # so that we can register when load it in the nodetree
+                # we pickle the class so that we can load again
                 data["node_class"] = pickle.dumps(self.__class__)
         return data
 
@@ -282,9 +270,7 @@ class Node:
             "node_type": self.node_type,
             "catalog": self.catalog,
             "identifier": self.identifier,
-            "nodetree_uuid": self.nodetree.uuid
-            if self.nodetree
-            else self.nodetree_uuid,
+            "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
             "platform": self.platform,
             "args": self.args,
             "kwargs": self.kwargs,
@@ -389,7 +375,7 @@ class Node:
         # read all the metadata
         for key in [
             "parent",
-            "nodetree_uuid",
+            "parent_uuid",
         ]:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
@@ -426,28 +412,28 @@ class Node:
         node = ItemClass(name=name)
         return node
 
-    def copy(self, name=None, nodetree=None, is_ref=False):
+    def copy(self, name=None, parent=None, is_ref=False):
         """Copy a node.
 
-        Copy a node to a new node. If nodetree is None, the node will be copied inside the same nodetree, otherwise the node will be copied to a new nodetree.
+        Copy a node to a new node. If parent is None, the node will be copied inside the same parent, otherwise the node will be copied to a new parent.
         The properties, inputs and outputs will be copied.
 
         Args:
             name (str, optional): _description_. Defaults to None.
-            nodetree (NodeGraph, optional): _description_. Defaults to None.
+            parent (NodeGraph, optional): _description_. Defaults to None.
 
         Returns:
             Node: _description_
         """
         print(f"Copy node {self.name}, as a ref: {is_ref}")
-        if nodetree is not None:
-            # copy node to a new nodetree, keep the name
+        if parent is not None:
+            # copy node to a new parent, keep the name
             name = self.name if name is None else name
         else:
-            # copy node inside the same nodetree, change the name
-            nodetree = self.nodetree
+            # copy node inside the same parent, change the name
+            parent = self.parent
             name = f"{self.name}_copy" if name is None else name
-        node = self.__class__(name=name, uuid=None, nodetree=nodetree)
+        node = self.__class__(name=name, uuid=None, parent=parent)
         # becareful when copy the properties, the value should be copied
         # it will update the sockets, so we copy the properties first
         # then overwrite the sockets
@@ -496,7 +482,7 @@ class Node:
                 self.properties[key].value = value
             elif key in self.inputs.keys():
                 if isinstance(value, NodeSocket):
-                    self.nodetree.links.new(value, self.inputs[key])
+                    self.parent.links.new(value, self.inputs[key])
                 else:
                     self.inputs[key].property.value = value
             else:
