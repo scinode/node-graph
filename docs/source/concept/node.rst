@@ -14,9 +14,7 @@ A node can have the following features:
 - metadata, e.g. name, state, type
 - properties (optional)
 - input and output sockets (optional)
-- control input and output sockets (optional)
 - executor: a function (class) to process node data.
-- belong to a `Nodegraph`
 
 
 Metadata
@@ -27,63 +25,16 @@ Metadata
 .. code-block:: python
 
    # identifier: TestFloat, name: float1
-   node1 = nt.nodes.new("TestFloat", "float1")
-   node2 = nt.nodes.new("TestFloat", "float2")
-
-- State
-   A node can has following states:
-   ``CREATED``, ``RUNNING``, ``FINISHED``, ``FAILED``, ``CANCELLED``, ``PAUSED``, ``WAITING``, ``SKIPPED``, ``UNKNOWN``.
-
-- Action
-   Actions applied to a node:
-   ``NONE``,  ``LAUNCH``,  ``WAIT_RESULT``,  ``PAUSE``,  ``PLAY``,  ``GATHER``,  ``CANCEL``,  ``SKIP``.
+   node1 = nt.nodes.new("TestFloat", name="float1")
+   node2 = nt.nodes.new("TestFloat", name="float2")
 
 Executor
 ===========================================
-Finally, the main entry point is the executor. An executor is a Python class/function for processing node data. It uses the node properties, inputs, outputs and context information as arguments (positional and keyword).
+An executor is a Python class/function for processing node data. It uses the node properties, inputs, outputs and context information as arguments (positional and keyword).
 
 - function
 - class
 
-.. note::
-
-   One can run nodegraph inside a executor, and in this way, one can create nodes dynamically base on the results of other nodes.
-
-
-Use Node
-==================
-Create a Node inside a NodeGraph
-
-.. code-block:: python
-
-   from node_graph import NodeGraph
-
-   # create a nodegraph
-   nt = NodeGraph(name="test_node")
-   # create a node using the Node identifier, e.g. TestFloat
-   float1 = nt.nodes.new("TestFloat")
-   # set node properties
-   float1.set({"Float": 8})
-   # copy a node
-   float2 = float1.copy()
-   # append a node to the nodegraph
-   nt.nodes.append(float2)
-
-Load node from database
-
-.. code-block:: python
-
-   from node_graph.core.node import Node
-
-   # load a Node from database
-   uuid = "xxx"
-   node = Node.load(uuid)
-
-.. note::
-
-   One can not edit the node and save it to database directly. All the changes should be saved using the `NodeGraph` object.
-
-   >>> nt.save()
 
 
 Define and register a custom Node
@@ -131,7 +82,7 @@ then you can use the node in a nodegraph:
    print("add1.result: ", add1.results[0]["value"])
 
 
-class
+Class
 -----------
 One can define a new node by extend the `Node` class.
 
@@ -170,6 +121,43 @@ One can define a new node by extend the `Node` class.
                "path": "scinode.executors.test",
                "name": "test_add",
          }
+
+
+Use Node
+==================
+Create a Node inside a NodeGraph
+
+.. code-block:: python
+
+   from node_graph import NodeGraph
+
+   # create a nodegraph
+   nt = NodeGraph(name="test_node")
+   # create a node using the Node identifier, e.g. TestFloat
+   float1 = nt.nodes.new("TestFloat")
+   # set node properties
+   float1.set({"Float": 8})
+   # copy a node
+   float2 = float1.copy()
+   # append a node to the nodegraph
+   nt.nodes.append(float2)
+
+Load node from database
+
+.. code-block:: python
+
+   from node_graph.core.node import Node
+
+   # load a Node from database
+   uuid = "xxx"
+   node = Node.load(uuid)
+
+.. note::
+
+   One can not edit the node and save it to database directly. All the changes should be saved using the `NodeGraph` object.
+
+   >>> nt.save()
+
 
 List of all Methods
 ===================

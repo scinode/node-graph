@@ -5,8 +5,8 @@ Concepts
 .. toctree::
    :maxdepth: 1
 
-   node_graph
    node
+   node_graph
    collection
    property
    socket

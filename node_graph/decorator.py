@@ -275,7 +275,7 @@ def decorator_node_group(
         )
         node_outputs = [["General", output[1]] for output in outputs]
         #
-        node_type = "worktree"
+        node_type = "nodegroup"
         ndata = {
             "node_class": Node,
             "identifier": identifier,
@@ -297,6 +297,37 @@ def decorator_node_group(
         return func
 
     return decorator
+
+
+def build_node(ndata):
+    import importlib
+    from node_graph.node import Node
+
+    ndata.setdefault("properties", [])
+    ndata.setdefault("inputs", [])
+    ndata.setdefault("outputs", [["General", "result"]])
+    ndata.setdefault("node_class", Node)
+
+    executor = ndata["executor"]
+    name = executor.get("name", None)
+    if not name:
+        executor["path"], executor["name"] = executor["path"].split(".", 1)
+    module = importlib.import_module("{}".format(executor["path"]))
+    func = getattr(module, executor["name"])
+    # Get the args and kwargs of the function
+    args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
+        func, ndata["inputs"], ndata["properties"]
+    )
+    ndata.update(
+        {
+            "args": args,
+            "kwargs": kwargs,
+            "var_args": var_args,
+            "var_kwargs": var_kwargs,
+        }
+    )
+    node = create_node(ndata)
+    return node
 
 
 class NodeDecoratorCollection:

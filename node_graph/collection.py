@@ -62,7 +62,7 @@ class Collection:
         if item.name in self.keys():
             raise Exception(f"{item.name} already exist, please choose another name.")
         item.inner_id = self.get_inner_id()
-        setattr(item, self.parent_name, self.parent)
+        setattr(item, "parent", self.parent)
         self._items.append(item)
 
     def extend(self, items):
@@ -201,7 +201,7 @@ class NodeCollection(Collection):
             ItemClass = identifier.node
         else:
             raise Exception(f"Identifier {identifier} is not a node or node name.")
-        item = ItemClass(inner_id=inner_id, name=name, uuid=uuid)
+        item = ItemClass(inner_id=inner_id, name=name, uuid=uuid, parent=self.parent)
         self.append(item)
         item.set(kwargs)
         return item

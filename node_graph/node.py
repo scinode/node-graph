@@ -348,24 +348,24 @@ class Node:
     @classmethod
     def from_dict(cls, data):
         """Rebuild Node from dict data."""
+        from node_graph.utils import get_entry_by_identifier
         import cloudpickle as pickle
 
-        # register the node created by decorator
+        # first create the node instance
         if data.get("executor", {}).get("is_pickle", False):
             node_class = pickle.loads(data["node_class"])
         else:
-            from node_graph.utils import get_entries
-
-            node_pool = get_entries("node_graph.node")
-            node_class = node_pool[data["metadata"]["identifier"]]
+            node_class = get_entry_by_identifier(
+                data["metadata"]["identifier"], cls.node_entry
+            )
         node = node_class(name=data["name"], uuid=data["uuid"])
-        # load properties
+        # then load the properties
         node.update_from_dict(data)
         return node
 
     def update_from_dict(self, data):
-        """udpate node from dict data.
-        Set metadata and properties.
+        """udpate node from dict data. Set metadata and properties.
+        This method can be overrided.
         """
         for key in ["uuid", "state", "action", "description", "hash", "position"]:
             if data.get(key):

@@ -21,7 +21,7 @@ class NodeSocket:
     default_value: float = 0.0
     link_limit: int = 1
 
-    def __init__(self, name, node=None, type="INPUT", inner_id=0, uuid=None) -> None:
+    def __init__(self, name, parent=None, type="INPUT", inner_id=0, uuid=None) -> None:
         """Init a instance of NodeSocket.
 
         Args:
@@ -30,12 +30,16 @@ class NodeSocket:
             inner_id (int, optional): _description_. Defaults to 0.
         """
         self.name = name
-        self.node = node
+        self.parent = parent
         self.type = type
         self.inner_id = inner_id
         self.uuid = uuid or str(uuid1())
         self.links = []
         self.property = None
+
+    @property
+    def node(self):
+        return self.parent
 
     def to_dict(self):
         """Export to a dictionary.
