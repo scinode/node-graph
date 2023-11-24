@@ -474,7 +474,9 @@ class Node:
             data (dict): _description_
         """
         from node_graph.socket import NodeSocket
+        from node_graph.utils import deep_copy_only_dicts
 
+        data = deep_copy_only_dicts(data)
         for key, value in data.items():
             if key in self.properties.keys():
                 self.properties[key].value = value
