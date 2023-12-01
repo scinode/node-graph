@@ -10,12 +10,13 @@ def register(pool, entries):
 def get_entries(entry_point_name):
     """Get entries from the entry point."""
     from importlib.metadata import entry_points
+    import sys
 
     pool = {}
     eps = entry_points()
-    try:
+    if sys.version_info >= (3, 10):
         group = eps.select(group=entry_point_name)
-    except ValueError:
+    else:
         # deprecated in 3.10
         eps.get(entry_point_name, [])
     for entry_point in group:
