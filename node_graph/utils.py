@@ -13,7 +13,11 @@ def get_entries(entry_point_name):
 
     pool = {}
     eps = entry_points()
-    group = eps.select(group=entry_point_name)
+    try:
+        group = eps.select(group=entry_point_name)
+    except ValueError:
+        # deprecated in 3.10
+        eps.get(entry_point_name, [])
     for entry_point in group:
         new_entries = entry_point.load()
         register(pool, new_entries)

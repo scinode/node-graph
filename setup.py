@@ -49,6 +49,6 @@ setup(
     ],
     package_data={},
     include_package_data=True,
-    python_requires=">=3.10",
+    python_requires=">=3.9",
     test_suite="setup.test_suite",
 )
