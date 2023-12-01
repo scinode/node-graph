@@ -206,6 +206,7 @@ class Node:
         import json
         import hashlib
         import cloudpickle as pickle
+        from node_graph.utils import deep_copy_only_dicts
 
         if short:
             data = {
@@ -260,6 +261,10 @@ class Node:
                 data["metadata"]["hash"] = str(uuid1())
                 # we pickle the class so that we can load again
                 data["node_class"] = pickle.dumps(self.__class__)
+        # to avoid some dict has the same address with others nodes
+        # which happens when {} is used as default value
+        # we copy the value only
+        data = deep_copy_only_dicts(data)
         return data
 
     def get_metadata(self):
@@ -474,7 +479,9 @@ class Node:
             data (dict): _description_
         """
         from node_graph.socket import NodeSocket
+        from node_graph.utils import deep_copy_only_dicts
 
+        data = deep_copy_only_dicts(data)
         for key, value in data.items():
             if key in self.properties.keys():
                 self.properties[key].value = value

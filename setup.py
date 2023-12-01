@@ -18,7 +18,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="node_graph",
-    version="0.0.1",
+    version="0.0.2",
     description="Create node-based workflow",
     long_description=README,
     long_description_content_type="text/markdown",

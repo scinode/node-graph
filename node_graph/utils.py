@@ -10,9 +10,15 @@ def register(pool, entries):
 def get_entries(entry_point_name):
     """Get entries from the entry point."""
     from importlib.metadata import entry_points
+    import sys
 
     pool = {}
-    for entry_point in entry_points().get(entry_point_name, []):
+    eps = entry_points()
+    if sys.version_info >= (3, 10):
+        group = eps.select(group=entry_point_name)
+    else:
+        group = eps.get(entry_point_name, [])
+    for entry_point in group:
         new_entries = entry_point.load()
         register(pool, new_entries)
     return pool
@@ -61,3 +67,14 @@ def yaml_to_dict(data):
     ntdata["links"] = links
     ntdata.setdefault("ctrl_links", {})
     return ntdata
+
+
+def deep_copy_only_dicts(original):
+    """Copy all nested dictionaries in a structure but keep
+    the immutable values (such as integers, strings, or tuples)
+    shared between the original and the copy"""
+    if isinstance(original, dict):
+        return {k: deep_copy_only_dicts(v) for k, v in original.items()}
+    else:
+        # Return the original value if it's not a dictionary
+        return original
