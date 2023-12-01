@@ -17,8 +17,7 @@ def get_entries(entry_point_name):
     if sys.version_info >= (3, 10):
         group = eps.select(group=entry_point_name)
     else:
-        # deprecated in 3.10
-        eps.get(entry_point_name, [])
+        group = eps.get(entry_point_name, [])
     for entry_point in group:
         new_entries = entry_point.load()
         register(pool, new_entries)
