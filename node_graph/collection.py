@@ -13,7 +13,7 @@ class Collection:
     path: str = ""
     parent_name: str = "parent"
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, pool=None, entry_point=None) -> None:
         """Init a collection instance
 
         Args:
@@ -21,6 +21,10 @@ class Collection:
         """
         self._items = []
         self.parent = parent
+        if pool is not None:
+            self.pool = pool
+        elif entry_point is not None:
+            self.pool = get_entries(entry_point_name=entry_point)
 
     def __iter__(self):
         for item in self._items:
@@ -182,9 +186,8 @@ class NodeCollection(Collection):
 
     parent_name = "node_graph"
 
-    def __init__(self, parent=None, entry_point="node_graph.node") -> None:
-        self.pool = get_entries(entry_point_name=entry_point)
-        super().__init__(parent)
+    def __init__(self, parent=None, pool=None, entry_point="node_graph.node") -> None:
+        super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, uuid=None, **kwargs):
@@ -225,9 +228,10 @@ class PropertyCollection(Collection):
 
     parent_name = "node"
 
-    def __init__(self, parent=None, entry_point="node_graph.property") -> None:
-        self.pool = get_entries(entry_point_name=entry_point)
-        super().__init__(parent)
+    def __init__(
+        self, parent=None, pool=None, entry_point="node_graph.property"
+    ) -> None:
+        super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, **kwargs):
@@ -251,9 +255,8 @@ class InputSocketCollection(Collection):
 
     parent_name = "node"
 
-    def __init__(self, parent=None, entry_point="node_graph.socket") -> None:
-        self.pool = get_entries(entry_point_name=entry_point)
-        super().__init__(parent)
+    def __init__(self, parent=None, pool=None, entry_point="node_graph.socket") -> None:
+        super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, **kwargs):
@@ -292,9 +295,8 @@ class OutputSocketCollection(Collection):
 
     parent_name = "node"
 
-    def __init__(self, parent=None, entry_point="node_graph.socket") -> None:
-        self.pool = get_entries(entry_point_name=entry_point)
-        super().__init__(parent)
+    def __init__(self, parent=None, pool=None, entry_point="node_graph.socket") -> None:
+        super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None):

@@ -1,5 +1,6 @@
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
+from node_graph.node_pool import node_pool
 
 
 class NodeGraph:
@@ -36,10 +37,10 @@ class NodeGraph:
 
     """
 
-    node_entry = "node_graph.node"
     platform: str = "node_graph"
     uuid: str = ""
     type: str = "NORMAL"
+    node_pool = node_pool
     group_properties = []
     group_inputs = []
     group_outputs = []
@@ -61,7 +62,7 @@ class NodeGraph:
         self.name = name
         self.uuid = uuid or str(uuid1())
         self.type = type
-        self.nodes = NodeCollection(self, entry_point=self.node_entry)
+        self.nodes = NodeCollection(self, pool=self.node_pool)
         self.links = LinkCollection(self)
         self.ctrl_links = LinkCollection(self)
         self.state = "CREATED"
@@ -173,7 +174,6 @@ class NodeGraph:
             Nodedtree: a nodegraph
         """
         import cloudpickle as pickle
-        from node_graph.utils import get_entries
 
         # subnodegraph
         nt = cls(
@@ -197,8 +197,7 @@ class NodeGraph:
             if ndata.get("executor", {}).get("is_pickle", False):
                 node_class = pickle.loads(ndata["node_class"])
             else:
-                node_pool = get_entries(cls.node_entry)
-                node_class = node_pool[ndata["metadata"]["identifier"]]
+                node_class = cls.node_pool[ndata["metadata"]["identifier"]]
             node = nt.nodes.new(
                 node_class,
                 name=name,

@@ -4,6 +4,8 @@ from node_graph.collection import (
     OutputSocketCollection,
 )
 from uuid import uuid1
+from node_graph.socket_pool import socket_pool
+from node_graph.property_pool import property_pool
 
 
 class Node:
@@ -44,10 +46,6 @@ class Node:
     >>> nt.nodes.append(node)
     """
 
-    node_entry = "node_graph.node"
-    socket_entry = "node_graph.socket"
-    property_entry = "node_graph.property"
-
     identifier: str = "Node"
     node_type: str = "Normal"
     inner_id: int = 0
@@ -61,6 +59,9 @@ class Node:
     group_inputs = []
     group_outputs = []
 
+    socket_pool = socket_pool
+    property_pool = property_pool
+
     def __init__(
         self,
         inner_id=0,
@@ -72,11 +73,11 @@ class Node:
         self.name = name or "{}{}".format(self.identifier, inner_id)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
-        self.properties = PropertyCollection(self, entry_point=self.property_entry)
-        self.inputs = InputSocketCollection(self, entry_point=self.socket_entry)
-        self.outputs = OutputSocketCollection(self, entry_point=self.socket_entry)
-        self.ctrl_inputs = InputSocketCollection(self, entry_point=self.socket_entry)
-        self.ctrl_outputs = OutputSocketCollection(self, entry_point=self.socket_entry)
+        self.properties = PropertyCollection(self, pool=self.property_pool)
+        self.inputs = InputSocketCollection(self, pool=self.socket_pool)
+        self.outputs = OutputSocketCollection(self, pool=self.socket_pool)
+        self.ctrl_inputs = InputSocketCollection(self, pool=self.socket_pool)
+        self.ctrl_outputs = OutputSocketCollection(self, pool=self.socket_pool)
         self.executor = None
         self.state = "CREATED"
         self.action = "NONE"
@@ -351,18 +352,19 @@ class Node:
         return executor
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data, node_pool=None):
         """Rebuild Node from dict data."""
-        from node_graph.utils import get_entry_by_identifier
         import cloudpickle as pickle
+
+        if node_pool is None:
+            from node_graph.node_pool import node_pool
 
         # first create the node instance
         if data.get("executor", {}).get("is_pickle", False):
             node_class = pickle.loads(data["node_class"])
         else:
-            node_class = get_entry_by_identifier(
-                data["metadata"]["identifier"], cls.node_entry
-            )
+            node_class = node_pool[data["metadata"]["identifier"]]
+
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
         node.update_from_dict(data)
@@ -407,11 +409,12 @@ class Node:
         """Load Node data from database."""
 
     @classmethod
-    def new(cls, identifier, name=None):
+    def new(cls, identifier, name=None, node_pool=None):
         """Create a node from a identifier."""
-        from node_graph.utils import get_entry_by_identifier
+        if node_pool is None:
+            from node_graph.node_pool import node_pool
 
-        ItemClass = get_entry_by_identifier(identifier, cls.node_entry)
+        ItemClass = node_pool[identifier]
         node = ItemClass(name=name)
         return node
 

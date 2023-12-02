@@ -1,4 +1,5 @@
 from uuid import uuid1
+from node_graph.property import NodeProperty
 
 
 class NodeSocket:
@@ -15,11 +16,10 @@ class NodeSocket:
         link_limit (int): maxminum number of link.
     """
 
-    property_entry = "node_graph.property"
-
     identifier: str = "NodeSocket"
     default_value: float = 0.0
     link_limit: int = 1
+    node_property = NodeProperty
 
     def __init__(self, name, parent=None, type="INPUT", inner_id=0, uuid=None) -> None:
         """Init a instance of NodeSocket.
@@ -83,14 +83,11 @@ class NodeSocket:
 
     def add_property(self, identifier, name=None, **kwargs):
         """Add property to this socket."""
-        from node_graph.property import NodeProperty
 
         if name is None:
             name = self.name
 
-        self.property = NodeProperty.new(
-            identifier, name=name, property_entry=self.property_entry, data=kwargs
-        )
+        self.property = self.node_property.new(identifier, name=name, data=kwargs)
 
     @classmethod
     def from_dict(cls, data):
