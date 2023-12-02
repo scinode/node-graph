@@ -77,7 +77,7 @@ class NodeProperty:
     def new(cls, identifier, name=None, data={}, property_pool=None):
         """Create a node from a identifier."""
         if property_pool is None:
-            from node_graph.property_pool import property_pool
+            from node_graph.properties import property_pool
 
         ItemClass = property_pool[identifier]
         item = ItemClass(name, **data)

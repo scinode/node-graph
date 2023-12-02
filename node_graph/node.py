@@ -4,8 +4,8 @@ from node_graph.collection import (
     OutputSocketCollection,
 )
 from uuid import uuid1
-from node_graph.socket_pool import socket_pool
-from node_graph.property_pool import property_pool
+from node_graph.sockets import socket_pool
+from node_graph.properties import property_pool
 
 
 class Node:
@@ -357,7 +357,7 @@ class Node:
         import cloudpickle as pickle
 
         if node_pool is None:
-            from node_graph.node_pool import node_pool
+            from node_graph.nodes import node_pool
 
         # first create the node instance
         if data.get("executor", {}).get("is_pickle", False):
@@ -412,7 +412,7 @@ class Node:
     def new(cls, identifier, name=None, node_pool=None):
         """Create a node from a identifier."""
         if node_pool is None:
-            from node_graph.node_pool import node_pool
+            from node_graph.nodes import node_pool
 
         ItemClass = node_pool[identifier]
         node = ItemClass(name=name)

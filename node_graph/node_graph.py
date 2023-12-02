@@ -1,6 +1,6 @@
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
-from node_graph.node_pool import node_pool
+from node_graph.nodes import node_pool
 
 
 class NodeGraph:
