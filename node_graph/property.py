@@ -74,12 +74,15 @@ class NodeProperty:
         return p
 
     @classmethod
-    def new(cls, identifier, name=None, property_entry=None, data={}):
-        """Create a node from a identifier."""
-        from node_graph.utils import get_entry_by_identifier
+    def new(cls, identifier, name=None, data={}, property_pool=None):
+        """Create a property from a identifier.
+        When a plugin create a property, it should provide its own property pool.
+        Then call super().new(identifier, name, property_pool) to create a property.
+        """
+        if property_pool is None:
+            from node_graph.properties import property_pool
 
-        property_entry = property_entry if property_entry else cls.property_entry
-        ItemClass = get_entry_by_identifier(identifier, property_entry)
+        ItemClass = property_pool[identifier]
         item = ItemClass(name, **data)
         return item
 
