@@ -16,10 +16,12 @@ class NodeSocket:
         link_limit (int): maxminum number of link.
     """
 
+    # this is the class of the property object
+    node_property = NodeProperty
+
     identifier: str = "NodeSocket"
     default_value: float = 0.0
     link_limit: int = 1
-    node_property = NodeProperty
 
     def __init__(self, name, parent=None, type="INPUT", inner_id=0, uuid=None) -> None:
         """Init a instance of NodeSocket.

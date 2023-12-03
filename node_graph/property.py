@@ -75,7 +75,10 @@ class NodeProperty:
 
     @classmethod
     def new(cls, identifier, name=None, data={}, property_pool=None):
-        """Create a node from a identifier."""
+        """Create a property from a identifier.
+        When a plugin create a property, it should provide its own property pool.
+        Then call super().new(identifier, name, property_pool) to create a property.
+        """
         if property_pool is None:
             from node_graph.properties import property_pool
 

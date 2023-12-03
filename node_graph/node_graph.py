@@ -37,10 +37,12 @@ class NodeGraph:
 
     """
 
+    # This is the entry point of the nodes
+    node_pool = node_pool
+
     platform: str = "node_graph"
     uuid: str = ""
     type: str = "NORMAL"
-    node_pool = node_pool
     group_properties = []
     group_inputs = []
     group_outputs = []

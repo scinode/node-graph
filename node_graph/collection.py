@@ -21,6 +21,8 @@ class Collection:
         """
         self._items = []
         self.parent = parent
+        # one can specify the pool or entry_point to get the pool
+        # if pool is not None, entry_point will be ignored, e.g., Link has no pool
         if pool is not None:
             self.pool = pool
         elif entry_point is not None:

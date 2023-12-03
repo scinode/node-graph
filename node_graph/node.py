@@ -46,6 +46,10 @@ class Node:
     >>> nt.nodes.append(node)
     """
 
+    # This is the entry point for the socket and property pool
+    socket_pool = socket_pool
+    property_pool = property_pool
+
     identifier: str = "Node"
     node_type: str = "Normal"
     inner_id: int = 0
@@ -58,9 +62,6 @@ class Node:
     var_kwargs = None
     group_inputs = []
     group_outputs = []
-
-    socket_pool = socket_pool
-    property_pool = property_pool
 
     def __init__(
         self,
@@ -410,7 +411,10 @@ class Node:
 
     @classmethod
     def new(cls, identifier, name=None, node_pool=None):
-        """Create a node from a identifier."""
+        """Create a node from a identifier.
+        When a plugin create a node, it should provide its own node pool.
+        Then call super().new(identifier, name, node_pool) to create a node.
+        """
         if node_pool is None:
             from node_graph.nodes import node_pool
 
