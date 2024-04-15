@@ -101,7 +101,7 @@ def create_node(ndata):
 
     Node = ndata.get("node_class", Node)
 
-    class MyNode(Node):
+    class DecoratedNode(Node):
         identifier: str = ndata["identifier"]
         node_type: str = ndata.get("node_type", "NORMAL")
         catalog = ndata.get("catalog", "Others")
@@ -132,7 +132,7 @@ def create_node(ndata):
             executor = ndata.get("executor", {})
             return executor
 
-    return MyNode
+    return DecoratedNode
 
 
 def create_node_group(ngdata):
