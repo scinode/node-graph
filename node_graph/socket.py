@@ -21,9 +21,8 @@ class NodeSocket:
 
     identifier: str = "NodeSocket"
     default_value: float = 0.0
-    link_limit: int = 1
 
-    def __init__(self, name, parent=None, type="INPUT", inner_id=0, uuid=None) -> None:
+    def __init__(self, name, parent=None, type="INPUT", inner_id=0, uuid=None, link_limit=1) -> None:
         """Init a instance of NodeSocket.
 
         Args:
@@ -38,6 +37,7 @@ class NodeSocket:
         self.uuid = uuid or str(uuid1())
         self.links = []
         self.property = None
+        self.link_limit = link_limit
 
     @property
     def node(self):

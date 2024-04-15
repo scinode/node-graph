@@ -13,7 +13,9 @@ class Collection:
     path: str = ""
     parent_name: str = "parent"
 
-    def __init__(self, parent=None, pool=None, entry_point=None) -> None:
+    def __init__(self, parent=None, pool=None, entry_point=None,
+                 post_creation_hooks=None,
+                 post_deletion_hooks=None) -> None:
         """Init a collection instance
 
         Args:
@@ -27,6 +29,8 @@ class Collection:
             self.pool = pool
         elif entry_point is not None:
             self.pool = get_entries(entry_point_name=entry_point)
+        self.post_creation_hooks = post_creation_hooks or []
+        self.post_deletion_hooks = post_deletion_hooks or []
 
     def __iter__(self):
         for item in self._items:
@@ -133,6 +137,7 @@ class Collection:
         for index, item in enumerate(self._items):
             if item.name == name:
                 del self._items[index]
+                self.execute_post_deletion_hooks(item)
                 return
 
     def __len__(self):
@@ -147,6 +152,16 @@ class Collection:
         coll = self.__class__(parent=parent)
         coll._items = [item.copy() for item in self._items]
         return coll
+
+    def execute_post_creation_hooks(self, item):
+        """Execute all functions in post_creation_hooks with the given item."""
+        for func in self.post_creation_hooks:
+            func(self, item)
+    
+    def execute_post_deletion_hooks(self, item):
+        """Execute all functions in post_deletion_hooks with the given item."""
+        for func in self.post_deletion_hooks:
+            func(self, item)
 
 
 def decorator_check_identifier_name(func):
@@ -188,8 +203,8 @@ class NodeCollection(Collection):
 
     parent_name = "node_graph"
 
-    def __init__(self, parent=None, pool=None, entry_point="node_graph.node") -> None:
-        super().__init__(parent, pool=pool, entry_point=entry_point)
+    def __init__(self, parent=None, pool=None, entry_point="node_graph.node", post_creation_hooks=None) -> None:
+        super().__init__(parent, pool=pool, entry_point=entry_point, post_creation_hooks=post_creation_hooks)
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, uuid=None, **kwargs):
@@ -209,6 +224,8 @@ class NodeCollection(Collection):
         item = ItemClass(inner_id=inner_id, name=name, uuid=uuid, parent=self.parent)
         self.append(item)
         item.set(kwargs)
+        # Execute post creation hooks
+        self.execute_post_creation_hooks(item)
         return item
 
     def copy(self, parent=None):
@@ -333,6 +350,9 @@ class LinkCollection(Collection):
 
         item = NodeLink(input, output)
         self.append(item)
+        # Execute post creation hooks
+        self.execute_post_creation_hooks(item)
+        return item
 
     def __delitem__(self, index):
         """Delete link from this collection.
