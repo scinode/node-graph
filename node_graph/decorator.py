@@ -100,6 +100,7 @@ def create_node(ndata):
     from node_graph.node import Node
 
     Node = ndata.get("node_class", Node)
+    print("Node: ", Node)
 
     class DecoratedNode(Node):
         identifier: str = ndata["identifier"]
@@ -113,6 +114,8 @@ def create_node(ndata):
 
         def create_sockets(self):
             for input in ndata.get("inputs", []):
+                print("self: ", self)
+                print("inputs: ", self.inputs.__class__.__name__)
                 inp = self.inputs.new(input[0], input[1])
                 setting = input[2] if len(input) > 2 else {}
                 prop = setting.get("property", None)

@@ -81,8 +81,15 @@ class NodeProperty:
         """
         if property_pool is None:
             from node_graph.properties import property_pool
+        if isinstance(identifier, str):
+            ItemClass = property_pool[identifier]
+        elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
+            ItemClass = identifier
+        else:
+            raise Exception(
+                f"Identifier {identifier} is not a property or property name."
+            )
 
-        ItemClass = property_pool[identifier]
         item = ItemClass(name, **data)
         return item
 

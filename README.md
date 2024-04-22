@@ -1,6 +1,9 @@
 # NodeGraph
+[![PyPI version](https://badge.fury.io/py/node-graph.svg)](https://badge.fury.io/py/node-graph)
+[![Unit test](https://github.com/scinode/node-graph/actions/workflows/unit_test.yaml/badge.svg)](https://github.com/scinode/node-graph/actions/workflows/unit_test.yaml)
+[![Docs status](https://readthedocs.org/projects/node-graph/badge)](http://node-graph.readthedocs.io/)
 
-[![Unit test](https://github.com/scinode/node_graph/actions/workflows/unit_test.yaml/badge.svg)](https://github.com/scinode/node_graph/actions/workflows/unit_test.yaml)
+
 
 A platform for designing node-based workflows.
 

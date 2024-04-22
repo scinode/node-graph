@@ -13,9 +13,14 @@ class Collection:
     path: str = ""
     parent_name: str = "parent"
 
-    def __init__(self, parent=None, pool=None, entry_point=None,
-                 post_creation_hooks=None,
-                 post_deletion_hooks=None) -> None:
+    def __init__(
+        self,
+        parent=None,
+        pool=None,
+        entry_point=None,
+        post_creation_hooks=None,
+        post_deletion_hooks=None,
+    ) -> None:
         """Init a collection instance
 
         Args:
@@ -157,7 +162,7 @@ class Collection:
         """Execute all functions in post_creation_hooks with the given item."""
         for func in self.post_creation_hooks:
             func(self, item)
-    
+
     def execute_post_deletion_hooks(self, item):
         """Execute all functions in post_deletion_hooks with the given item."""
         for func in self.post_deletion_hooks:
@@ -203,8 +208,19 @@ class NodeCollection(Collection):
 
     parent_name = "node_graph"
 
-    def __init__(self, parent=None, pool=None, entry_point="node_graph.node", post_creation_hooks=None) -> None:
-        super().__init__(parent, pool=pool, entry_point=entry_point, post_creation_hooks=post_creation_hooks)
+    def __init__(
+        self,
+        parent=None,
+        pool=None,
+        entry_point="node_graph.node",
+        post_creation_hooks=None,
+    ) -> None:
+        super().__init__(
+            parent,
+            pool=pool,
+            entry_point=entry_point,
+            post_creation_hooks=post_creation_hooks,
+        )
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, uuid=None, **kwargs):
@@ -254,8 +270,16 @@ class PropertyCollection(Collection):
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, **kwargs):
+        from node_graph.property import NodeProperty
 
-        ItemClass = self.pool[identifier]
+        if isinstance(identifier, str):
+            ItemClass = self.pool[identifier]
+        elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
+            ItemClass = identifier
+        else:
+            raise Exception(
+                f"Identifier {identifier} is not a property or property name."
+            )
         item = ItemClass(name, **kwargs)
         self.append(item)
         return item
@@ -279,8 +303,14 @@ class InputSocketCollection(Collection):
 
     @decorator_check_identifier_name
     def new(self, identifier, name=None, **kwargs):
+        from node_graph.socket import NodeSocket
 
-        ItemClass = self.pool[identifier]
+        if isinstance(identifier, str):
+            ItemClass = self.pool[identifier]
+        elif isinstance(identifier, type) and issubclass(identifier, NodeSocket):
+            ItemClass = identifier
+        else:
+            raise Exception(f"Identifier {identifier} is not a socket or socket name.")
         inner_id = self.get_inner_id()
         item = ItemClass(name, type="INPUT", index=inner_id, **kwargs)
         self.append(item)
@@ -320,7 +350,14 @@ class OutputSocketCollection(Collection):
     @decorator_check_identifier_name
     def new(self, identifier, name=None):
 
-        ItemClass = self.pool[identifier]
+        from node_graph.socket import NodeSocket
+
+        if isinstance(identifier, str):
+            ItemClass = self.pool[identifier]
+        elif isinstance(identifier, type) and issubclass(identifier, NodeSocket):
+            ItemClass = identifier
+        else:
+            raise Exception(f"Identifier {identifier} is not a socket or socket name.")
         item = ItemClass(name, type="OUTPUT", index=len(self._items))
         self.append(item)
         return item

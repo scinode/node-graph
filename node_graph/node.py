@@ -69,14 +69,17 @@ class Node:
         name=None,
         uuid=None,
         parent=None,
+        property_collection_class=PropertyCollection,
+        input_collection_class=InputSocketCollection,
+        output_collection_class=OutputSocketCollection,
     ) -> None:
         self.inner_id = inner_id
         self.name = name or "{}{}".format(self.identifier, inner_id)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
-        self.properties = PropertyCollection(self, pool=self.property_pool)
-        self.inputs = InputSocketCollection(self, pool=self.socket_pool)
-        self.outputs = OutputSocketCollection(self, pool=self.socket_pool)
+        self.properties = property_collection_class(self, pool=self.property_pool)
+        self.inputs = input_collection_class(self, pool=self.socket_pool)
+        self.outputs = output_collection_class(self, pool=self.socket_pool)
         self.ctrl_inputs = InputSocketCollection(self, pool=self.socket_pool)
         self.ctrl_outputs = OutputSocketCollection(self, pool=self.socket_pool)
         self.executor = None
