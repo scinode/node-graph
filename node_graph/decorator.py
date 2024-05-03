@@ -33,11 +33,13 @@ def inspect_function(func: Any):
                 arg = [name, None]
             args.append(arg)
         elif parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
-            kwargs[name] = {"type": parameter.annotation}
             if parameter.default is not inspect.Parameter.empty:
-                kwargs[name]["default"] = parameter.default
+                kwargs[name] = {
+                    "type": parameter.annotation,
+                    "default": parameter.default,
+                }
             else:
-                kwargs[name]["default"] = None
+                args.append([name, None])
         elif parameter.kind == inspect.Parameter.VAR_POSITIONAL:
             var_args = name
         elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
