@@ -11,7 +11,6 @@ ndata = {
 }
 MyNumpyAdd = create_node(ndata)
 
-
 def create_test_node_group():
     nt = NodeGraph()
     add1 = nt.nodes.new("TestAdd", "add1")
@@ -34,6 +33,13 @@ MyTestAddGroup = create_node_group(
         "nt": create_test_node_group(),
     }
 )
+
+def test_socket(decorated_myadd):
+    """Test simple math."""
+    n = decorated_myadd.node()
+    assert n.inputs["x"].identifier == "Float"
+    assert n.inputs["y"].identifier == "Float"
+    assert n.inputs["t"].property.default == 1
 
 
 def test_create_node():

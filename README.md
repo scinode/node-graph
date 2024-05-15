@@ -1,6 +1,7 @@
 # NodeGraph
 [![PyPI version](https://badge.fury.io/py/node-graph.svg)](https://badge.fury.io/py/node-graph)
-[![Unit test](https://github.com/scinode/node-graph/actions/workflows/unit_test.yaml/badge.svg)](https://github.com/scinode/node-graph/actions/workflows/unit_test.yaml)
+[![CI](https://github.com/scinode/node-graph/actions/workflows/ci.yaml/badge.svg)](https://github.com/scinode/node-graph/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/scinode/node-graph/branch/main/graph/badge.svg)](https://codecov.io/gh/scinode/node-graph)
 [![Docs status](https://readthedocs.org/projects/node-graph/badge)](http://node-graph.readthedocs.io/)
 
 

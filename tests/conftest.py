@@ -37,11 +37,11 @@ def decorated_myadd():
 
     @node(
         identifier="MyAdd",
-        properties=[["Float", "t", {"default": 1}]],
-        inputs=[["Float", "x"], ["Float", "y"]],
         outputs=[["General", "result"]],
     )
-    def myadd(t: float, x: float, y: float):
+    def myadd(x: float, y: float, t: float = 1):
+        import time
+        time.sleep(t)
         return x + y
 
     return myadd

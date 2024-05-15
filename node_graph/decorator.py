@@ -27,10 +27,7 @@ def inspect_function(func: Any):
     var_kwargs = None
     for name, parameter in parameters.items():
         if parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
-            if parameter.annotation is not inspect.Parameter.empty:
-                arg = [name, parameter.annotation]
-            else:
-                arg = [name, None]
+            arg = [name, parameter.annotation]
             args.append(arg)
         elif parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
             if parameter.default is not inspect.Parameter.empty:
@@ -39,7 +36,7 @@ def inspect_function(func: Any):
                     "default": parameter.default,
                 }
             else:
-                args.append([name, None])
+                args.append([name, parameter.annotation])
         elif parameter.kind == inspect.Parameter.VAR_POSITIONAL:
             var_args = name
         elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
