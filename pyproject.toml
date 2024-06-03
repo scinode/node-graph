@@ -1,0 +1,47 @@
+[build-system]
+requires = ["flit_core >=3.2"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "node_graph"
+version = "0.0.8"
+description = "Create node-based workflow"
+authors = [{ name = "Xing Wang", email = "xingwang1991@gmail.com" }]
+readme = "README.md"
+license = { text = "MIT License" }
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "click",
+    "pyyaml",
+    "colorama",
+    "termcolor",
+    "cloudpickle"
+]
+keywords = ["graph", "workflows"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering"
+]
+
+[project.urls]
+Documentation = "https://node-graph.readthedocs.io"
+Source = "https://github.com/scinode/node-graph"
+
+
+[project.entry-points."node_graph.node"]
+test = "node_graph.nodes.test_nodes:node_list"
+
+[project.entry-points."node_graph.socket"]
+built_in = "node_graph.sockets.builtin:socket_list"
+
+[project.entry-points."node_graph.property"]
+built_in = "node_graph.properties.builtin:property_list"
