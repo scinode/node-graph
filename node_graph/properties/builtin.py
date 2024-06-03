@@ -18,12 +18,12 @@ class IntProperty(NodeProperty, SerializeJson):
     identifier: str = "Int"
     data_type = "Int"
 
-    def __init__(self, name, description="", default=0, update=None) -> None:
+    def __init__(self, name, description="", default=None, update=None) -> None:
         super().__init__(name, description, default, update)
 
     def set_value(self, value):
         # run the callback function
-        if isinstance(value, int):
+        if isinstance(value, (int, type(None))):
             self._value = value
             if self.update is not None:
                 self.update()
@@ -37,12 +37,12 @@ class FloatProperty(NodeProperty, SerializeJson):
     identifier: str = "Float"
     data_type = "Float"
 
-    def __init__(self, name, description="", default=0.0, update=None) -> None:
+    def __init__(self, name, description="", default=None, update=None) -> None:
         super().__init__(name, description, default, update)
 
     def set_value(self, value):
         # run the callback function
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float, type(None))):
             self._value = value
             if self.update is not None:
                 self.update()
@@ -56,12 +56,12 @@ class BoolProperty(NodeProperty, SerializeJson):
     identifier: str = "Bool"
     data_type = "Bool"
 
-    def __init__(self, name, description="", default=True, update=None) -> None:
+    def __init__(self, name, description="", default=None, update=None) -> None:
         super().__init__(name, description, default, update)
 
     def set_value(self, value):
         # run the callback function
-        if isinstance(value, (bool, int)):
+        if isinstance(value, (bool, int, type(None))):
             self._value = bool(value)
             if self.update is not None:
                 self.update()
@@ -75,11 +75,11 @@ class StringProperty(NodeProperty, SerializeJson):
     identifier: str = "String"
     data_type = "String"
 
-    def __init__(self, name, description="", default="", update=None) -> None:
+    def __init__(self, name, description="", default=None, update=None) -> None:
         super().__init__(name, description, default, update)
 
     def set_value(self, value):
-        if isinstance(value, str):
+        if isinstance(value, (str, type(None))):
             self._value = value
             # run the callback function
             if self.update is not None:
