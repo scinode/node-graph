@@ -37,10 +37,11 @@ def decorated_myadd():
 
     @node(
         identifier="MyAdd",
-        outputs=[["General", "result"]],
+        outputs=[{"identifier": "General", "name": "result"}],
     )
     def myadd(x: float, y: float, t: float = 1):
         import time
+
         time.sleep(t)
         return x + y
 
@@ -74,8 +75,11 @@ def node_with_decorated_node(decorated_myadd):
 
     @node(
         identifier="node_with_decorated_node",
-        inputs=[["Float", "x"], ["Float", "y"]],
-        outputs=[["General", "result"]],
+        inputs=[
+            {"identifier": "Float", "name": "x"},
+            {"identifier": "Float", "name": "y"},
+        ],
+        outputs=[{"identifier": "General", "name": "result"}],
     )
     def node_with_decorated_node(x, y):
         nt = NodeGraph("node_in_decorated_node")
