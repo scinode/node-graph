@@ -138,7 +138,8 @@ def create_node(ndata):
             for output in outputs:
                 if isinstance(output, str):
                     output = {"identifier": "General", "name": output}
-                self.outputs.new(output.pop("identifier"), **output)
+                identifier = output.pop("identifier", "General")
+                self.outputs.new(identifier, **output)
             self.args = ndata.get("args", [])
             self.kwargs = ndata.get("kwargs", [])
             self.var_args = ndata.get("var_args", None)
