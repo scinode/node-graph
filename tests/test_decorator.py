@@ -4,12 +4,19 @@ import pytest
 
 ndata = {
     "identifier": "MyNumpyAdd",
-    "properties": [["Float", "x", {"default": 3}]],
-    "inputs": [["Float", "y", {"property": ["Float", {"default": 10}]}]],
-    "outputs": [["General", "result"]],
+    "properties": [{"identifier": "Float", "name": "x", "default": 3}],
+    "inputs": [
+        {
+            "identifier": "Float",
+            "name": "y",
+            "property": {"identifier": "Float", "default": 10},
+        },
+    ],
+    "outputs": [{"identifier": "General", "name": "result"}],
     "executor": {"path": "numpy.add"},
 }
 MyNumpyAdd = create_node(ndata)
+
 
 def create_test_node_group():
     nt = NodeGraph()
@@ -34,6 +41,7 @@ MyTestAddGroup = create_node_group(
     }
 )
 
+
 def test_socket(decorated_myadd):
     """Test simple math."""
     n = decorated_myadd.node()
@@ -48,6 +56,8 @@ def test_create_node():
     nt = NodeGraph(name="test_create_node")
     nt.nodes.new(MyNumpyAdd, "add1")
     assert len(nt.nodes) == 1
+    assert nt.nodes[0].properties[0].default == 3
+    assert nt.nodes[0].inputs[0].property.default == 10
 
 
 def test_create_node_group():

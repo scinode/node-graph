@@ -66,21 +66,31 @@ def generate_input_sockets(func: Any, inputs=None, properties=None):
     inputs = inputs or []
     properties = properties or []
     args, kwargs, var_args, var_kwargs = inspect_function(func)
-    names = [input[1] for input in inputs] + [property[1] for property in properties]
+    names = [input["name"] for input in inputs] + [
+        property[1] for property in properties
+    ]
     for arg in args:
         if arg[0] not in names:
-            inputs.append([python_type_to_socket_type(arg[1]), arg[0]])
+            inputs.append(
+                {"identifier": python_type_to_socket_type(arg[1]), "name": arg[0]}
+            )
     for name, kwarg in kwargs.items():
         if name not in names:
-            input = [python_type_to_socket_type(kwarg["type"]), name]
+            input = {
+                "identifier": python_type_to_socket_type(kwarg["type"]),
+                "name": name,
+            }
             if kwarg["default"] is not None:
                 # prop: [identifier, kwargs]
-                input.append({"property": [input[0], {"default": kwarg["default"]}]})
+                input["property"] = {
+                    "identifier": input["identifier"],
+                    "default": kwarg["default"],
+                }
             inputs.append(input)
     if var_args is not None:
-        inputs.append(["General", var_args])
+        inputs.append({"identifier": "General", "name": var_args})
     if var_kwargs is not None:
-        inputs.append(["General", var_kwargs])
+        inputs.append({"identifier": "General", "name": var_kwargs})
     #
     arg_names = [arg[0] for arg in args]
     kwarg_names = [name for name in kwargs.keys()]
@@ -97,6 +107,7 @@ def create_node(ndata):
         _type_: _description_
     """
     from node_graph.node import Node
+    from copy import deepcopy
 
     Node = ndata.get("node_class", Node)
 
@@ -106,22 +117,29 @@ def create_node(ndata):
         catalog = ndata.get("catalog", "Others")
 
         def create_properties(self):
-            for prop in ndata.get("properties", []):
-                kwargs = prop[2] if len(prop) > 2 else {}
-                self.properties.new(prop[0], prop[1], **kwargs)
+            properties = deepcopy(ndata.get("properties", []))
+            for prop in properties:
+                self.properties.new(prop.pop("identifier"), **prop)
 
         def create_sockets(self):
-            for input in ndata.get("inputs", []):
-                inp = self.inputs.new(input[0], input[1])
-                setting = input[2] if len(input) > 2 else {}
-                prop = setting.get("property", None)
+            outputs = deepcopy(ndata.get("outputs", []))
+            inputs = deepcopy(ndata.get("inputs", []))
+
+            for input in inputs:
+                if isinstance(input, str):
+                    input = {"identifier": "General", "name": input}
+                inp = self.inputs.new(input["identifier"], input["name"])
+                prop = input.get("property", None)
                 if prop is not None:
-                    kwargs = prop[1] if len(prop) > 1 else {}
+                    prop["name"] = input["name"]
                     # identifer, name, kwargs
-                    inp.add_property(prop[0], input[1], **kwargs)
-                inp.link_limit = setting.get("link_limit", 1)
-            for output in ndata.get("outputs", []):
-                self.outputs.new(output[0], output[1])
+                    inp.add_property(**prop)
+                inp.link_limit = input.get("link_limit", 1)
+            for output in outputs:
+                if isinstance(output, str):
+                    output = {"identifier": "General", "name": output}
+                identifier = output.pop("identifier", "General")
+                self.outputs.new(identifier, **output)
             self.args = ndata.get("args", [])
             self.kwargs = ndata.get("kwargs", [])
             self.var_args = ndata.get("var_args", None)
@@ -187,7 +205,7 @@ def decorator_node(
 
     properties = properties or []
     inputs = inputs or []
-    outputs = outputs or [["General", "result"]]
+    outputs = outputs or [{"identifier": "General", "name": "result"}]
 
     def decorator(func):
         import cloudpickle as pickle
@@ -272,7 +290,9 @@ def decorator_node_group(
         args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
             func, inputs, properties
         )
-        node_outputs = [["General", output[1]] for output in outputs]
+        node_outputs = [
+            {"identifier": "General", "name": output[1]} for output in outputs
+        ]
         #
         node_type = "nodegroup"
         ndata = {
@@ -304,7 +324,7 @@ def build_node(ndata):
 
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
-    ndata.setdefault("outputs", [["General", "result"]])
+    ndata.setdefault("outputs", [{"identifier": "General", "name": "result"}])
     ndata.setdefault("node_class", Node)
 
     executor = ndata["executor"]
