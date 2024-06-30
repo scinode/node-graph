@@ -8,17 +8,9 @@ dynamic = ["version"]  # read from aiida_workgraph/__init__.py
 description = "Create node-based workflow"
 authors = [{ name = "Xing Wang", email = "xingwang1991@gmail.com" }]
 readme = "README.md"
-license = { text = "MIT License" }
-requires-python = ">=3.9"
-dependencies = [
-    "numpy",
-    "click",
-    "pyyaml",
-    "colorama",
-    "termcolor",
-    "cloudpickle"
-]
+license = {file = "LICENSE"}
 keywords = ["graph", "workflows"]
+requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 1 - Planning",
     "License :: OSI Approved :: MIT License",
@@ -32,9 +24,35 @@ classifiers = [
     "Topic :: Scientific/Engineering"
 ]
 
+dependencies = [
+    "numpy",
+    "click",
+    "pyyaml",
+    "colorama",
+    "termcolor",
+    "cloudpickle"
+]
+
 [project.urls]
 Documentation = "https://node-graph.readthedocs.io"
 Source = "https://github.com/scinode/node-graph"
+
+
+[project.optional-dependencies]
+docs = [
+    "sphinx_rtd_theme",
+    "sphinx~=7.2",
+    "nbsphinx",
+]
+pre-commit = [
+    "pre-commit~=2.2",
+    "pylint~=2.17.4",
+]
+tests = [
+    "pytest~=7.0",
+    "pytest-cov~=2.7,<2.11",
+]
+
 
 
 [project.entry-points."node_graph.node"]

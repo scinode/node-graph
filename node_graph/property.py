@@ -1,33 +1,40 @@
+from typing import Callable, Dict, Any, Union
+
+
 class NodeProperty:
     """Node property.
 
     Property is the data which can be shown in the GUI.
     """
 
-    property_entry = "node_graph.property"
-    identifier = "NodeProperty"
+    property_entry: str = "node_graph.property"
+    identifier: str = "NodeProperty"
 
-    def __init__(self, name, description="", default=None, update=None) -> None:
+    def __init__(
+        self,
+        name: str,
+        description: str = "",
+        default: Any = None,
+        update: Callable[[], None] = None,
+    ) -> None:
         """_summary_
 
         Args:
-            name (str): name of the varible
-            options (list, optional): options of the varible. Defaults to [].
+            name (str): name of the variable
             description (str, optional): _description_. Defaults to "".
-            default (_type_, optional): _description_. Defaults to None.
-            extra (dict, optional): extra data, e.g. size for a vector. Defaults to {}.
-            update (function, optional): The callback function when
-                udpate the item. Defaults to None.
+            default (Any, optional): _description_. Defaults to None.
+            update (Callable[[], None], optional): The callback function when
+                update the item. Defaults to None.
         """
-        self.name = name
-        self.description = description
-        self.default = default
-        self.update = update
-        self._value = self.default
+        self.name: str = name
+        self.description: str = description
+        self.default: Any = default
+        self.update: Callable[[], None] = update
+        self._value: Any = self.default
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """Data to be saved to database."""
-        data = {
+        data: Dict[str, Any] = {
             "value": self.value,
             "name": self.name,
             "identifier": self.identifier,
@@ -37,52 +44,60 @@ class NodeProperty:
         }
         return data
 
-    def get_metadata(self):
-        metadata = {"default": self.default}
+    def get_metadata(self) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = {"default": self.default}
         return metadata
 
     @classmethod
-    def from_dict(cls, data):
-        p = cls(data["name"])
+    def from_dict(cls, data: Dict[str, Any]) -> "NodeProperty":
+        p: NodeProperty = cls(data["name"])
         p.identifier = data["identifier"]
         p.value = data["value"]
         return p
 
-    def update_from_dict(self, data):
+    def update_from_dict(self, data: Dict[str, Any]) -> None:
         self.value = data["value"]
 
     @property
-    def value(self):
+    def value(self) -> Any:
         return self._value
 
     @value.setter
-    def value(self, value):
+    def value(self, value: Any) -> None:
         self.set_value(value)
 
-    def set_value(self, value):
+    def set_value(self, value: Any) -> None:
         # run the callback function
         self._value = value
         if self.update is not None:
             self.update()
 
-    def copy(self):
+    def copy(self) -> "NodeProperty":
         """Copy the property.
         We should not use this function! Because can not copy the callback function!!!
         """
-        p = self.__class__(self.name, self.description, self.value, self.update)
+        p: NodeProperty = self.__class__(
+            self.name, self.description, self.value, self.update
+        )
         p._value = self._value
         return p
 
     @classmethod
-    def new(cls, identifier, name=None, data={}, property_pool=None):
-        """Create a property from a identifier.
-        When a plugin create a property, it should provide its own property pool.
+    def new(
+        cls,
+        identifier: Union[str, type],
+        name: str = None,
+        data: Dict[str, Any] = {},
+        property_pool: Dict[str, "NodeProperty"] = None,
+    ) -> "NodeProperty":
+        """Create a property from an identifier.
+        When a plugin creates a property, it should provide its own property pool.
         Then call super().new(identifier, name, property_pool) to create a property.
         """
         if property_pool is None:
             from node_graph.properties import property_pool
         if isinstance(identifier, str):
-            ItemClass = property_pool[identifier]
+            ItemClass: "NodeProperty" = property_pool[identifier]
         elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
             ItemClass = identifier
         else:
@@ -90,15 +105,15 @@ class NodeProperty:
                 f"Identifier {identifier} is not a property or property name."
             )
 
-        item = ItemClass(name, **data)
+        item: NodeProperty = ItemClass(name, **data)
         return item
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '{}(name="{}", value={})'.format(
             self.__class__.__name__, self.name, self._value
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '{}(name="{}", value={})'.format(
             self.__class__.__name__, self.name, self._value
         )

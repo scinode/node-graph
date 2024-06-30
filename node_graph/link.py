@@ -1,19 +1,22 @@
+from __future__ import annotations
+
+
 class NodeLink:
     """Link connect two sockets."""
 
-    def __init__(self, from_socket, to_socket) -> None:
+    def __init__(self, from_socket: "Socket", to_socket: "Socket") -> None:
         """init a instance of Link
 
         Args:
-            from_socket (ndoe_graph.Socket): _description_
-            to_socket (ndoe_graph.Socket): _description_
+            from_socket (Socket): The socket where the link originates from.
+            to_socket (Socket): The socket where the link connects to.
         """
-        self.from_socket = from_socket
+        self.from_socket: "Socket" = from_socket
         self.from_node = from_socket.node
-        self.to_socket = to_socket
+        self.to_socket: "Socket" = to_socket
         self.to_node = to_socket.node
-        self.state = False
-        self.name = "{}.{} -> {}.{}".format(
+        self.state: bool = False
+        self.name: str = "{}.{} -> {}.{}".format(
             self.from_node.name,
             self.from_socket.name,
             self.to_node.name,
@@ -22,7 +25,7 @@ class NodeLink:
         self.check_socket_match()
         self.mount()
 
-    def check_socket_match(self):
+    def check_socket_match(self) -> None:
         if (
             self.from_socket.identifier.upper() == "GENERAL"
             or self.to_socket.identifier.upper() == "GENERAL"
@@ -35,7 +38,7 @@ class NodeLink:
                 )
             )
 
-    def mount(self):
+    def mount(self) -> None:
         """Create a link trigger the update action for the sockets."""
         self.from_socket.links.append(self)
         if len(self.to_socket.links) < self.to_socket.link_limit:
@@ -50,7 +53,7 @@ class NodeLink:
                 )
             )
 
-    def unmount(self):
+    def unmount(self) -> None:
         """unmount link from node"""
         i = 0
         for link in self.from_socket.links:
@@ -76,9 +79,8 @@ class NodeLink:
             i += 1
         del self.to_socket.links[i]
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """Data to be saved to database"""
-        # logger.debug("save socket to db: {}".format(self.name))
         dbdata = {
             "from_socket": self.from_socket.name,
             "from_node": self.from_node.name,
@@ -89,7 +91,7 @@ class NodeLink:
         }
         return dbdata
 
-    def copy(self):
+    def copy(self) -> None:
         """We can not simply copy the link, because the link is related to the node."""
         pass
 
