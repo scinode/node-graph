@@ -1,4 +1,10 @@
-def register(pool, entries):
+from typing import Dict, List, Any, Union
+from importlib.metadata import entry_points
+import sys
+import difflib
+
+
+def register(pool: Dict[str, Any], entries: List[Any]) -> None:
     """Add entries to the pool."""
     for entry in entries:
         if entry.identifier not in pool:
@@ -7,12 +13,9 @@ def register(pool, entries):
             raise Exception("Entry: {} is already registered.".format(entry.identifier))
 
 
-def get_entries(entry_point_name):
+def get_entries(entry_point_name: str) -> Dict[str, Any]:
     """Get entries from the entry point."""
-    from importlib.metadata import entry_points
-    import sys
-
-    pool = {}
+    pool: Dict[str, Any] = {}
     eps = entry_points()
     if sys.version_info >= (3, 10):
         group = eps.select(group=entry_point_name)
@@ -24,9 +27,7 @@ def get_entries(entry_point_name):
     return pool
 
 
-def get_entry_by_identifier(identifier, entry_point):
-    import difflib
-
+def get_entry_by_identifier(identifier: str, entry_point: str) -> Any:
     node_pool = get_entries(entry_point)
     if identifier not in node_pool:
         items = difflib.get_close_matches(identifier, node_pool)
@@ -41,7 +42,7 @@ def get_entry_by_identifier(identifier, entry_point):
     return NodeClass
 
 
-def yaml_to_dict(data):
+def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     """Convert yaml data into dict."""
     ntdata = data
     nodes = ntdata.pop("nodes")
@@ -69,7 +70,9 @@ def yaml_to_dict(data):
     return ntdata
 
 
-def deep_copy_only_dicts(original):
+def deep_copy_only_dicts(
+    original: Union[Dict[str, Any], Any]
+) -> Union[Dict[str, Any], Any]:
     """Copy all nested dictionaries in a structure but keep
     the immutable values (such as integers, strings, or tuples)
     shared between the original and the copy"""

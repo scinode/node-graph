@@ -1,96 +1,94 @@
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
 from node_graph.nodes import node_pool
+from typing import Dict, Any, List, Optional
+from node_graph.version import __version__
+import cloudpickle as pickle
+import yaml
+from node_graph.utils import yaml_to_dict
+import time
 
 
 class NodeGraph:
-    """NodeGraph is a collection of nodes and links.
+    """A collection of nodes and links.
 
     Attributes:
-
-    uuid: str
-        uuid of this nodegraph.
-    state: str
-        state of this nodegraph.
-    action: str
-        action of this nodegraph.
-    platform: str
-        platform that used to creat this nodegraph.
+        uuid (str): The UUID of this node graph.
+        state (str): The state of this node graph.
+        action (str): The action of this node graph.
+        platform (str): The platform used to create this node graph.
 
     Examples:
+        >>> from node_graph import NodeGraph
+        >>> nt = NodeGraph(name="my_first_nodegraph")
 
-    >>> from node_graph import NodeGraph
-    >>> nt = NodeGraph(name="my_first_nodegraph")
+        Add nodes:
+        >>> float1 = nt.nodes.new("TestFloat", name="float1")
+        >>> add1 = nt.nodes.new("TestAdd", name="add1")
 
-    add nodes:
+        Add links:
+        >>> nt.links.new(float1.outputs[0], add1.inputs[0])
 
-    >>> float1 = nt.nodes.new("TestFloat", name = "float1")
-    >>> add1 = nt.nodes.new("TestAdd", name = "add1")
-
-    add links:
-
-    >>> nt.links.new(float1.outputs[0], add1.inputs[0])
-
-    Export to dict:
-
-    >>> nt.to_dict()
+        Export to dict:
+        >>> nt.to_dict()
 
     """
 
     # This is the entry point of the nodes
-    node_pool = node_pool
+    node_pool: Dict[str, Any] = node_pool
 
     platform: str = "node_graph"
     uuid: str = ""
     type: str = "NORMAL"
-    group_properties = []
-    group_inputs = []
-    group_outputs = []
+    group_properties: List[str] = []
+    group_inputs: List[str] = []
+    group_outputs: List[str] = []
 
     def __init__(
         self,
-        name="NodeGraph",
-        uuid=None,
-        type="NORMAL",
+        name: str = "NodeGraph",
+        uuid: Optional[str] = None,
+        type: str = "NORMAL",
     ) -> None:
-        """_summary_
+        """Initializes a new instance of the NodeGraph class.
 
         Args:
-            name (str, optional): name of the nodegraph.
-                Defaults to "NodeGraph".
-            uuid (str, optional): uuid of the nodegraph.
-                Defaults to None.
+            name (str, optional): The name of the node graph. Defaults to "NodeGraph".
+            uuid (str, optional): The UUID of the node graph. Defaults to None.
+            type (str, optional): The type of the node graph. Defaults to "NORMAL".
         """
-        self.name = name
-        self.uuid = uuid or str(uuid1())
-        self.type = type
-        self.nodes = NodeCollection(self, pool=self.node_pool)
-        self.links = LinkCollection(self)
-        self.ctrl_links = LinkCollection(self)
-        self.state = "CREATED"
-        self.action = "NONE"
-        self.description = ""
-        self.log = ""
+        self.name: str = name
+        self.uuid: str = uuid or str(uuid1())
+        self.type: str = type
+        self.nodes: NodeCollection = NodeCollection(self, pool=self.node_pool)
+        self.links: LinkCollection = LinkCollection(self)
+        self.ctrl_links: LinkCollection = LinkCollection(self)
+        self.state: str = "CREATED"
+        self.action: str = "NONE"
+        self.description: str = ""
+        self.log: str = ""
 
-    def launch(self):
-        """Launch the nodegraph."""
+    def launch(self) -> None:
+        """Launches the node graph."""
 
-    def save(self):
-        """Save nodegraph to database."""
+    def save(self) -> None:
+        """Saves the node graph to the database."""
 
-    def to_dict(self, short=False):
-        """To dict
+    def to_dict(self, short: bool = False) -> Dict[str, Any]:
+        """Converts the node graph to a dictionary.
+
+        Args:
+            short (bool, optional): Indicates whether to include short node representations. Defaults to False.
 
         Returns:
-            dict: nodegraph data
+            dict: The node graph data.
         """
-        from node_graph.version import __version__
 
-        metadata = self.get_metadata()
-        nodes = self.nodes_to_dict(short=short)
-        links = self.links_to_dict()
-        ctrl_links = self.ctrl_links_to_dict()
-        data = {
+        metadata: Dict[str, Any] = self.get_metadata()
+        nodes: Dict[str, Any] = self.nodes_to_dict(short=short)
+        links: List[Dict[str, Any]] = self.links_to_dict()
+        ctrl_links: List[Dict[str, Any]] = self.ctrl_links_to_dict()
+        data: Dict[str, Any] = {
             "version": "node_graph@{}".format(__version__),
             "uuid": self.uuid,
             "name": self.name,
@@ -106,9 +104,13 @@ class NodeGraph:
         }
         return data
 
-    def get_metadata(self):
-        """metadata to dict"""
-        metadata = {
+    def get_metadata(self) -> Dict[str, Any]:
+        """Converts the metadata to a dictionary.
+
+        Returns:
+            dict: The metadata.
+        """
+        metadata: Dict[str, Any] = {
             "type": self.type,
             "platform": self.platform,
             "group_properties": self.group_properties,
@@ -117,10 +119,16 @@ class NodeGraph:
         }
         return metadata
 
-    def nodes_to_dict(self, short=False):
-        """nodes to dict"""
-        # save all relations using links
-        nodes = {}
+    def nodes_to_dict(self, short: bool = False) -> Dict[str, Any]:
+        """Converts the nodes to a dictionary.
+
+        Args:
+            short (bool, optional): Indicates whether to include short node representations. Defaults to False.
+
+        Returns:
+            dict: The nodes data.
+        """
+        nodes: Dict[str, Any] = {}
         for node in self.nodes:
             if short:
                 nodes[node.name] = node.to_dict(short=short)
@@ -128,37 +136,51 @@ class NodeGraph:
                 nodes[node.name] = node.to_dict()
         return nodes
 
-    def links_to_dict(self):
-        """links to dict"""
-        # save all relations using links
-        links = []
+    def links_to_dict(self) -> List[Dict[str, Any]]:
+        """Converts the links to a list of dictionaries.
+
+        Returns:
+            list: The links data.
+        """
+        links: List[Dict[str, Any]] = []
         for link in self.links:
             links.append(link.to_dict())
         return links
 
-    def ctrl_links_to_dict(self):
-        """ctrl_links to dict"""
-        # save all relations using ctrl_links
-        ctrl_links = []
+    def ctrl_links_to_dict(self) -> List[Dict[str, Any]]:
+        """Converts the control links to a list of dictionaries.
+
+        Returns:
+            list: The control links data.
+        """
+        ctrl_links: List[Dict[str, Any]] = []
         for link in self.ctrl_links:
             ctrl_links.append(link.to_dict())
         return ctrl_links
 
-    def to_yaml(self):
-        """Export to a yaml format data.
-        Results of the nodes are not exported."""
-        import yaml
+    def to_yaml(self) -> str:
+        """Exports the node graph to a YAML format data.
 
-        data = self.to_dict()
+        Results of the nodes are not exported.
+
+        Returns:
+            str: The YAML string representation of the node graph.
+        """
+        data: Dict[str, Any] = self.to_dict()
         for name, node in data["nodes"].items():
             node.pop("results", None)
-        s = yaml.dump(data, sort_keys=False)
+        s: str = yaml.dump(data, sort_keys=False)
         return s
 
-    def update(self):
-        """Update node graph."""
+    def update(self) -> None:
+        """Updates the node graph."""
 
-    def update_nodes(self, data):
+    def update_nodes(self, data: Dict[str, Any]) -> None:
+        """Updates the nodes in the node graph.
+
+        Args:
+            data (dict): The updated node data.
+        """
         for node in self.nodes:
             node.state = data[node.name]["state"]
             node.counter = data[node.name]["counter"]
@@ -166,27 +188,22 @@ class NodeGraph:
             node.update()
 
     @classmethod
-    def from_dict(cls, ntdata):
-        """Rebuild nodegraph from dict ntdata.
+    def from_dict(cls, ntdata: Dict[str, Any]) -> "NodeGraph":
+        """Rebuilds a node graph from a dictionary.
 
         Args:
-            ntdata (dict): data of the nodegraph.
+            ntdata (dict): The data of the node graph.
 
         Returns:
-            Nodedtree: a nodegraph
+            NodeGraph: The rebuilt node graph.
         """
-        import cloudpickle as pickle
-
-        # subnodegraph
-        nt = cls(
+        nt: "NodeGraph" = cls(
             name=ntdata["name"],
             uuid=ntdata.get("uuid"),
         )
-        # print("from_dict: ", nt.uuid)
         for key in ["state", "action", "description"]:
             if ntdata.get(key):
                 setattr(nt, key, ntdata.get(key))
-        # read all the metadata
         for key in [
             "group_properties",
             "group_inputs",
@@ -195,7 +212,6 @@ class NodeGraph:
             if ntdata["metadata"].get(key):
                 setattr(nt, key, ntdata["metadata"].get(key))
         for name, ndata in ntdata["nodes"].items():
-            # register the node created by decorator
             if ndata.get("executor", {}).get("is_pickle", False):
                 node_class = pickle.loads(ndata["node_class"])
             else:
@@ -206,13 +222,11 @@ class NodeGraph:
                 uuid=ndata.pop("uuid", None),
             )
             node.update_from_dict(ndata)
-        # re-build links
         for link in ntdata.get("links", []):
             nt.links.new(
                 nt.nodes[link["from_node"]].outputs[link["from_socket"]],
                 nt.nodes[link["to_node"]].inputs[link["to_socket"]],
             )
-        # re-build control links
         for link in ntdata.get("ctrl_links", []):
             nt.ctrl_links.new(
                 nt.nodes[link["from_node"]].ctrl_outputs[link["from_socket"]],
@@ -221,42 +235,43 @@ class NodeGraph:
         return nt
 
     @classmethod
-    def from_yaml(cls, filename=None, string=None):
-        """Build nodegraph from yaml file.
+    def from_yaml(
+        cls, filename: Optional[str] = None, string: Optional[str] = None
+    ) -> "NodeGraph":
+        """Builds a node graph from a YAML file or string.
 
         Args:
-            filename (str, optional): _description_. Defaults to None.
-            string (str, optional): _description_. Defaults to None.
+            filename (str, optional): The filename of the YAML file. Defaults to None.
+            string (str, optional): The YAML string. Defaults to None.
 
         Returns:
-            NodeGraph: _description_
+            NodeGraph: The built node graph.
         """
-        import yaml
-        from node_graph.utils import yaml_to_dict
-
-        # load data
         if filename:
             with open(filename, "r") as f:
                 ntdata = yaml.safe_load(f)
         elif string:
             ntdata = yaml.safe_load(string)
         else:
-            raise Exception("Please specific a filename or yaml string.")
+            raise Exception("Please specify a filename or YAML string.")
         ntdata = yaml_to_dict(ntdata)
         nt = cls.from_dict(ntdata)
         return nt
 
-    def copy(self, name=None):
-        """Copy nodegraph.
+    def copy(self, name: Optional[str] = None) -> "NodeGraph":
+        """Copies the node graph.
 
         The nodes and links are copied.
 
+        Args:
+            name (str, optional): The name of the new node graph. Defaults to None.
+
+        Returns:
+            NodeGraph: The copied node graph.
         """
         name = f"{self.name}_copy" if name is None else name
-        nt = self.__class__(name=name, uuid=None)
-        # should pass the nodegraph to the nodes as parent
+        nt: "NodeGraph" = self.__class__(name=name, uuid=None)
         nt.nodes = self.nodes.copy(parent=nt)
-        # create links
         for link in self.links:
             nt.links.new(
                 nt.nodes[link.from_node.name].outputs[link.from_socket.name],
@@ -264,47 +279,44 @@ class NodeGraph:
             )
         return nt
 
-    def copy_using_dict(self):
-        """Copy nodegraph using dict data.
+    def copy_using_dict(self) -> "NodeGraph":
+        """Copies the node graph using dictionary data.
 
-        Fist export the nodegraph to dict data.
-        Then reset uuid of nodegraph and nodes.
-        Finally, rebuild the nodegraph from dict data.
+        First exports the node graph to dictionary data.
+        Then resets the UUID of the node graph and nodes.
+        Finally, rebuilds the node graph from the dictionary data.
+
+        Returns:
+            NodeGraph: The copied node graph.
         """
-        ntdata = self.to_dict()
-        # copy nodes
-        # reset uuid for nodegraph
+        ntdata: Dict[str, Any] = self.to_dict()
         ntdata["uuid"] = str(uuid1())
-        # reset uuid for nodes
         for name, node in ntdata["nodes"].items():
             node["uuid"] = str(uuid1())
-        nodegraph = self.from_dict(ntdata)
-        # copy links
-        # TODO the uuid of the socket inside the links should be udpated.
-        # print("copy nodegraph: ", nodegraph)
+        nodegraph: "NodeGraph" = self.from_dict(ntdata)
         return nodegraph
 
     @classmethod
-    def load(cls, uuid):
-        """Load data from database."""
+    def load(cls, uuid: str) -> None:
+        """Loads data from the database."""
 
-    def copy_subset(self, node_list, name=None, add_ref=True):
-        """Copy a subset of a nodegraph.
+    def copy_subset(
+        self, node_list: List[str], name: Optional[str] = None, add_ref: bool = True
+    ) -> "NodeGraph":
+        """Copies a subset of the node graph.
 
         Args:
-            node_list (list of string): names of the nodes to be copied.
-            name (str, optional): name of the new nodegraph. Defaults to None.
+            node_list (list of str): The names of the nodes to be copied.
+            name (str, optional): The name of the new node graph. Defaults to None.
+            add_ref (bool, optional): Indicates whether to add reference nodes. Defaults to True.
 
         Returns:
-            NodeGraph: A new NodeGraph
+            NodeGraph: The new node graph.
         """
-
-        nt = self.__class__(name=name, uuid=None)
+        nt: "NodeGraph" = self.__class__(name=name, uuid=None)
         for node in node_list:
             nt.nodes.append(self.nodes[node].copy(nodegraph=nt))
-        # copy links
         for link in self.links:
-            # create ref node for input node that is not in the new nodegraph
             if (
                 add_ref
                 and link.from_node.name not in nt.nodes.keys()
@@ -313,7 +325,6 @@ class NodeGraph:
                 nt.nodes.append(
                     self.nodes[link.from_node.name].copy(nodegraph=nt, is_ref=True)
                 )
-            # add link if both nodes are in the new nodegraph
             if (
                 link.from_node.name in nt.nodes.keys()
                 and link.to_node.name in nt.nodes.keys()
@@ -324,14 +335,28 @@ class NodeGraph:
                 )
         return nt
 
-    def __getitem__(self, keys):
-        """Get a sub-nodegraph by the names of nodes."""
-        nt = self.copy_subset(keys)
+    def __getitem__(self, keys: List[str]) -> "NodeGraph":
+        """Gets a sub-nodegraph by the names of nodes.
+
+        Args:
+            keys (list of str): The names of the nodes.
+
+        Returns:
+            NodeGraph: The sub-nodegraph.
+        """
+        nt: "NodeGraph" = self.copy_subset(keys)
         return nt
 
-    def __iadd__(self, other):
+    def __iadd__(self, other: "NodeGraph") -> "NodeGraph":
+        """Adds another node graph to this node graph.
+
+        Args:
+            other (NodeGraph): The other node graph to add.
+
+        Returns:
+            NodeGraph: The combined node graph.
+        """
         self.nodes.extend(other.nodes.copy(parent=self))
-        # create links
         for link in other.links:
             self.links.new(
                 self.nodes[link.from_node.name].outputs[link.from_socket.name],
@@ -339,32 +364,39 @@ class NodeGraph:
             )
         return self
 
-    def __add__(self, other):
-        """Sum of two nodegraph."""
+    def __add__(self, other: "NodeGraph") -> "NodeGraph":
+        """Adds another node graph to this node graph.
+
+        Args:
+            other (NodeGraph): The other node graph to add.
+
+        Returns:
+            NodeGraph: The combined node graph.
+        """
         self += other
         return self
 
-    def delete_nodes(self, node_list):
-        """_summary_
+    def delete_nodes(self, node_list: List[str]) -> None:
+        """Deletes nodes from the node graph.
 
         Args:
-            node_list (_type_): _description_
+            node_list (list of str): The names of the nodes to delete.
         """
         for name in node_list:
-            # remove links connected to the node
-            link_index = []
+            link_index: List[int] = []
             for index, link in enumerate(self.links):
                 if link.from_node.name == name or link.to_node.name == name:
                     link_index.append(index)
             del self.links[link_index]
-            # remove the node
             self.nodes.delete(name)
 
-    def wait(self, timeout=50):
-        """Wait for nodegraph to finish."""
-        import time
+    def wait(self, timeout: int = 50) -> None:
+        """Waits for the node graph to finish.
 
-        start = time.time()
+        Args:
+            timeout (int, optional): The maximum time to wait in seconds. Defaults to 50.
+        """
+        start: float = time.time()
         self.update()
         while self.state not in ("PAUSED", "FINISHED", "FAILED", "CANCELLED"):
             time.sleep(0.5)
@@ -373,6 +405,6 @@ class NodeGraph:
                 return
 
     def __repr__(self) -> str:
-        s = ""
+        s: str = ""
         s += 'NodeGraph(name="{}, uuid="{}")\n'.format(self.name, self.uuid)
         return s

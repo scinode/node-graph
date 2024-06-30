@@ -1,49 +1,46 @@
+from uuid import uuid1
+from node_graph.sockets import socket_pool
+from node_graph.properties import property_pool
+from typing import List, Optional, Dict, Any, Union
+import json
+import hashlib
+import cloudpickle as pickle
+from node_graph.utils import deep_copy_only_dicts
+import cloudpickle as pickle
+from node_graph.socket import NodeSocket
+
 from node_graph.collection import (
     PropertyCollection,
     InputSocketCollection,
     OutputSocketCollection,
 )
-from uuid import uuid1
-from node_graph.sockets import socket_pool
-from node_graph.properties import property_pool
 
 
 class Node:
     """Base class for Node.
 
     Attributes:
-
-    identifier: str
-        The identifier is used for loading the Node.
-    node_type: str
-        type of this node. "Normal", "REF", "GROUP".
-    inner_id: int
-        node id inside the node graph.
-    parent_uuid: str
-        uuid of the node graph this node belongs to.
-    args: list
-        postional arguments of the exector.
-    kwargs: list
-        keyword arguments of the exector.
-    var_args: str
-    var_kwargs: str
-    platform: str
-        platform that used to creat this node.
+        identifier (str): The identifier is used for loading the Node.
+        node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
+        inner_id (int): Node id inside the node graph.
+        parent_uuid (str): UUID of the node graph this node belongs to.
+        args (list): Positional arguments of the executor.
+        kwargs (list): Keyword arguments of the executor.
+        var_args (str): Variable arguments of the executor.
+        var_kwargs (str): Variable keyword arguments of the executor.
+        platform (str): Platform that used to create this node.
 
     Examples:
+        Add nodes:
+        >>> float1 = nt.nodes.new("TestFloat", name="float1")
+        >>> add1 = nt.nodes.new("TestDelayAdd", name="add1")
 
-    add nodes:
+        Copy node:
+        >>> n = node.copy(name="new_name")
 
-    >>> float1 = nt.nodes.new("TestFloat", name = "float1")
-    >>> add1 = nt.nodes.new("TestDelayAdd", name = "add1")
+        Append node to node graph:
+        >>> nt.nodes.append(node)
 
-    copy node:
-
-    >>> n = node.copy(name="new_name")
-
-    append node to node graph:
-
-    >>> nt.nodes.append(node)
     """
 
     # This is the entry point for the socket and property pool
@@ -56,23 +53,34 @@ class Node:
     parent_uuid: str = ""
     platform: str = "node_graph"
     catalog: str = "Node"
-    args = []
-    kwargs = []
-    var_args = None
-    var_kwargs = None
-    group_inputs = []
-    group_outputs = []
+    args: List[Any] = []
+    kwargs: List[Any] = []
+    var_args: Optional[str] = None
+    var_kwargs: Optional[str] = None
+    group_inputs: List[List[str]] = []
+    group_outputs: List[List[str]] = []
 
     def __init__(
         self,
-        inner_id=0,
-        name=None,
-        uuid=None,
-        parent=None,
-        property_collection_class=PropertyCollection,
-        input_collection_class=InputSocketCollection,
-        output_collection_class=OutputSocketCollection,
+        inner_id: int = 0,
+        name: Optional[str] = None,
+        uuid: Optional[str] = None,
+        parent: Optional[Any] = None,
+        property_collection_class: Any = PropertyCollection,
+        input_collection_class: Any = InputSocketCollection,
+        output_collection_class: Any = OutputSocketCollection,
     ) -> None:
+        """Initialize the Node.
+
+        Args:
+            inner_id (int, optional): Node id inside the node graph. Defaults to 0.
+            name (str, optional): Name of the node. Defaults to None.
+            uuid (str, optional): UUID of the node. Defaults to None.
+            parent (Any, optional): Parent node. Defaults to None.
+            property_collection_class (Any, optional): Property collection class. Defaults to PropertyCollection.
+            input_collection_class (Any, optional): Input socket collection class. Defaults to InputSocketCollection.
+            output_collection_class (Any, optional): Output socket collection class. Defaults to OutputSocketCollection.
+        """
         self.inner_id = inner_id
         self.name = name or "{}{}".format(self.identifier, inner_id)
         self.uuid = uuid or str(uuid1())
@@ -93,7 +101,7 @@ class Node:
         self.create_sockets()
         self.create_ctrl_sockets()
 
-    def create_properties(self):
+    def create_properties(self) -> None:
         """Create properties for this node.
         If this node is a group node, create properties based on the exposed properties.
         """
@@ -101,7 +109,7 @@ class Node:
         if self.node_type.upper() == "GROUP":
             self.create_group_properties()
 
-    def create_group_properties(self):
+    def create_group_properties(self) -> None:
         """Create properties based on the exposed properties."""
         for prop in self.group_properties:
             node_prop, new_prop_name = prop
@@ -117,7 +125,7 @@ class Node:
             # TODO add the default value to group property
             self.properties.append(p)
 
-    def create_sockets(self):
+    def create_sockets(self) -> None:
         """Create input and output sockets for this node.
         If this node is a group node, create sockets based on group inputs and outputs.
         """
@@ -126,7 +134,7 @@ class Node:
         if self.node_type.upper() == "GROUP":
             self.create_group_sockets()
 
-    def create_ctrl_sockets(self):
+    def create_ctrl_sockets(self) -> None:
         """Create control input and output sockets for this node."""
         self.ctrl_inputs.clear()
         self.ctrl_outputs.clear()
@@ -138,9 +146,8 @@ class Node:
         socket = self.ctrl_outputs.new("General", "ctrl")
         socket.link_limit = 1000
 
-    def create_group_sockets(self):
-        """Create input and output sockets based on group inputs
-        and outputs.
+    def create_group_sockets(self) -> None:
+        """Create input and output sockets based on group inputs and outputs.
 
         group_inputs = [
             ["add1.x", "x"],
@@ -151,7 +158,7 @@ class Node:
             node, socket = node_socket.split(".")
             if socket not in self.ng.nodes[node].inputs.keys():
                 raise ValueError(
-                    "Socket {} does not exist in the intputs of node {}".format(
+                    "Socket {} does not exist in the inputs of node {}".format(
                         socket, node
                     )
                 )
@@ -169,26 +176,26 @@ class Node:
             identifier = self.ng.nodes[node].outputs[socket].identifier
             self.outputs.new(identifier, name)
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
 
     @property
-    def group_properties(self):
+    def group_properties(self) -> List[List[str]]:
         return self.ng.group_properties if self.ng else []
 
     @property
-    def group_inputs(self):
+    def group_inputs(self) -> List[List[str]]:
         return self.ng.group_inputs if self.ng else []
 
     @property
-    def group_outputs(self):
+    def group_outputs(self) -> List[List[str]]:
         return self.ng.group_outputs if self.ng else []
 
     @property
-    def node_group(self):
+    def node_group(self) -> Any:
         return self.get_node_group()
 
-    def get_node_group(self):
+    def get_node_group(self) -> Any:
         """Get the node group of this node.
 
         Returns:
@@ -196,7 +203,7 @@ class Node:
         """
         return self.get_default_node_group()
 
-    def get_default_node_group(self):
+    def get_default_node_group(self) -> Any:
         from node_graph import NodeGraph
 
         nt = NodeGraph(
@@ -205,13 +212,9 @@ class Node:
         )
         return nt
 
-    def to_dict(self, short=False):
+    def to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
         from node_graph.version import __version__
-        import json
-        import hashlib
-        import cloudpickle as pickle
-        from node_graph.utils import deep_copy_only_dicts
 
         if short:
             data = {
@@ -272,7 +275,7 @@ class Node:
         data = deep_copy_only_dicts(data)
         return data
 
-    def get_metadata(self):
+    def get_metadata(self) -> Dict[str, Any]:
         """Export metadata to a dictionary."""
         metadata = {
             "node_type": self.node_type,
@@ -290,7 +293,7 @@ class Node:
         }
         return metadata
 
-    def properties_to_dict(self):
+    def properties_to_dict(self) -> Dict[str, Any]:
         """Export properties to a dictionary.
         This data will be used for calculation.
         """
@@ -306,7 +309,7 @@ class Node:
                 properties[input.name] = None
         return properties
 
-    def input_sockets_to_dict(self):
+    def input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
         inputs = []
@@ -314,7 +317,7 @@ class Node:
             inputs.append(socket.to_dict())
         return inputs
 
-    def output_sockets_to_dict(self):
+    def output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export output sockets to a dictionary."""
         # save all relations using links
         outputs = []
@@ -322,7 +325,7 @@ class Node:
             outputs.append(socket.to_dict())
         return outputs
 
-    def ctrl_input_sockets_to_dict(self):
+    def ctrl_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_input sockets to a dictionary."""
         # save all relations using links
         ctrl_inputs = []
@@ -330,7 +333,7 @@ class Node:
             ctrl_inputs.append(socket.to_dict())
         return ctrl_inputs
 
-    def ctrl_output_sockets_to_dict(self):
+    def ctrl_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_output sockets to a dictionary."""
         # save all relations using links
         ctrl_outputs = []
@@ -338,7 +341,7 @@ class Node:
             ctrl_outputs.append(socket.to_dict())
         return ctrl_outputs
 
-    def executor_to_dict(self):
+    def executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Export executor dictionary to a dictionary.
         Three kinds of executor:
         - Python built-in function. e.g. getattr
@@ -356,9 +359,10 @@ class Node:
         return executor
 
     @classmethod
-    def from_dict(cls, data, node_pool=None):
+    def from_dict(
+        cls, data: Dict[str, Any], node_pool: Optional[Dict[str, Any]] = None
+    ) -> Any:
         """Rebuild Node from dict data."""
-        import cloudpickle as pickle
 
         if node_pool is None:
             from node_graph.nodes import node_pool
@@ -374,7 +378,7 @@ class Node:
         node.update_from_dict(data)
         return node
 
-    def update_from_dict(self, data):
+    def update_from_dict(self, data: Dict[str, Any]) -> None:
         """udpate node from dict data. Set metadata and properties.
         This method can be overrided.
         """
@@ -409,11 +413,16 @@ class Node:
                     self.outputs[i].uuid = data["outputs"][i]["uuid"]
 
     @classmethod
-    def load(cls, uuid):
+    def load(cls, uuid: str) -> None:
         """Load Node data from database."""
 
     @classmethod
-    def new(cls, identifier, name=None, node_pool=None):
+    def new(
+        cls,
+        identifier: str,
+        name: Optional[str] = None,
+        node_pool: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         """Create a node from a identifier.
         When a plugin create a node, it should provide its own node pool.
         Then call super().new(identifier, name, node_pool) to create a node.
@@ -425,7 +434,12 @@ class Node:
         node = ItemClass(name=name)
         return node
 
-    def copy(self, name=None, parent=None, is_ref=False):
+    def copy(
+        self,
+        name: Optional[str] = None,
+        parent: Optional[Any] = None,
+        is_ref: bool = False,
+    ) -> Any:
         """Copy a node.
 
         Copy a node to a new node. If parent is None, the node will be copied inside the same parent, otherwise the node will be copied to a new parent.
@@ -456,19 +470,19 @@ class Node:
         node.outputs = self.outputs.copy(parent=node, is_ref=is_ref)
         return node
 
-    def get_executor(self):
+    def get_executor(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Get the default executor."""
         executor = {"path": "", "name": ""}
         return executor
 
-    def get_results(self):
+    def get_results(self) -> None:
         """Item data from database"""
 
-    def update(self):
+    def update(self) -> None:
         """Update node state."""
 
     @property
-    def results(self):
+    def results(self) -> None:
         return self.get_results()
 
     def __repr__(self) -> str:
@@ -482,14 +496,12 @@ class Node:
         s += "])\n"
         return s
 
-    def set(self, data):
+    def set(self, data: Dict[str, Any]) -> None:
         """Set properties by a dict.
 
         Args:
             data (dict): _description_
         """
-        from node_graph.socket import NodeSocket
-        from node_graph.utils import deep_copy_only_dicts
 
         data = deep_copy_only_dicts(data)
         for key, value in data.items():
@@ -507,7 +519,7 @@ class Node:
                     )
                 )
 
-    def get(self, key):
+    def get(self, key: str) -> Any:
         """Get the value of property by key.
 
         Args:
@@ -518,5 +530,5 @@ class Node:
         """
         return self.properties[key].value
 
-    def save(self):
+    def save(self) -> None:
         """Modify and save a node to database."""

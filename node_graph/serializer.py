@@ -1,10 +1,18 @@
+from typing import Any, Dict
+import json
+import pickle
+
+
 class SerializeNone:
-    def get_serialize(self):
-        serialize = {"path": "node_graph.serializer", "name": "serialize_none"}
+    def get_serialize(self) -> Dict[str, str]:
+        serialize: Dict[str, str] = {
+            "path": "node_graph.serializer",
+            "name": "serialize_none",
+        }
         return serialize
 
-    def get_deserialize(self):
-        deserialize = {
+    def get_deserialize(self) -> Dict[str, str]:
+        deserialize: Dict[str, str] = {
             "path": "node_graph.serializer",
             "name": "deserialize_none",
         }
@@ -12,15 +20,15 @@ class SerializeNone:
 
 
 class SerializeJson:
-    def get_serialize(self):
-        serialize = {
+    def get_serialize(self) -> Dict[str, str]:
+        serialize: Dict[str, str] = {
             "path": "node_graph.serializer",
             "name": "serialize_json",
         }
         return serialize
 
-    def get_deserialize(self):
-        deserialize = {
+    def get_deserialize(self) -> Dict[str, str]:
+        deserialize: Dict[str, str] = {
             "path": "node_graph.serializer",
             "name": "deserialize_json",
         }
@@ -28,52 +36,48 @@ class SerializeJson:
 
 
 class SerializePickle:
-    def get_serialize(self):
-        serialize = {
+    def get_serialize(self) -> Dict[str, str]:
+        serialize: Dict[str, str] = {
             "path": "node_graph.serializer",
             "name": "serialize_pickle",
         }
         return serialize
 
-    def get_deserialize(self):
-        deserialize = {
+    def get_deserialize(self) -> Dict[str, str]:
+        deserialize: Dict[str, str] = {
             "path": "node_graph.serializer",
             "name": "deserialize_pickle",
         }
         return deserialize
 
 
-def serialize_none(data):
+def serialize_none(data: Any) -> Any:
     return data
 
 
-def deserialize_none(data):
+def deserialize_none(data: Any) -> Any:
     return data
 
 
-def serialize_json(data):
-    import json
+def serialize_json(data: Any) -> str:
 
     data = json.dumps(data)
     return data
 
 
-def deserialize_json(data):
-    import json
+def deserialize_json(data: str) -> Any:
 
     data = json.loads(data)
     return data
 
 
-def serialize_pickle(data):
-    import pickle
+def serialize_pickle(data: Any) -> bytes:
 
     data = pickle.dumps(data)
     return data
 
 
-def deserialize_pickle(data):
-    import pickle
+def deserialize_pickle(data: bytes) -> Any:
 
     data = pickle.loads(data)
     return data

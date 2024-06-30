@@ -1,18 +1,29 @@
-from typing import Any
+from typing import Any, List, Dict, Tuple, Union, Optional, Callable
+import inspect
+from copy import deepcopy
+import cloudpickle as pickle
+import importlib
+from node_graph.node import Node
 
 
-def inspect_function(func: Any):
+def inspect_function(
+    func: Callable[..., Any]
+) -> Tuple[
+    List[List[Union[str, Any]]],
+    Dict[str, Dict[str, Union[Any, Optional[Any]]]],
+    Optional[str],
+    Optional[str],
+]:
     """inspect the arguments of a function, and return a list of arguments
     and a list of keyword arguments, and a list of default values
     and a list of annotations
 
     Args:
-        func (Any): any function
+        func (Callable[..., Any]): any function
 
     Returns:
-        tuple: (args, kwargs, defaults, annotations)
+        Tuple[List[List[Union[str, Any]]], Dict[str, Dict[str, Union[Any, Optional[Any]]]], Optional[str], Optional[str]]: (args, kwargs, defaults, annotations)
     """
-    import inspect
 
     # Get the signature of the function
     signature = inspect.signature(func)
@@ -27,7 +38,7 @@ def inspect_function(func: Any):
     var_kwargs = None
     for name, parameter in parameters.items():
         if parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
-            arg = [name, parameter.annotation]
+            arg: List[Union[str, Any]] = [name, parameter.annotation]
             args.append(arg)
         elif parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
             if parameter.default is not inspect.Parameter.empty:
@@ -45,7 +56,7 @@ def inspect_function(func: Any):
     return args, kwargs, var_args, var_kwargs
 
 
-def python_type_to_socket_type(python_type):
+def python_type_to_socket_type(python_type: type) -> str:
     """Convert python type to socket type"""
     if python_type == int:
         return "Int"
@@ -59,7 +70,17 @@ def python_type_to_socket_type(python_type):
         return "General"
 
 
-def generate_input_sockets(func: Any, inputs=None, properties=None):
+def generate_input_sockets(
+    func: Callable[..., Any],
+    inputs: Optional[List[Dict[str, Any]]] = None,
+    properties: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[
+    List[str],
+    List[str],
+    Optional[str],
+    Optional[str],
+    List[Dict[str, Union[str, Dict[str, Union[str, Any]]]]],
+]:
     """Generate input sockets from a function.
     If the input sockets is not given, then the function
     will be used to update the input sockets."""
@@ -97,24 +118,22 @@ def generate_input_sockets(func: Any, inputs=None, properties=None):
     return arg_names, kwarg_names, var_args, var_kwargs, inputs
 
 
-def create_node(ndata):
+def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     """Create a node class from node data.
 
     Args:
-        ndata (dict): node data
+        ndata (Dict[str, Any]): node data
 
     Returns:
-        _type_: _description_
+        Callable[..., Any]: _description_
     """
-    from node_graph.node import Node
-    from copy import deepcopy
 
-    Node = ndata.get("node_class", Node)
+    NodeClass = ndata.get("node_class", Node)
 
-    class DecoratedNode(Node):
+    class DecoratedNode(NodeClass):
         identifier: str = ndata["identifier"]
         node_type: str = ndata.get("node_type", "NORMAL")
-        catalog = ndata.get("catalog", "Others")
+        catalog: str = ndata.get("catalog", "Others")
 
         def create_properties(self):
             properties = deepcopy(ndata.get("properties", []))
@@ -152,23 +171,22 @@ def create_node(ndata):
     return DecoratedNode
 
 
-def create_node_group(ngdata):
+def create_node_group(ngdata: Dict[str, Any]) -> Callable[..., Any]:
     """Create a node group class from node group data.
 
     Args:
-        ngdata (dict): node data
+        ngdata (Dict[str, Any]): node data
 
     Returns:
-        _type_: _description_
+        Callable[..., Any]: _description_
     """
-    from node_graph.node import Node
 
-    Node = ngdata.get("node_class", Node)
+    NodeClass = ngdata.get("node_class", Node)
 
-    class MyNodeGroup(Node):
+    class MyNodeGroup(NodeClass):
         identifier: str = ngdata["identifier"]
         node_type: str = "GROUP"
-        catalog = ngdata.get("catalog", "Others")
+        catalog: str = ngdata.get("catalog", "Others")
 
         def get_default_node_group(self):
             nt = ngdata["nt"]
@@ -180,16 +198,15 @@ def create_node_group(ngdata):
     return MyNodeGroup
 
 
-# decorator with arguments indentifier, args, kwargs, properties, inputs, outputs, executor
 def decorator_node(
-    identifier=None,
-    node_type="Normal",
-    properties=None,
-    inputs=None,
-    outputs=None,
-    catalog="Others",
-    executor_type="function",
-):
+    identifier: Optional[str] = None,
+    node_type: str = "Normal",
+    properties: Optional[List[Dict[str, Any]]] = None,
+    inputs: Optional[List[Dict[str, Any]]] = None,
+    outputs: Optional[List[Dict[str, Any]]] = None,
+    catalog: str = "Others",
+    executor_type: str = "function",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
 
     Attributes:
@@ -201,14 +218,12 @@ def decorator_node(
         inputs (list): node inputs
         outputs (list): node outputs
     """
-    from node_graph.node import Node
 
     properties = properties or []
     inputs = inputs or []
     outputs = outputs or [{"identifier": "General", "name": "result"}]
 
-    def decorator(func):
-        import cloudpickle as pickle
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 
         nonlocal identifier
 
@@ -249,13 +264,13 @@ def decorator_node(
 
 
 def decorator_node_group(
-    identifier=None,
-    properties=None,
-    inputs=None,
-    outputs=None,
-    catalog="Others",
-    executor_type="function",
-):
+    identifier: Optional[str] = None,
+    properties: Optional[List[Dict[str, Any]]] = None,
+    inputs: Optional[List[Dict[str, Any]]] = None,
+    outputs: Optional[List[Dict[str, Any]]] = None,
+    catalog: str = "Others",
+    executor_type: str = "function",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a node group as a node.
 
     Attributes:
@@ -265,14 +280,12 @@ def decorator_node_group(
         inputs (list): node inputs
         outputs (list): node outputs
     """
-    from node_graph.node import Node
 
     properties = properties or []
     inputs = inputs or []
     outputs = outputs or []
 
-    def decorator(func):
-        import cloudpickle as pickle
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 
         nonlocal identifier, inputs, outputs
 
@@ -318,9 +331,7 @@ def decorator_node_group(
     return decorator
 
 
-def build_node(ndata):
-    import importlib
-    from node_graph.node import Node
+def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
@@ -352,10 +363,10 @@ def build_node(ndata):
 class NodeDecoratorCollection:
     """Collection of node decorators."""
 
-    node = staticmethod(decorator_node)
-    group = staticmethod(decorator_node_group)
+    node: Callable[..., Any] = staticmethod(decorator_node)
+    group: Callable[..., Any] = staticmethod(decorator_node_group)
 
     __call__: Any = node  # Alias '@node' to '@node.node'.
 
 
-node = NodeDecoratorCollection()
+node: NodeDecoratorCollection = NodeDecoratorCollection()
