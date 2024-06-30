@@ -22,7 +22,8 @@ def inspect_function(
         func (Callable[..., Any]): any function
 
     Returns:
-        Tuple[List[List[Union[str, Any]]], Dict[str, Dict[str, Union[Any, Optional[Any]]]], Optional[str], Optional[str]]: (args, kwargs, defaults, annotations)
+        Tuple[List[List[Union[str, Any]]], Dict[str, Dict[str, Union[Any, Optional[Any]]]],
+        Optional[str], Optional[str]]: (args, kwargs, defaults, annotations)
     """
 
     # Get the signature of the function

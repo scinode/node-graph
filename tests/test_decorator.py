@@ -1,6 +1,5 @@
-from node_graph.decorator import node, create_node, create_node_group
+from node_graph.decorator import create_node, create_node_group
 from node_graph import NodeGraph
-import pytest
 
 ndata = {
     "identifier": "MyNumpyAdd",

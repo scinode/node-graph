@@ -319,12 +319,12 @@ class DifferenceAnalysis:
                     if inputs1[key]["value"] != inputs2[key]["value"]:
                         modified.add(name)
                 except Exception as e:
-                    pass
+                    print(e)
                 try:
                     if not (inputs1[key]["value"] == inputs2[key]["value"]).all():
                         modified.add(name)
                 except Exception as e:
-                    pass
+                    print(e)
         return modified
 
     def check_socket(self) -> Set[str]:

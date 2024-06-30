@@ -6,7 +6,6 @@ import json
 import hashlib
 import cloudpickle as pickle
 from node_graph.utils import deep_copy_only_dicts
-import cloudpickle as pickle
 from node_graph.socket import NodeSocket
 
 from node_graph.collection import (
@@ -442,7 +441,8 @@ class Node:
     ) -> Any:
         """Copy a node.
 
-        Copy a node to a new node. If parent is None, the node will be copied inside the same parent, otherwise the node will be copied to a new parent.
+        Copy a node to a new node. If parent is None, the node will be copied inside the same parent,
+        otherwise the node will be copied to a new parent.
         The properties, inputs and outputs will be copied.
 
         Args:

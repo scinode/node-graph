@@ -105,7 +105,8 @@ class Collection:
             if item.name == name:
                 return item
         raise Exception(
-            f'"{name}" is not in the {self.__class__.__name__}. Acceptable names are {self.keys()}. This collection belongs to {self.parent}.'
+            f""""{name}" is not in the {self.__class__.__name__}.
+Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
         )
 
     def get_by_uuid(self, uuid: str) -> Optional[object]:
