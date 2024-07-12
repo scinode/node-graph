@@ -68,7 +68,7 @@ def python_type_to_socket_type(python_type: type) -> str:
     elif python_type == bool:
         return "Bool"
     else:
-        return "General"
+        return "Any"
 
 
 def generate_input_sockets(
@@ -110,9 +110,9 @@ def generate_input_sockets(
                 }
             inputs.append(input)
     if var_args is not None:
-        inputs.append({"identifier": "General", "name": var_args})
+        inputs.append({"identifier": "Any", "name": var_args})
     if var_kwargs is not None:
-        inputs.append({"identifier": "General", "name": var_kwargs})
+        inputs.append({"identifier": "Any", "name": var_kwargs})
     #
     arg_names = [arg[0] for arg in args]
     kwarg_names = [name for name in kwargs.keys()]
@@ -147,7 +147,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
             for input in inputs:
                 if isinstance(input, str):
-                    input = {"identifier": "General", "name": input}
+                    input = {"identifier": "Any", "name": input}
                 inp = self.inputs.new(input["identifier"], input["name"])
                 prop = input.get("property", None)
                 if prop is not None:
@@ -157,8 +157,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 inp.link_limit = input.get("link_limit", 1)
             for output in outputs:
                 if isinstance(output, str):
-                    output = {"identifier": "General", "name": output}
-                identifier = output.pop("identifier", "General")
+                    output = {"identifier": "Any", "name": output}
+                identifier = output.pop("identifier", "Any")
                 self.outputs.new(identifier, **output)
             self.args = ndata.get("args", [])
             self.kwargs = ndata.get("kwargs", [])
@@ -222,7 +222,7 @@ def decorator_node(
 
     properties = properties or []
     inputs = inputs or []
-    outputs = outputs or [{"identifier": "General", "name": "result"}]
+    outputs = outputs or [{"identifier": "Any", "name": "result"}]
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 
@@ -304,9 +304,7 @@ def decorator_node_group(
         args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
             func, inputs, properties
         )
-        node_outputs = [
-            {"identifier": "General", "name": output[1]} for output in outputs
-        ]
+        node_outputs = [{"identifier": "Any", "name": output[1]} for output in outputs]
         #
         node_type = "nodegroup"
         ndata = {
@@ -336,7 +334,7 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
-    ndata.setdefault("outputs", [{"identifier": "General", "name": "result"}])
+    ndata.setdefault("outputs", [{"identifier": "Any", "name": "result"}])
     ndata.setdefault("node_class", Node)
 
     executor = ndata["executor"]

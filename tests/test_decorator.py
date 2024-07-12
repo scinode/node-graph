@@ -11,7 +11,7 @@ ndata = {
             "property": {"identifier": "Float", "default": 10},
         },
     ],
-    "outputs": [{"identifier": "General", "name": "result"}],
+    "outputs": [{"identifier": "Any", "name": "result"}],
     "executor": {"path": "numpy.add"},
 }
 MyNumpyAdd = create_node(ndata)

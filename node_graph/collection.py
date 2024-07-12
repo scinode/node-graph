@@ -49,6 +49,12 @@ class Collection:
         elif isinstance(index, str):
             return self.get(index)
 
+    def __getattr__(self, name):
+        if self._items:
+            return self.get(name)
+        else:
+            raise AttributeError(f"{name} not available in an empty collection")
+
     def get_inner_id(self) -> int:
         """Get the inner id for the next item.
 

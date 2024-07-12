@@ -37,7 +37,7 @@ def decorated_myadd():
 
     @node(
         identifier="MyAdd",
-        outputs=[{"identifier": "General", "name": "result"}],
+        outputs=[{"identifier": "Any", "name": "result"}],
     )
     def myadd(x: float, y: float, t: float = 1):
         import time
@@ -79,7 +79,7 @@ def node_with_decorated_node(decorated_myadd):
             {"identifier": "Float", "name": "x"},
             {"identifier": "Float", "name": "y"},
         ],
-        outputs=[{"identifier": "General", "name": "result"}],
+        outputs=[{"identifier": "Any", "name": "result"}],
     )
     def node_with_decorated_node(x, y):
         nt = NodeGraph("node_in_decorated_node")
