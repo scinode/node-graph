@@ -99,7 +99,7 @@ class TestEnum(Node):
     def create_sockets(self):
         self.inputs.clear()
         self.outputs.clear()
-        self.outputs.new("General", "result")
+        self.outputs.new("Any", "result")
 
     def get_executor(self):
         return {
@@ -137,7 +137,7 @@ class TestEnumUpdate(Node):
         elif self.properties["function"].value in ["sqrt"]:
             self.inputs.new("Float", "x")
             self.kwargs = ["t", "x"]
-        self.outputs.new("General", "result")
+        self.outputs.new("Any", "result")
 
     def get_executor(self):
         return {

@@ -27,8 +27,8 @@ class NodeLink:
 
     def check_socket_match(self) -> None:
         if (
-            self.from_socket.identifier.upper() == "GENERAL"
-            or self.to_socket.identifier.upper() == "GENERAL"
+            self.from_socket.identifier.upper() == "ANY"
+            or self.to_socket.identifier.upper() == "ANY"
         ):
             return
         if self.from_socket.identifier.upper() != self.to_socket.identifier.upper():

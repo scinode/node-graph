@@ -55,7 +55,7 @@ Add properties to a input socket
 .. code:: Python
 
       def create_sockets(self):
-         inp = self.inputs.new("General", "x")
+         inp = self.inputs.new("Any", "x")
          inp.add_property("FloatVector", size=3, default=[0, 0, 0])
 
 Assigning to Existing Node

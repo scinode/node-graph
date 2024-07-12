@@ -2,16 +2,16 @@ from node_graph.socket import NodeSocket
 from node_graph.serializer import SerializeJson, SerializePickle
 
 
-class SocketGeneral(NodeSocket, SerializePickle):
-    """General socket."""
+class SocketAny(NodeSocket, SerializePickle):
+    """Any socket."""
 
-    identifier: str = "General"
+    identifier: str = "Any"
 
     def __init__(
         self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
     ) -> None:
         super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("General", name, **kwargs)
+        self.add_property("Any", name, **kwargs)
 
 
 class SocketFloat(NodeSocket, SerializeJson):
@@ -111,7 +111,7 @@ class SocketFloatVector(NodeSocket, SerializeJson):
 
 
 socket_list = [
-    SocketGeneral,
+    SocketAny,
     SocketInt,
     SocketFloat,
     SocketString,

@@ -25,20 +25,20 @@ Socket can have different data type:
 - :class:`~node_graph.socket.SocketInt`
 - :class:`~node_graph.socket.SocketBool`
 - :class:`~node_graph.socket.SocketString`
-- :class:`~node_graph.socket.SocketGeneral`
+- :class:`~node_graph.socket.SocketAny`
 
 One can extend the socket type by designing a custom socket. Please read :ref:`custom_socket` page for how to create a custom socket type.
 
 
 Property
 -----------
-Socket has a property, which is used to store the data. The data can be used when there is no connection to the input socket. The property is a :class:`~node_graph.property.Property` object. The property can be added when define a custom socket. Or it can be added later by using ``add_property`` method for the :class:`~node_graph.socket.SocketGeneral`.
+Socket has a property, which is used to store the data. The data can be used when there is no connection to the input socket. The property is a :class:`~node_graph.property.Property` object. The property can be added when define a custom socket. Or it can be added later by using ``add_property`` method for the :class:`~node_graph.socket.SocketAny`.
 
 .. code:: Python
 
    def create_sockets(self):
-      # create a General socket.
-      inp = self.inputs.new("General", "symbols")
+      # create a Any type socket.
+      inp = self.inputs.new("Any", "symbols")
       # add a string property to the socket with default value "H".
       inp.add_property("String", "default", default="H"})
 
@@ -49,7 +49,7 @@ Socket has serialization/deserialization methods, which tell how the results sto
 There are two built_in serialization methods:
 
 - `None`, No serialization. This is used for the Python base type (Int, Float, Bool, String).
-- `Pickle`, this is used in for the :class:`~node_graph.socket.SocketGeneral`
+- `Pickle`, this is used in for the :class:`~node_graph.socket.SocketAny`
 
 User can define a new socket type with a customized serialization method.
 

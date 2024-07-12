@@ -2,11 +2,11 @@ from node_graph.property import NodeProperty
 from node_graph.serializer import SerializeJson, SerializePickle
 
 
-class GeneralProperty(NodeProperty, SerializePickle):
-    """A new class for General type."""
+class AnyProperty(NodeProperty, SerializePickle):
+    """A new class for Any type."""
 
-    identifier: str = "General"
-    data_type = "General"
+    identifier: str = "Any"
+    data_type = "Any"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
         super().__init__(name, description, default, update)
@@ -378,7 +378,7 @@ class BaseListProperty(NodeProperty, SerializePickle):
 
 
 property_list = [
-    GeneralProperty,
+    AnyProperty,
     IntProperty,
     FloatProperty,
     StringProperty,
