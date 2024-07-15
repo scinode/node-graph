@@ -26,6 +26,7 @@ classifiers = [
 
 dependencies = [
     "numpy",
+    "scipy",
     "click",
     "pyyaml",
     "colorama",
