@@ -26,6 +26,16 @@ class NodeLink:
         self.mount()
 
     def check_socket_match(self) -> None:
+        """Check if the socket type match, and belong to the same node graph."""
+        if self.from_node.parent != self.to_node.parent:
+            raise Exception(
+                "Can not link sockets from different {}. {} and {}".format(
+                    self.from_node.parent.__class__.__name__,
+                    self.from_node.parent,
+                    self.to_node.parent,
+                )
+            )
+
         if (
             self.from_socket.identifier.upper() == "ANY"
             or self.to_socket.identifier.upper() == "ANY"
