@@ -3,15 +3,15 @@ from node_graph import NodeGraph
 
 ndata = {
     "identifier": "MyNumpyAdd",
-    "properties": [{"identifier": "Float", "name": "x", "default": 3}],
+    "properties": [{"identifier": "node_graph.float", "name": "x", "default": 3}],
     "inputs": [
         {
-            "identifier": "Float",
+            "identifier": "node_graph.float",
             "name": "y",
-            "property": {"identifier": "Float", "default": 10},
+            "property": {"identifier": "node_graph.float", "default": 10},
         },
     ],
-    "outputs": [{"identifier": "Any", "name": "result"}],
+    "outputs": [{"identifier": "node_graph.any", "name": "result"}],
     "executor": {"path": "numpy.add"},
 }
 MyNumpyAdd = create_node(ndata)
@@ -19,9 +19,9 @@ MyNumpyAdd = create_node(ndata)
 
 def create_test_node_group():
     nt = NodeGraph()
-    add1 = nt.nodes.new("TestAdd", "add1")
-    add2 = nt.nodes.new("TestAdd", "add2")
-    add3 = nt.nodes.new("TestAdd", "add3")
+    add1 = nt.nodes.new("node_graph.test_add", "add1")
+    add2 = nt.nodes.new("node_graph.test_add", "add2")
+    add3 = nt.nodes.new("node_graph.test_add", "add3")
     nt.links.new(add1.outputs[0], add3.inputs[0])
     nt.links.new(add2.outputs[0], add3.inputs[1])
     nt.group_properties = [
@@ -44,8 +44,8 @@ MyTestAddGroup = create_node_group(
 def test_socket(decorated_myadd):
     """Test simple math."""
     n = decorated_myadd.node()
-    assert n.inputs["x"].identifier == "Float"
-    assert n.inputs["y"].identifier == "Float"
+    assert n.inputs["x"].identifier == "node_graph.float"
+    assert n.inputs["y"].identifier == "node_graph.float"
     assert n.inputs["t"].property.default == 1
 
 

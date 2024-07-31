@@ -4,15 +4,6 @@ import sys
 import difflib
 
 
-def register(pool: Dict[str, Any], entries: List[Any]) -> None:
-    """Add entries to the pool."""
-    for entry in entries:
-        if entry.identifier not in pool:
-            pool[entry.identifier] = entry
-        else:
-            raise Exception("Entry: {} is already registered.".format(entry.identifier))
-
-
 def get_entries(entry_point_name: str) -> Dict[str, Any]:
     """Get entries from the entry point."""
     pool: Dict[str, Any] = {}
@@ -22,8 +13,11 @@ def get_entries(entry_point_name: str) -> Dict[str, Any]:
     else:
         group = eps.get(entry_point_name, [])
     for entry_point in group:
-        new_entries = entry_point.load()
-        register(pool, new_entries)
+        entry = entry_point.load()
+        if entry_point.name not in pool:
+            pool[entry_point.name] = entry
+        else:
+            raise Exception("Entry: {} is already registered.".format(entry_point.name))
     return pool
 
 

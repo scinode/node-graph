@@ -180,12 +180,3 @@ class TestAddGroup(Node):
         nt.group_outputs = [("add3.result", "result")]
         return nt
 
-
-node_list = [
-    TestFloat,
-    TestString,
-    TestAdd,
-    TestEnum,
-    TestEnumUpdate,
-    TestAddGroup,
-]

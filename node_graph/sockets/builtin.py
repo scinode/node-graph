@@ -109,15 +109,3 @@ class SocketFloatVector(NodeSocket, SerializeJson):
         super().__init__(name, node, type, index, uuid=uuid)
         self.add_property("FloatVector", name, **kwargs)
 
-
-socket_list = [
-    SocketAny,
-    SocketInt,
-    SocketFloat,
-    SocketString,
-    SocketBool,
-    SocketBaseDict,
-    SocketBaseList,
-    SocketIntVector,
-    SocketFloatVector,
-]
