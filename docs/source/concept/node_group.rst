@@ -41,7 +41,7 @@ One can define a node group using the `node.group` decorator. In the definition 
         sqrt1.set({"t":2, "x": x})
         sqrt2 = nt.nodes.new("TestSqrt", "sqrt2")
         sqrt2.set({"x": y})
-        add1 = nt.nodes.new("TestAdd", "add1")
+        add1 = nt.nodes.new("node_graph.test_add", "add1")
         nt.links.new(sqrt1.outputs[0], add1.inputs[0])
         nt.links.new(sqrt2.outputs[0], add1.inputs[1])
         return nt
@@ -67,7 +67,7 @@ One can define a nodegroup use a Node class, and specify the `node_type` to `GRO
                         daemon_name=self.daemon_name)
             sqrt1 = nt.nodes.new("TestSqrt", "sqrt1")
             sqrt2 = nt.nodes.new("TestSqrt", "sqrt2")
-            add1 = nt.nodes.new("TestAdd", "add1")
+            add1 = nt.nodes.new("node_graph.test_add", "add1")
             nt.links.new(sqrt1.outputs[0], add1.inputs[0])
             nt.links.new(sqrt2.outputs[0], add1.inputs[1])
             nt.group_properties = [("sqrt1", "t", "t1"),

@@ -57,10 +57,34 @@ tests = [
 
 
 [project.entry-points."node_graph.node"]
-test = "node_graph.nodes.test_nodes:node_list"
+"node_graph.test_float" = "node_graph.nodes.test_nodes:TestFloat"
+"node_graph.test_string" = "node_graph.nodes.test_nodes:TestString"
+"node_graph.test_add" = "node_graph.nodes.test_nodes:TestAdd"
+"node_graph.test_enum" = "node_graph.nodes.test_nodes:TestEnum"
+"node_graph.test_enum_update" = "node_graph.nodes.test_nodes:TestEnumUpdate"
+"node_graph.test_add_group" = "node_graph.nodes.test_nodes:TestAddGroup"
 
 [project.entry-points."node_graph.socket"]
-built_in = "node_graph.sockets.builtin:socket_list"
+"node_graph.any" = "node_graph.sockets.builtins:SocketAny"
+"node_graph.int" = "node_graph.sockets.builtins:SocketInt"
+"node_graph.float" = "node_graph.sockets.builtins:SocketFloat"
+"node_graph.string" = "node_graph.sockets.builtins:SocketString"
+"node_graph.bool" = "node_graph.sockets.builtins:SocketBool"
+"node_graph.base_dict" = "node_graph.sockets.builtins:SocketBaseDict"
+"node_graph.base_list" = "node_graph.sockets.builtins:SocketBaseList"
+"node_graph.int_vector" = "node_graph.sockets.builtins:SocketIntVector"
+"node_graph.float_vector" = "node_graph.sockets.builtins:SocketFloatVector"
 
 [project.entry-points."node_graph.property"]
-built_in = "node_graph.properties.builtin:property_list"
+"node_graph.any" = "node_graph.properties.builtins:PropertyAny"
+"node_graph.int" = "node_graph.properties.builtins:PropertyInt"
+"node_graph.float" = "node_graph.properties.builtins:PropertyFloat"
+"node_graph.string" = "node_graph.properties.builtins:PropertyString"
+"node_graph.bool" = "node_graph.properties.builtins:PropertyBool"
+"node_graph.enum" = "node_graph.properties.builtins:PropertyEnum"
+"node_graph.int_vector" = "node_graph.properties.builtins:PropertyIntVector"
+"node_graph.float_vector" = "node_graph.properties.builtins:PropertyFloatVector"
+"node_graph.bool_vector" = "node_graph.properties.builtins:PropertyBoolVector"
+"node_graph.float_matrix" = "node_graph.properties.builtins:PropertyFloatMatrix"
+"node_graph.base_dict" = "node_graph.properties.builtins:PropertyBaseDict"
+"node_graph.base_list" = "node_graph.properties.builtins:PropertyBaseList"

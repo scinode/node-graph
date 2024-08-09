@@ -81,7 +81,7 @@ class Node:
             output_collection_class (Any, optional): Output socket collection class. Defaults to OutputSocketCollection.
         """
         self.inner_id = inner_id
-        self.name = name or "{}{}".format(self.identifier, inner_id)
+        self.name = name or "{}{}".format(self.identifier.split(".")[-1], inner_id)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self.properties = property_collection_class(self, pool=self.property_pool)
@@ -137,12 +137,12 @@ class Node:
         """Create control input and output sockets for this node."""
         self.ctrl_inputs.clear()
         self.ctrl_outputs.clear()
-        socket = self.ctrl_inputs.new("Any", "entry")
+        socket = self.ctrl_inputs.new("node_graph.any", "entry")
         socket.link_limit = 1000
-        socket = self.ctrl_inputs.new("Any", "ctrl")
+        socket = self.ctrl_inputs.new("node_graph.any", "ctrl")
         socket.link_limit = 1000
-        socket = self.ctrl_outputs.new("Any", "exit")
-        socket = self.ctrl_outputs.new("Any", "ctrl")
+        socket = self.ctrl_outputs.new("node_graph.any", "exit")
+        socket = self.ctrl_outputs.new("node_graph.any", "ctrl")
         socket.link_limit = 1000
 
     def create_group_sockets(self) -> None:
@@ -429,7 +429,7 @@ class Node:
         if node_pool is None:
             from node_graph.nodes import node_pool
 
-        ItemClass = node_pool[identifier]
+        ItemClass = node_pool[identifier.upper()]
         node = ItemClass(name=name)
         return node
 

@@ -2,18 +2,18 @@ from node_graph.node import Node
 
 
 class TestFloat(Node):
-    identifier = "TestFloat"
+    identifier = "node_graph.test_float"
     name = "TestFloat"
     catalog = "Test"
 
     kwargs = ["t", "value"]
 
     def create_properties(self):
-        self.properties.new("Int", "t", default=1)
-        self.properties.new("Float", "value", default=0.0)
+        self.properties.new("node_graph.int", "t", default=1)
+        self.properties.new("node_graph.float", "value", default=0.0)
 
     def create_sockets(self):
-        self.outputs.new("Float", "float")
+        self.outputs.new("node_graph.float", "float")
 
     def get_executor(self):
         return {
@@ -23,18 +23,18 @@ class TestFloat(Node):
 
 
 class TestString(Node):
-    identifier = "TestString"
+    identifier = "node_graph.test_string"
     name = "String"
     catalog = "Test"
 
     kwargs = ["t", "value"]
 
     def create_properties(self):
-        self.properties.new("Int", "t", default=1)
-        self.properties.new("String", "value", default="")
+        self.properties.new("node_graph.int", "t", default=1)
+        self.properties.new("node_graph.string", "value", default="")
 
     def create_sockets(self):
-        self.outputs.new("String", "string")
+        self.outputs.new("node_graph.string", "string")
 
     def get_executor(self):
         return {
@@ -56,20 +56,20 @@ class TestAdd(Node):
 
     """
 
-    identifier: str = "TestAdd"
+    identifier: str = "node_graph.test_add"
     name = "TestAdd"
     catalog = "Test"
     kwargs = ["t", "x", "y"]
 
     def create_properties(self):
-        self.properties.new("Int", "t", default=1)
+        self.properties.new("node_graph.int", "t", default=1)
 
     def create_sockets(self):
         self.inputs.clear()
         self.outputs.clear()
-        self.inputs.new("Float", "x")
-        self.inputs.new("Float", "y")
-        self.outputs.new("Float", "result")
+        self.inputs.new("node_graph.float", "x")
+        self.inputs.new("node_graph.float", "y")
+        self.outputs.new("node_graph.float", "result")
 
     def get_executor(self):
         return {
@@ -80,15 +80,15 @@ class TestAdd(Node):
 
 class TestEnum(Node):
 
-    identifier: str = "TestEnum"
+    identifier: str = "node_graph.test_enum"
     name = "Enum"
     catalog = "Test"
     kwargs = ["t", "function"]
 
     def create_properties(self):
-        self.properties.new("Int", "t", default=1)
+        self.properties.new("node_graph.int", "t", default=1)
         self.properties.new(
-            "Enum",
+            "node_graph.enum",
             "function",
             options=[
                 ["add", "test_add", "add function"],
@@ -99,7 +99,7 @@ class TestEnum(Node):
     def create_sockets(self):
         self.inputs.clear()
         self.outputs.clear()
-        self.outputs.new("Any", "result")
+        self.outputs.new("node_graph.any", "result")
 
     def get_executor(self):
         return {
@@ -110,14 +110,14 @@ class TestEnum(Node):
 
 class TestEnumUpdate(Node):
 
-    identifier: str = "TestEnumUpdate"
-    name = "Enum"
+    identifier: str = "node_graph.test_enum_update"
+    name = "EnumUpdate"
     catalog = "Test"
 
     def create_properties(self):
-        self.properties.new("Int", "t", default=1)
+        self.properties.new("node_graph.int", "t", default=1)
         self.properties.new(
-            "Enum",
+            "node_graph.enum",
             "function",
             default="add",
             options=[
@@ -131,13 +131,13 @@ class TestEnumUpdate(Node):
         self.inputs.clear()
         self.outputs.clear()
         if self.properties["function"].value in ["add"]:
-            self.inputs.new("Float", "x")
-            self.inputs.new("Float", "y")
+            self.inputs.new("node_graph.float", "x")
+            self.inputs.new("node_graph.float", "y")
             self.kwargs = ["t", "x", "y"]
         elif self.properties["function"].value in ["sqrt"]:
-            self.inputs.new("Float", "x")
+            self.inputs.new("node_graph.float", "x")
             self.kwargs = ["t", "x"]
-        self.outputs.new("Any", "result")
+        self.outputs.new("node_graph.any", "result")
 
     def get_executor(self):
         return {
@@ -164,9 +164,9 @@ class TestAddGroup(Node):
             worker_name=self.worker_name,
             type="NODE_GROUP",
         )
-        add1 = nt.nodes.new("TestAdd", "add1")
-        add2 = nt.nodes.new("TestAdd", "add2")
-        add3 = nt.nodes.new("TestAdd", "add1")
+        add1 = nt.nodes.new("node_graph.test_add", "add1")
+        add2 = nt.nodes.new("node_graph.test_add", "add2")
+        add3 = nt.nodes.new("node_graph.test_add", "add1")
         nt.links.new(add1.outputs[0], add3.inputs[0])
         nt.links.new(add2.outputs[0], add3.inputs[1])
         nt.group_properties = [
@@ -179,13 +179,3 @@ class TestAddGroup(Node):
         ]
         nt.group_outputs = [("add3.result", "result")]
         return nt
-
-
-node_list = [
-    TestFloat,
-    TestString,
-    TestAdd,
-    TestEnum,
-    TestEnumUpdate,
-    TestAddGroup,
-]

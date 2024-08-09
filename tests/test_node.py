@@ -7,7 +7,7 @@ def test_base_node():
     Append it to a nodegraph.
     """
     nt = NodeGraph(name="test_base_node")
-    n = Node.new("TestFloat")
+    n = Node.new("node_graph.test_float")
     # added to nodegraph
     nt.nodes.append(n)
     assert n.parent == nt
@@ -21,14 +21,14 @@ def test_id_name():
 
     nt = NodeGraph(name="test_id_name")
     # auto generate name for the node
-    math1 = nt.nodes.new("TestAdd")
+    math1 = nt.nodes.new("node_graph.test_add")
     assert math1.inner_id == 1
-    assert math1.name == "TestAdd1"
+    assert math1.name == "test_add1"
     # set node name manually
-    math2 = nt.nodes.new("TestAdd", "Math2")
+    math2 = nt.nodes.new("node_graph.test_add", "Math2")
     assert math2.inner_id == 2
     assert math2.name == "Math2"
-    math3 = nt.nodes.new("TestAdd", name="Math3")
+    math3 = nt.nodes.new("node_graph.test_add", name="Math3")
     assert math3.name == "Math3"
     assert math3.inner_id == 3
 
@@ -36,7 +36,7 @@ def test_id_name():
 def test_set_property():
 
     nt = NodeGraph(name="test_set_property")
-    math = nt.nodes.new("TestAdd", "Math")
+    math = nt.nodes.new("node_graph.test_add", "Math")
     math.inputs["x"].property.value = 2
     assert math.inputs["x"].property.value == 2
 
@@ -44,10 +44,10 @@ def test_set_property():
 def test_to_dict():
 
     nt = NodeGraph(name="test_to_dict")
-    math = nt.nodes.new("TestAdd", "Math")
+    math = nt.nodes.new("node_graph.test_add", "Math")
     math.inputs["x"].property.value = 2
     data = math.to_dict()
-    assert data["metadata"]["identifier"] == "TestAdd"
+    assert data["metadata"]["identifier"] == "node_graph.test_add"
 
 
 def test_copy():
@@ -58,7 +58,7 @@ def test_copy():
     """
 
     nt = NodeGraph(name="test_copy")
-    math = nt.nodes.new("TestAdd", "Math", t=5, x=2)
+    math = nt.nodes.new("node_graph.test_add", "Math", t=5, x=2)
     math1 = math.copy()
     assert math1.properties["t"].value == 5
     assert math1.inputs["x"].property.value == 2

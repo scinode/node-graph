@@ -23,8 +23,8 @@ class NodeGraph:
         >>> nt = NodeGraph(name="my_first_nodegraph")
 
         Add nodes:
-        >>> float1 = nt.nodes.new("TestFloat", name="float1")
-        >>> add1 = nt.nodes.new("TestAdd", name="add1")
+        >>> float1 = nt.nodes.new("node_graph.test_float", name="float1")
+        >>> add1 = nt.nodes.new("node_graph.test_add", name="add1")
 
         Add links:
         >>> nt.links.new(float1.outputs[0], add1.inputs[0])
@@ -215,7 +215,7 @@ class NodeGraph:
             if ndata.get("executor", {}).get("is_pickle", False):
                 node_class = pickle.loads(ndata["node_class"])
             else:
-                node_class = cls.node_pool[ndata["metadata"]["identifier"]]
+                node_class = cls.node_pool[ndata["metadata"]["identifier"].upper()]
             node = nt.nodes.new(
                 node_class,
                 name=name,

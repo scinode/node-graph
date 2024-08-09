@@ -5,12 +5,12 @@ from node_graph import NodeGraph
 @pytest.mark.parametrize(
     "id, data",
     (
-        ("Int", 1),
-        ("Float", 1.0),
-        ("Bool", False),
-        ("String", "a"),
-        ("BaseDict", {"a": 1}),
-        ("BaseList", [1, 2, 3]),
+        ("node_graph.int", 1),
+        ("node_graph.float", 1.0),
+        ("node_graph.bool", False),
+        ("node_graph.string", "a"),
+        ("node_graph.base_dict", {"a": 1}),
+        ("node_graph.base_list", [1, 2, 3]),
     ),
 )
 def test_base_type(id, data):
@@ -28,12 +28,12 @@ def test_base_type(id, data):
 @pytest.mark.parametrize(
     "id, data",
     (
-        ("Int", "a"),
-        ("Float", "a"),
-        ("Bool", "a"),
-        ("String", 0.0),
-        ("BaseDict", 0.0),
-        ("BaseList", 0.0),
+        ("node_graph.int", "a"),
+        ("node_graph.float", "a"),
+        ("node_graph.bool", "a"),
+        ("node_graph.string", 0.0),
+        ("node_graph.base_dict", 0.0),
+        ("node_graph.base_list", 0.0),
     ),
 )
 def test_base_type_validation(id, data):
@@ -52,7 +52,7 @@ def test_enum_type():
     """Test simple math."""
 
     nt = NodeGraph(name="test_enum_type")
-    nd = nt.nodes.new("TestEnum")
+    nd = nt.nodes.new("node_graph.test_enum")
     assert nd.properties["function"].content == "test_add"
     nd.properties["function"].value = "sqrt"
     assert nd.properties["function"].content == "test_sqrt"
@@ -62,7 +62,7 @@ def test_enum_update_type():
     """Test simple math."""
 
     nt = NodeGraph(name="test_enum_update_type")
-    nd = nt.nodes.new("TestEnumUpdate")
+    nd = nt.nodes.new("node_graph.test_enum_update")
     assert nd.properties["function"].content == "test_add"
     assert len(nd.inputs) == 2
     nd.properties["function"].value = "sqrt"
@@ -77,9 +77,9 @@ def test_enum_update_type():
 @pytest.mark.parametrize(
     "id, size, default, data",
     (
-        ("IntVector", 3, [0, 0, 0], [1, 2, 3]),
-        ("FloatVector", 3, [0.0, 0.0, 0.0], [1.0, 2.0, 3.0]),
-        ("BoolVector", 3, [True, True, True], [False, True, False]),
+        ("node_graph.int_vector", 3, [0, 0, 0], [1, 2, 3]),
+        ("node_graph.float_vector", 3, [0.0, 0.0, 0.0], [1.0, 2.0, 3.0]),
+        ("node_graph.bool_vector", 3, [True, True, True], [False, True, False]),
     ),
 )
 def test_vector(id, size, default, data):

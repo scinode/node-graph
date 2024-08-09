@@ -2,20 +2,20 @@ from node_graph.property import NodeProperty
 from node_graph.serializer import SerializeJson, SerializePickle
 
 
-class AnyProperty(NodeProperty, SerializePickle):
+class PropertyAny(NodeProperty, SerializePickle):
     """A new class for Any type."""
 
-    identifier: str = "Any"
+    identifier: str = "node_graph.any"
     data_type = "Any"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
         super().__init__(name, description, default, update)
 
 
-class IntProperty(NodeProperty, SerializeJson):
+class PropertyInt(NodeProperty, SerializeJson):
     """A new class for integer type."""
 
-    identifier: str = "Int"
+    identifier: str = "node_graph.int"
     data_type = "Int"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -31,10 +31,10 @@ class IntProperty(NodeProperty, SerializeJson):
             raise Exception("{} is not a integer.".format(value))
 
 
-class FloatProperty(NodeProperty, SerializeJson):
+class PropertyFloat(NodeProperty, SerializeJson):
     """A new class for float type."""
 
-    identifier: str = "Float"
+    identifier: str = "node_graph.float"
     data_type = "Float"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -50,10 +50,10 @@ class FloatProperty(NodeProperty, SerializeJson):
             raise Exception("{} is not a float.".format(value))
 
 
-class BoolProperty(NodeProperty, SerializeJson):
+class PropertyBool(NodeProperty, SerializeJson):
     """A new class for bool type."""
 
-    identifier: str = "Bool"
+    identifier: str = "node_graph.bool"
     data_type = "Bool"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -69,10 +69,10 @@ class BoolProperty(NodeProperty, SerializeJson):
             raise Exception("{} is not a bool.".format(value))
 
 
-class StringProperty(NodeProperty, SerializeJson):
+class PropertyString(NodeProperty, SerializeJson):
     """A new class for string type."""
 
-    identifier: str = "String"
+    identifier: str = "node_graph.string"
     data_type = "String"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -88,7 +88,7 @@ class StringProperty(NodeProperty, SerializeJson):
             raise Exception("{} is not a string.".format(value))
 
 
-class EnumProperty(NodeProperty, SerializeJson):
+class PropertyEnum(NodeProperty, SerializeJson):
     """A new class for enumeration type.
 
     Each option has:
@@ -97,8 +97,8 @@ class EnumProperty(NodeProperty, SerializeJson):
     - content: The true content of the this option.
     - description: Used for documentation and tooltips.
 
-    >>> from node_graph.properties.built_in import EnumProperty
-    >>> enum = EnumProperty("enum",
+    >>> from node_graph.properties.built_in import PropertyEnum
+    >>> enum = PropertyEnum("node_graph.enum",
                     options=[["add", "test_add", "add function"],
                             "sqrt", "test_sqrt", "sqrt function"],
                             "power", "test_power", "power function"]],
@@ -108,7 +108,7 @@ class EnumProperty(NodeProperty, SerializeJson):
     >>> asset enum.value == "test_sqrt"
     """
 
-    identifier: str = "Enum"
+    identifier: str = "node_graph.enum"
     data_type = "Enum"
 
     def __init__(
@@ -155,10 +155,10 @@ class EnumProperty(NodeProperty, SerializeJson):
 
 # ====================================
 # Vector
-class VectorProperty(NodeProperty, SerializePickle):
+class PropertyVector(NodeProperty, SerializePickle):
     """node_graph Vector property"""
 
-    identifier: str = "Vector"
+    identifier: str = "node_graph.vector"
     data_type = "Vector"
 
     def __init__(self, name, description="", size=3, default=[], update=None) -> None:
@@ -173,10 +173,10 @@ class VectorProperty(NodeProperty, SerializePickle):
         return p
 
 
-class IntVectorProperty(VectorProperty):
+class PropertyIntVector(PropertyVector):
     """A new class for integer vector type."""
 
-    identifier: str = "IntVector"
+    identifier: str = "node_graph.int_vector"
     data_type = "IntVector"
 
     def __init__(
@@ -202,10 +202,10 @@ class IntVectorProperty(VectorProperty):
             )
 
 
-class FloatVectorProperty(VectorProperty):
+class PropertyFloatVector(PropertyVector):
     """A new class for float vector type."""
 
-    identifier: str = "FloatVector"
+    identifier: str = "node_graph.float_vector"
     data_type = "FloatVector"
 
     def __init__(
@@ -233,10 +233,10 @@ class FloatVectorProperty(VectorProperty):
         return metadata
 
 
-class BoolVectorProperty(VectorProperty):
+class PropertyBoolVector(PropertyVector):
     """A new class for bool vector type."""
 
-    identifier: str = "BoolVector"
+    identifier: str = "node_graph.bool_vector"
     data_type = "BoolVector"
 
     def __init__(
@@ -265,7 +265,7 @@ class BoolVectorProperty(VectorProperty):
 class MatrixProperty(NodeProperty, SerializePickle):
     """node_graph Matrix property"""
 
-    identifier: str = "Matrix"
+    identifier: str = "node_graph.matrix"
     data_type = "Matrix"
 
     def __init__(
@@ -282,10 +282,10 @@ class MatrixProperty(NodeProperty, SerializePickle):
         return p
 
 
-class FloatMatrixProperty(MatrixProperty):
+class PropertyFloatMatrix(MatrixProperty):
     """A new class for float matrix type."""
 
-    identifier: str = "FloatMatrix"
+    identifier: str = "node_graph.float_matrix"
     data_type = "FloatMatrix"
 
     def __init__(
@@ -331,12 +331,12 @@ def validate_base_type(value):
             )
 
 
-class BaseDictProperty(NodeProperty, SerializePickle):
+class PropertyBaseDict(NodeProperty, SerializePickle):
     """node_graph BaseDict property.
     All the elements should be a base type (int, float, string, bool).
     """
 
-    identifier: str = "BaseDict"
+    identifier: str = "node_graph.base_dict"
     data_type = "BaseDict"
 
     def __init__(self, name, description="", default={}, update=None) -> None:
@@ -353,7 +353,7 @@ class BaseDictProperty(NodeProperty, SerializePickle):
             raise Exception("{} is not a dict.".format(value))
 
 
-class BaseListProperty(NodeProperty, SerializePickle):
+class PropertyBaseList(NodeProperty, SerializePickle):
     """node_graph BaseList property.
     All the elements should be a base type (int, float, string, bool).
     """
@@ -375,19 +375,3 @@ class BaseListProperty(NodeProperty, SerializePickle):
             raise Exception(
                 f"Set property {self.name} failed. {value} is not a list or tuple."
             )
-
-
-property_list = [
-    AnyProperty,
-    IntProperty,
-    FloatProperty,
-    StringProperty,
-    BoolProperty,
-    EnumProperty,
-    IntVectorProperty,
-    FloatVectorProperty,
-    BoolVectorProperty,
-    FloatMatrixProperty,
-    BaseDictProperty,
-    BaseListProperty,
-]

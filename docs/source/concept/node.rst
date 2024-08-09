@@ -24,9 +24,9 @@ Metadata
 
 .. code-block:: python
 
-   # identifier: TestFloat, name: float1
-   node1 = nt.nodes.new("TestFloat", name="float1")
-   node2 = nt.nodes.new("TestFloat", name="float2")
+   # identifier: node_graph.test_float, name: float1
+   node1 = nt.nodes.new("node_graph.test_float", name="float1")
+   node2 = nt.nodes.new("node_graph.test_float", name="float2")
 
 Executor
 ===========================================
@@ -107,14 +107,14 @@ One can define a new node by extend the `Node` class.
       kwargs = ["t", "x", "y"]
 
       def create_properties(self):
-         self.properties.new("Int", "t", default=1)
+         self.properties.new("node_graph.int", "t", default=1)
 
       def create_sockets(self):
          self.inputs.clear()
          self.outputs.clear()
-         self.inputs.new("Float", "x")
-         self.inputs.new("Float", "y")
-         self.outputs.new("Float", "Result")
+         self.inputs.new("node_graph.float", "x")
+         self.inputs.new("node_graph.float", "y")
+         self.outputs.new("node_graph.float", "Result")
 
       def get_executor(self):
          return {
@@ -133,8 +133,8 @@ Create a Node inside a NodeGraph
 
    # create a nodegraph
    nt = NodeGraph(name="test_node")
-   # create a node using the Node identifier, e.g. TestFloat
-   float1 = nt.nodes.new("TestFloat")
+   # create a node using the Node identifier, e.g. node_graph.test_float
+   float1 = nt.nodes.new("node_graph.test_float")
    # set node properties
    float1.set({"Float": 8})
    # copy a node
