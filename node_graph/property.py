@@ -97,7 +97,7 @@ class NodeProperty:
         if property_pool is None:
             from node_graph.properties import property_pool
         if isinstance(identifier, str):
-            ItemClass: "NodeProperty" = property_pool[identifier]
+            ItemClass: "NodeProperty" = property_pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
             ItemClass = identifier
         else:

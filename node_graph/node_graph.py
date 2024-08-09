@@ -215,7 +215,7 @@ class NodeGraph:
             if ndata.get("executor", {}).get("is_pickle", False):
                 node_class = pickle.loads(ndata["node_class"])
             else:
-                node_class = cls.node_pool[ndata["metadata"]["identifier"]]
+                node_class = cls.node_pool[ndata["metadata"]["identifier"].upper()]
             node = nt.nodes.new(
                 node_class,
                 name=name,

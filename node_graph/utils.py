@@ -14,8 +14,8 @@ def get_entries(entry_point_name: str) -> Dict[str, Any]:
         group = eps.get(entry_point_name, [])
     for entry_point in group:
         entry = entry_point.load()
-        if entry_point.name not in pool:
-            pool[entry_point.name] = entry
+        if entry_point.name.upper() not in pool:
+            pool[entry_point.name.upper()] = entry
         else:
             raise Exception("Entry: {} is already registered.".format(entry_point.name))
     return pool

@@ -188,8 +188,8 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
     def wrapper_func(*args, **kwargs):
 
         identifier = args[1]
-        if isinstance(identifier, str) and identifier not in args[0].pool:
-            items = difflib.get_close_matches(identifier, args[0].pool)
+        if isinstance(identifier, str) and identifier.upper() not in args[0].pool:
+            items = difflib.get_close_matches(identifier.upper(), args[0].pool)
             if len(items) == 0:
                 msg = "Identifier: {} is not defined.".format(identifier)
             else:
@@ -242,7 +242,7 @@ class NodeCollection(Collection):
 
         inner_id = self.get_inner_id()
         if isinstance(identifier, str):
-            ItemClass = self.pool[identifier]
+            ItemClass = self.pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, Node):
             ItemClass = identifier
         elif isinstance(getattr(identifier, "node", None), type) and issubclass(
@@ -292,7 +292,7 @@ class PropertyCollection(Collection):
         from node_graph.property import NodeProperty
 
         if isinstance(identifier, str):
-            ItemClass = self.pool[identifier]
+            ItemClass = self.pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
             ItemClass = identifier
         else:
@@ -332,7 +332,7 @@ class InputSocketCollection(Collection):
         from node_graph.socket import NodeSocket
 
         if isinstance(identifier, str):
-            ItemClass = self.pool[identifier]
+            ItemClass = self.pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, NodeSocket):
             ItemClass = identifier
         else:
@@ -383,7 +383,7 @@ class OutputSocketCollection(Collection):
         from node_graph.socket import NodeSocket
 
         if isinstance(identifier, str):
-            ItemClass = self.pool[identifier]
+            ItemClass = self.pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, NodeSocket):
             ItemClass = identifier
         else:

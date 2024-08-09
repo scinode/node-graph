@@ -429,7 +429,7 @@ class Node:
         if node_pool is None:
             from node_graph.nodes import node_pool
 
-        ItemClass = node_pool[identifier]
+        ItemClass = node_pool[identifier.upper()]
         node = ItemClass(name=name)
         return node
 
