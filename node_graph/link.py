@@ -37,8 +37,8 @@ class NodeLink:
             )
 
         if (
-            self.from_socket.identifier.upper() == "NODE_GRAPH.ANY"
-            or self.to_socket.identifier.upper() == "NODE_GRAPH.ANY"
+            self.from_socket.identifier.upper().split(".")[1] == "ANY"
+            or self.to_socket.identifier.upper().split(".")[1] == "ANY"
         ):
             return
         if self.from_socket.identifier.upper() != self.to_socket.identifier.upper():
