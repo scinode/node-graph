@@ -20,5 +20,5 @@ def test_from_dict(nt_decorator):
 def test_new_node(nt):
     """Export NodeGraph to dict."""
     n = len(nt.nodes)
-    nt.nodes.new("TestAdd")
+    nt.nodes.new("node_graph.test_add")
     assert len(nt.nodes) == n + 1

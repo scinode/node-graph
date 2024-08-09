@@ -18,8 +18,8 @@ Create a node graph
 
 .. code-block:: python
 
-    float1 = ng.nodes.new("Float", name = "float1")
-    add1 = ng.nodes.new("TestAdd", name = "add1")
+    float1 = ng.nodes.new("node_graph.float", name = "float1")
+    add1 = ng.nodes.new("node_graph.test_add", name = "add1")
 
 - Add link between nodes:
 

@@ -60,15 +60,15 @@ def inspect_function(
 def python_type_to_socket_type(python_type: type) -> str:
     """Convert python type to socket type"""
     if python_type == int:
-        return "Int"
+        return "node_graph.int"
     elif python_type == float:
-        return "Float"
+        return "node_graph.float"
     elif python_type == str:
-        return "String"
+        return "node_graph.string"
     elif python_type == bool:
-        return "Bool"
+        return "node_graph.bool"
     else:
-        return "Any"
+        return "node_graph.any"
 
 
 def generate_input_sockets(
@@ -110,9 +110,9 @@ def generate_input_sockets(
                 }
             inputs.append(input)
     if var_args is not None:
-        inputs.append({"identifier": "Any", "name": var_args})
+        inputs.append({"identifier": "node_graph.any", "name": var_args})
     if var_kwargs is not None:
-        inputs.append({"identifier": "Any", "name": var_kwargs})
+        inputs.append({"identifier": "node_graph.any", "name": var_kwargs})
     #
     arg_names = [arg[0] for arg in args]
     kwarg_names = [name for name in kwargs.keys()]
@@ -147,7 +147,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
             for input in inputs:
                 if isinstance(input, str):
-                    input = {"identifier": "Any", "name": input}
+                    input = {"identifier": "node_graph.any", "name": input}
                 inp = self.inputs.new(input["identifier"], input["name"])
                 prop = input.get("property", None)
                 if prop is not None:
@@ -157,8 +157,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 inp.link_limit = input.get("link_limit", 1)
             for output in outputs:
                 if isinstance(output, str):
-                    output = {"identifier": "Any", "name": output}
-                identifier = output.pop("identifier", "Any")
+                    output = {"identifier": "node_graph.any", "name": output}
+                identifier = output.pop("identifier", "node_graph.any")
                 self.outputs.new(identifier, **output)
             self.args = ndata.get("args", [])
             self.kwargs = ndata.get("kwargs", [])
@@ -222,7 +222,7 @@ def decorator_node(
 
     properties = properties or []
     inputs = inputs or []
-    outputs = outputs or [{"identifier": "Any", "name": "result"}]
+    outputs = outputs or [{"identifier": "node_graph.any", "name": "result"}]
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 
@@ -304,7 +304,9 @@ def decorator_node_group(
         args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
             func, inputs, properties
         )
-        node_outputs = [{"identifier": "Any", "name": output[1]} for output in outputs]
+        node_outputs = [
+            {"identifier": "node_graph.any", "name": output[1]} for output in outputs
+        ]
         #
         node_type = "nodegroup"
         ndata = {
@@ -334,7 +336,7 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
-    ndata.setdefault("outputs", [{"identifier": "Any", "name": "result"}])
+    ndata.setdefault("outputs", [{"identifier": "node_graph.any", "name": "result"}])
     ndata.setdefault("node_class", Node)
 
     executor = ndata["executor"]

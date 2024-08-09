@@ -137,12 +137,12 @@ class Node:
         """Create control input and output sockets for this node."""
         self.ctrl_inputs.clear()
         self.ctrl_outputs.clear()
-        socket = self.ctrl_inputs.new("Any", "entry")
+        socket = self.ctrl_inputs.new("node_graph.any", "entry")
         socket.link_limit = 1000
-        socket = self.ctrl_inputs.new("Any", "ctrl")
+        socket = self.ctrl_inputs.new("node_graph.any", "ctrl")
         socket.link_limit = 1000
-        socket = self.ctrl_outputs.new("Any", "exit")
-        socket = self.ctrl_outputs.new("Any", "ctrl")
+        socket = self.ctrl_outputs.new("node_graph.any", "exit")
+        socket = self.ctrl_outputs.new("node_graph.any", "ctrl")
         socket.link_limit = 1000
 
     def create_group_sockets(self) -> None:

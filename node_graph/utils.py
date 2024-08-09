@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union
+from typing import Dict, Any, Union
 from importlib.metadata import entry_points
 import sys
 import difflib

@@ -23,8 +23,8 @@ Check the [docs](https://node_graph.readthedocs.io/en/latest/) and learn about t
 ```python
 from node_graph import NodeGraph
 nt = NodeGraph(name="example")
-float1 = nt.nodes.new("Float", value=2.0)
-float2 = nt.nodes.new("Float", value=3.0)
+float1 = nt.nodes.new("node_graph.float", value=2.0)
+float2 = nt.nodes.new("node_graph.float", value=3.0)
 add1 = nt.nodes.new("Operator", operator="+")
 nt.links.new(float1.outputs[0], add1.inputs[0])
 nt.links.new(float2.outputs[0], add1.inputs[1])

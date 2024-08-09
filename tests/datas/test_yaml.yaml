@@ -4,11 +4,11 @@ metadata:
   version: node_graph@0.1.0
   platform: node_graph
 nodes:
-  - identifier: TestFloat
+  - identifier: node_graph.test_float
     name: float1
     properties:
       value: 2.0
-  - identifier: TestAdd
+  - identifier: node_graph.test_add
     name: add1
     properties:
       y: 3.0

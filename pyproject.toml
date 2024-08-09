@@ -88,4 +88,3 @@ tests = [
 "node_graph.float_matrix" = "node_graph.properties.builtin:PropertyFloatMatrix"
 "node_graph.base_dict" = "node_graph.properties.builtin:PropertyBaseDict"
 "node_graph.base_list" = "node_graph.properties.builtin:PropertyBaseList"
-

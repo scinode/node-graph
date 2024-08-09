@@ -34,7 +34,7 @@ One can set the value of a property by:
 
 .. code:: Python
 
-   float1 = nt.nodes.new("TestFloat")
+   float1 = nt.nodes.new("node_graph.test_float")
    # set the value for Float property
    float1.properties["Float"].value = 2.0
    # or by
@@ -55,7 +55,7 @@ Add properties to a input socket
 .. code:: Python
 
       def create_sockets(self):
-         inp = self.inputs.new("Any", "x")
+         inp = self.inputs.new("node_graph.any", "x")
          inp.add_property("FloatVector", size=3, default=[0, 0, 0])
 
 Assigning to Existing Node
@@ -64,7 +64,7 @@ Assigning to Existing Node
 .. code:: Python
 
    node1 = nt.nodes.new("ScinodeNode", "pow")
-   node1.properties.new("Float", "x")
+   node1.properties.new("node_graph.float", "x")
 
 
 Update Example
@@ -76,7 +76,7 @@ It can be useful to create a dynamic socket based on a property's value.
 .. code:: Python
 
    # the item of the Enum options are [name, content, description]
-   self.properties.new("Enum",
+   self.properties.new("node_graph.enum",
                         "function",
                         default="cos",
                         options=[["cos", "cos", "cos function"],

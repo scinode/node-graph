@@ -5,7 +5,7 @@ from node_graph.serializer import SerializeJson, SerializePickle
 class PropertyAny(NodeProperty, SerializePickle):
     """A new class for Any type."""
 
-    identifier: str = "Any"
+    identifier: str = "node_graph.any"
     data_type = "Any"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -15,7 +15,7 @@ class PropertyAny(NodeProperty, SerializePickle):
 class PropertyInt(NodeProperty, SerializeJson):
     """A new class for integer type."""
 
-    identifier: str = "Int"
+    identifier: str = "node_graph.int"
     data_type = "Int"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -34,7 +34,7 @@ class PropertyInt(NodeProperty, SerializeJson):
 class PropertyFloat(NodeProperty, SerializeJson):
     """A new class for float type."""
 
-    identifier: str = "Float"
+    identifier: str = "node_graph.float"
     data_type = "Float"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -53,7 +53,7 @@ class PropertyFloat(NodeProperty, SerializeJson):
 class PropertyBool(NodeProperty, SerializeJson):
     """A new class for bool type."""
 
-    identifier: str = "Bool"
+    identifier: str = "node_graph.bool"
     data_type = "Bool"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -72,7 +72,7 @@ class PropertyBool(NodeProperty, SerializeJson):
 class PropertyString(NodeProperty, SerializeJson):
     """A new class for string type."""
 
-    identifier: str = "String"
+    identifier: str = "node_graph.string"
     data_type = "String"
 
     def __init__(self, name, description="", default=None, update=None) -> None:
@@ -98,7 +98,7 @@ class PropertyEnum(NodeProperty, SerializeJson):
     - description: Used for documentation and tooltips.
 
     >>> from node_graph.properties.built_in import PropertyEnum
-    >>> enum = PropertyEnum("enum",
+    >>> enum = PropertyEnum("node_graph.enum",
                     options=[["add", "test_add", "add function"],
                             "sqrt", "test_sqrt", "sqrt function"],
                             "power", "test_power", "power function"]],
@@ -108,7 +108,7 @@ class PropertyEnum(NodeProperty, SerializeJson):
     >>> asset enum.value == "test_sqrt"
     """
 
-    identifier: str = "Enum"
+    identifier: str = "node_graph.enum"
     data_type = "Enum"
 
     def __init__(
@@ -158,7 +158,7 @@ class PropertyEnum(NodeProperty, SerializeJson):
 class PropertyVector(NodeProperty, SerializePickle):
     """node_graph Vector property"""
 
-    identifier: str = "Vector"
+    identifier: str = "node_graph.vector"
     data_type = "Vector"
 
     def __init__(self, name, description="", size=3, default=[], update=None) -> None:
@@ -176,7 +176,7 @@ class PropertyVector(NodeProperty, SerializePickle):
 class PropertyIntVector(PropertyVector):
     """A new class for integer vector type."""
 
-    identifier: str = "IntVector"
+    identifier: str = "node_graph.int_vector"
     data_type = "IntVector"
 
     def __init__(
@@ -205,7 +205,7 @@ class PropertyIntVector(PropertyVector):
 class PropertyFloatVector(PropertyVector):
     """A new class for float vector type."""
 
-    identifier: str = "FloatVector"
+    identifier: str = "node_graph.float_vector"
     data_type = "FloatVector"
 
     def __init__(
@@ -236,7 +236,7 @@ class PropertyFloatVector(PropertyVector):
 class PropertyBoolVector(PropertyVector):
     """A new class for bool vector type."""
 
-    identifier: str = "BoolVector"
+    identifier: str = "node_graph.bool_vector"
     data_type = "BoolVector"
 
     def __init__(
@@ -265,7 +265,7 @@ class PropertyBoolVector(PropertyVector):
 class MatrixProperty(NodeProperty, SerializePickle):
     """node_graph Matrix property"""
 
-    identifier: str = "Matrix"
+    identifier: str = "node_graph.matrix"
     data_type = "Matrix"
 
     def __init__(
@@ -285,7 +285,7 @@ class MatrixProperty(NodeProperty, SerializePickle):
 class PropertyFloatMatrix(MatrixProperty):
     """A new class for float matrix type."""
 
-    identifier: str = "FloatMatrix"
+    identifier: str = "node_graph.float_matrix"
     data_type = "FloatMatrix"
 
     def __init__(
@@ -336,7 +336,7 @@ class PropertyBaseDict(NodeProperty, SerializePickle):
     All the elements should be a base type (int, float, string, bool).
     """
 
-    identifier: str = "BaseDict"
+    identifier: str = "node_graph.base_dict"
     data_type = "BaseDict"
 
     def __init__(self, name, description="", default={}, update=None) -> None:
