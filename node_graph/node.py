@@ -81,7 +81,7 @@ class Node:
             output_collection_class (Any, optional): Output socket collection class. Defaults to OutputSocketCollection.
         """
         self.inner_id = inner_id
-        self.name = name or "{}{}".format(self.identifier, inner_id)
+        self.name = name or "{}{}".format(self.identifier.split(".")[-1], inner_id)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self.properties = property_collection_class(self, pool=self.property_pool)

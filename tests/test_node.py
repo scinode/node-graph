@@ -23,7 +23,7 @@ def test_id_name():
     # auto generate name for the node
     math1 = nt.nodes.new("node_graph.test_add")
     assert math1.inner_id == 1
-    assert math1.name == "node_graph.test_add1"
+    assert math1.name == "test_add1"
     # set node name manually
     math2 = nt.nodes.new("node_graph.test_add", "Math2")
     assert math2.inner_id == 2
