@@ -16,14 +16,17 @@ class NodeLink:
         self.to_socket: "Socket" = to_socket
         self.to_node = to_socket.node
         self.state: bool = False
-        self.name: str = "{}.{} -> {}.{}".format(
+        self.check_socket_match()
+        self.mount()
+
+    @property
+    def name(self) -> str:
+        return "{}.{} -> {}.{}".format(
             self.from_node.name,
             self.from_socket.name,
             self.to_node.name,
             self.to_socket.name,
         )
-        self.check_socket_match()
-        self.mount()
 
     def check_socket_match(self) -> None:
         """Check if the socket type match, and belong to the same node graph."""
