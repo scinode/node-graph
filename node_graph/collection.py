@@ -47,15 +47,21 @@ class Collection:
         if isinstance(index, int):
             return self._items[index]
         elif isinstance(index, str):
-            return self.get(index)
+            return self._get(index)
+
+    def __dir__(self) -> List[str]:
+        """Extend the list of attributes available in the class with the keys of items."""
+        custom_dir = self._keys()
+        return custom_dir
 
     def __getattr__(self, name):
-        if self._items:
-            return self.get(name)
+        """Override to allow access to items by their name."""
+        if name in self._keys():
+            return self._get(name)
         else:
-            raise AttributeError(f"{name} not available in an empty collection")
+            raise AttributeError(f"{name} not available in this collection")
 
-    def get_inner_id(self) -> int:
+    def _get_inner_id(self) -> int:
         """Get the inner id for the next item.
 
         inner_id is the index of the item in the collection.
@@ -82,15 +88,15 @@ class Collection:
 
     def append(self, item: object) -> None:
         """Append item into this collection."""
-        if item.name in self.keys():
+        if item.name in self._keys():
             raise Exception(f"{item.name} already exist, please choose another name.")
-        item.inner_id = self.get_inner_id()
+        item.inner_id = self._get_inner_id()
         setattr(item, "parent", self.parent)
         self._items.append(item)
 
     def extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
-        conflict_names = set(self.keys()).intersection(new_names)
+        conflict_names = set(self._keys()).intersection(new_names)
         if len(conflict_names) > 0:
             raise Exception(
                 f"{conflict_names} already exist, please choose another names."
@@ -98,7 +104,7 @@ class Collection:
         for item in items:
             self.append(item)
 
-    def get(self, name: str) -> object:
+    def _get(self, name: str) -> object:
         """Find item by name
 
         Args:
@@ -112,10 +118,10 @@ class Collection:
                 return item
         raise Exception(
             f""""{name}" is not in the {self.__class__.__name__}.
-Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
+Acceptable names are {self._keys()}. This collection belongs to {self.parent}."""
         )
 
-    def get_by_uuid(self, uuid: str) -> Optional[object]:
+    def _get_by_uuid(self, uuid: str) -> Optional[object]:
         """Find item by uuid
 
         Args:
@@ -129,7 +135,7 @@ Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
                 return item
         return None
 
-    def keys(self) -> List[str]:
+    def _keys(self) -> List[str]:
         keys = []
         for item in self._items:
             keys.append(item.name)
@@ -197,11 +203,11 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
                     identifier, ", ".join(items)
                 )
             raise Exception(msg)
-        if len(args) > 2 and args[2] in args[0].keys():
+        if len(args) > 2 and args[2] in args[0]._keys():
             raise Exception(
                 "{} already exist, please choose another name.".format(args[2])
             )
-        if kwargs.get("name", None) in args[0].keys():
+        if kwargs.get("name", None) in args[0]._keys():
             raise Exception(
                 "{} already exist, please choose another name.".format(args[1])
             )
@@ -240,7 +246,7 @@ class NodeCollection(Collection):
     ) -> object:
         from node_graph.node import Node
 
-        inner_id = self.get_inner_id()
+        inner_id = self._get_inner_id()
         if isinstance(identifier, str):
             ItemClass = self.pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, Node):
@@ -267,7 +273,7 @@ class NodeCollection(Collection):
         s = ""
         parent_name = self.parent.name if self.parent else ""
         s += f'NodeCollection(parent = "{parent_name}", nodes = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -307,7 +313,7 @@ class PropertyCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'PropertyCollection(node = "{node_name}", properties = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -337,7 +343,7 @@ class InputSocketCollection(Collection):
             ItemClass = identifier
         else:
             raise Exception(f"Identifier {identifier} is not a socket or socket name.")
-        inner_id = self.get_inner_id()
+        inner_id = self._get_inner_id()
         item = ItemClass(name, type="INPUT", index=inner_id, **kwargs)
         self.append(item)
         return item
@@ -360,7 +366,7 @@ class InputSocketCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'InputCollection(node = "{node_name}", sockets = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -401,7 +407,7 @@ class OutputSocketCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'OutputCollection(node = "{node_name}", sockets = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
