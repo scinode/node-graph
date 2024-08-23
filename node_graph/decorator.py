@@ -109,9 +109,10 @@ def generate_input_sockets(
                     "default": kwarg["default"],
                 }
             inputs.append(input)
-    if var_args is not None:
+    input_names = [input["name"] for input in inputs]
+    if var_args is not None and var_args not in input_names:
         inputs.append({"identifier": "node_graph.any", "name": var_args})
-    if var_kwargs is not None:
+    if var_kwargs is not None and var_kwargs not in input_names:
         inputs.append({"identifier": "node_graph.any", "name": var_kwargs})
     #
     arg_names = [arg[0] for arg in args]

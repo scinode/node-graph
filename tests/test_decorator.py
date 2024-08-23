@@ -1,4 +1,5 @@
 from node_graph.decorator import create_node, create_node_group
+from node_graph.decorator import node
 from node_graph import NodeGraph
 
 ndata = {
@@ -15,6 +16,22 @@ ndata = {
     "executor": {"path": "numpy.add"},
 }
 MyNumpyAdd = create_node(ndata)
+
+
+def test_decorators_parameters() -> None:
+    """Test passing parameters to decorators."""
+
+    @node(
+        inputs=[{"name": "c", "link_limit": 1000}],
+        outputs=[{"name": "sum"}, {"name": "product"}],
+    )
+    def test(a, b=1, **c):
+        return {"sum": a + b, "product": a * b}
+
+    test1 = test.node()
+    assert test1.inputs["c"].link_limit == 1000
+    assert "sum" in test1.outputs.keys()
+    assert "product" in test1.outputs.keys()
 
 
 def create_test_node_group():
