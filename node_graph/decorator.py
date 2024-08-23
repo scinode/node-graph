@@ -148,7 +148,9 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
             for input in inputs:
                 if isinstance(input, str):
                     input = {"identifier": "node_graph.any", "name": input}
-                inp = self.inputs.new(input["identifier"], input["name"])
+                inp = self.inputs.new(
+                    input.get("identifier", "node_graph.any"), input["name"]
+                )
                 prop = input.get("property", None)
                 if prop is not None:
                     prop["name"] = input["name"]
