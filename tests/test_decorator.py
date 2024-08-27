@@ -18,18 +18,23 @@ ndata = {
 MyNumpyAdd = create_node(ndata)
 
 
-def test_decorators_parameters() -> None:
+def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
     @node(
-        inputs=[{"name": "c", "link_limit": 1000}],
+        inputs=[{"name": "c"}, {"name": "kwargs", "link_limit": 1000}],
+        properties=[{"name": "d", "default": 3}],
         outputs=[{"name": "sum"}, {"name": "product"}],
     )
-    def test(a, b=1, **c):
+    def test(a, b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
     test1 = test.node()
-    assert test1.inputs["c"].link_limit == 1000
+    assert test1.inputs["kwargs"].link_limit == 1000
+    # user defined the c input manually
+    assert "c" in test1.inputs.keys()
+    assert "d" in test1.properties.keys()
+    assert set(test1.kwargs) == set(["b", "c", "d"])
     assert "sum" in test1.outputs.keys()
     assert "product" in test1.outputs.keys()
 

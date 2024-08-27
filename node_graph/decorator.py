@@ -88,16 +88,16 @@ def generate_input_sockets(
     inputs = inputs or []
     properties = properties or []
     args, kwargs, var_args, var_kwargs = inspect_function(func)
-    names = [input["name"] for input in inputs] + [
-        property[1] for property in properties
+    user_defined_input_names = [input["name"] for input in inputs] + [
+        property["name"] for property in properties
     ]
     for arg in args:
-        if arg[0] not in names:
+        if arg[0] not in user_defined_input_names:
             inputs.append(
                 {"identifier": python_type_to_socket_type(arg[1]), "name": arg[0]}
             )
     for name, kwarg in kwargs.items():
-        if name not in names:
+        if name not in user_defined_input_names:
             input = {
                 "identifier": python_type_to_socket_type(kwarg["type"]),
                 "name": name,
@@ -117,6 +117,14 @@ def generate_input_sockets(
     #
     arg_names = [arg[0] for arg in args]
     kwarg_names = [name for name in kwargs.keys()]
+    # If the function has var_kwargs, and the user define input names does not
+    # included in the args and kwargs, then add the user defined input names
+    if var_kwargs is not None:
+        for key in user_defined_input_names:
+            if key not in args and key not in kwargs:
+                if key == var_kwargs or key == var_args:
+                    continue
+                kwarg_names.append(key)
     return arg_names, kwarg_names, var_args, var_kwargs, inputs
 
 
@@ -140,7 +148,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         def create_properties(self):
             properties = deepcopy(ndata.get("properties", []))
             for prop in properties:
-                self.properties.new(prop.pop("identifier"), **prop)
+                self.properties.new(prop.pop("identifier", "node_graph.any"), **prop)
 
         def create_sockets(self):
             outputs = deepcopy(ndata.get("outputs", []))
