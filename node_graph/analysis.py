@@ -4,9 +4,17 @@ from scipy.sparse.csgraph import breadth_first_order
 
 
 def get_nt_short_data(ngdata):
+    """Create short data for the connectivity analysis.
+    The data only contains the necessary information, i.e.,
+    the links and the basic information of the tasks.
+    The actual input data of the tasks is not needed.
+    """
     from copy import deepcopy
 
-    ngdata_short = deepcopy(ngdata)
+    ngdata_short = {"nodes": {}}
+    for key, value in ngdata.items():
+        if key not in ["nodes"]:
+            ngdata_short[key] = deepcopy(value)
     for name, node in ngdata["nodes"].items():
         if node["metadata"]["node_type"] in ["REF"]:
             node["state"] = "FINISHED"
