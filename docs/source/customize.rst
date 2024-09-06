@@ -30,43 +30,29 @@ Your package should follow the following structure similar to this:
     │   ├── test.py
     │   ├── ...
 
-Define your new Node, Socket and Property in the folders ``nodes``, ``sockets`` and ``properties`` respectively. Define your executor, serialization methods in the folders ``executors`` and ``serialization``. For example, in the ``nodes.test.py`` file, define your test Node class. At the end of the file, create a list called ``node_list``, and add all Node classes into this list. Here is the `example file <https://github.com/scinode/scinode/blob/main/scinode/nodes/test.py>`_ from SciNode.
-
-.. code:: console
-
-    node_list = [
-        TestFloat,
-        TestAdd,
-        TestMinus,
-        TestSqrt,
-    ]
+Define your new Node, Socket and Property in the folders ``nodes``, ``sockets`` and ``properties`` respectively. Define your executor, serialization methods in the folders ``executors`` and ``serialization``. For example, in the ``nodes.test.py`` file, define your test Node class.
 
 
 Entry point
 -------------------
 
-In the ``setup.py`` file of your packages, you should define an entry point called ``scinode_node``. If you define a new socket type or property type, ``scinode_socket`` or ``scinode_property`` is needed too.
+In the ``pyproject.toml`` file of your packages, you should define the entry points for your nodes, sockets and properties. For example, if your package name is ``abc``, you should define the entry points like this:
 
 
-.. code:: Python
+.. code:: toml
 
-    entry_points={
-        'your_package_name.node': [
-            'test = your_package.nodes.test:node_list',
-        ],
-        'your_package_name.socket': [
-            'test = your_package.sockets.test:socket_list',
-        ],
-        'your_package_name.property': [
-            'test = your_package.properties.test:property_list',
-        ]
-        "your_package_name.cli": [
-            'test = your_package.cli.test:test',
-        ],
-    },
-    install_requires=[
-        "node_graph"
-    ],
+    [project.entry-points."abc.task"]
+    "abc.add" = "abc.nodes.test:Add"
+    "abc.multiply" = "abc.nodes.test:Multiply"
+
+    [project.entry-points."abc.property"]
+    "abc.any" = "abc.properties.test:SocketAny"
+    "abc.int" = "abc.properties.test:SocketInt"
+
+    [project.entry-points."abc.socket"]
+    "abc.any" = "abc.sockets.test:SocketAny"
+    "abc.int" = "abc.sockets.test:SocketInt"
+
 
 
 Installation

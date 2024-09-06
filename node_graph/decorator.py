@@ -57,24 +57,20 @@ def inspect_function(
     return args, kwargs, var_args, var_kwargs
 
 
-def python_type_to_socket_type(python_type: type) -> str:
-    """Convert python type to socket type"""
-    if python_type == int:
-        return "node_graph.int"
-    elif python_type == float:
-        return "node_graph.float"
-    elif python_type == str:
-        return "node_graph.string"
-    elif python_type == bool:
-        return "node_graph.bool"
-    else:
-        return "node_graph.any"
+node_graph_type_mapping = {
+    "default": "node_graph.any",
+    int: "node_graph.int",
+    float: "node_graph.float",
+    str: "node_graph.string",
+    bool: "node_graph.bool",
+}
 
 
 def generate_input_sockets(
     func: Callable[..., Any],
     inputs: Optional[List[Dict[str, Any]]] = None,
     properties: Optional[List[Dict[str, Any]]] = None,
+    type_mapping: Optional[Dict[type, str]] = None,
 ) -> Tuple[
     List[str],
     List[str],
@@ -85,6 +81,9 @@ def generate_input_sockets(
     """Generate input sockets from a function.
     If the input sockets is not given, then the function
     will be used to update the input sockets."""
+
+    if type_mapping is None:
+        type_mapping = node_graph_type_mapping
     inputs = inputs or []
     properties = properties or []
     args, kwargs, var_args, var_kwargs = inspect_function(func)
@@ -94,12 +93,15 @@ def generate_input_sockets(
     for arg in args:
         if arg[0] not in user_defined_input_names:
             inputs.append(
-                {"identifier": python_type_to_socket_type(arg[1]), "name": arg[0]}
+                {
+                    "identifier": type_mapping.get(arg[1], type_mapping["default"]),
+                    "name": arg[0],
+                }
             )
     for name, kwarg in kwargs.items():
         if name not in user_defined_input_names:
             input = {
-                "identifier": python_type_to_socket_type(kwarg["type"]),
+                "identifier": type_mapping.get(kwarg["type"], type_mapping["default"]),
                 "name": name,
             }
             if kwarg["default"] is not None:
@@ -111,9 +113,9 @@ def generate_input_sockets(
             inputs.append(input)
     input_names = [input["name"] for input in inputs]
     if var_args is not None and var_args not in input_names:
-        inputs.append({"identifier": "node_graph.any", "name": var_args})
+        inputs.append({"identifier": type_mapping["default"], "name": var_args})
     if var_kwargs is not None and var_kwargs not in input_names:
-        inputs.append({"identifier": "node_graph.any", "name": var_kwargs})
+        inputs.append({"identifier": type_mapping["default"], "name": var_kwargs})
     #
     arg_names = [arg[0] for arg in args]
     kwarg_names = [name for name in kwargs.keys()]
@@ -139,6 +141,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     """
 
     NodeClass = ndata.get("node_class", Node)
+    type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
 
     class DecoratedNode(NodeClass):
         identifier: str = ndata["identifier"]
@@ -148,7 +151,9 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         def create_properties(self):
             properties = deepcopy(ndata.get("properties", []))
             for prop in properties:
-                self.properties.new(prop.pop("identifier", "node_graph.any"), **prop)
+                self.properties.new(
+                    prop.pop("identifier", type_mapping["default"]), **prop
+                )
 
         def create_sockets(self):
             outputs = deepcopy(ndata.get("outputs", []))
@@ -156,9 +161,9 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
             for input in inputs:
                 if isinstance(input, str):
-                    input = {"identifier": "node_graph.any", "name": input}
+                    input = {"identifier": type_mapping["default"], "name": input}
                 inp = self.inputs.new(
-                    input.get("identifier", "node_graph.any"), input["name"]
+                    input.get("identifier", type_mapping["default"]), input["name"]
                 )
                 prop = input.get("property", None)
                 if prop is not None:
@@ -168,8 +173,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 inp.link_limit = input.get("link_limit", 1)
             for output in outputs:
                 if isinstance(output, str):
-                    output = {"identifier": "node_graph.any", "name": output}
-                identifier = output.pop("identifier", "node_graph.any")
+                    output = {"identifier": type_mapping["default"], "name": output}
+                identifier = output.pop("identifier", type_mapping["default"])
                 self.outputs.new(identifier, **output)
             self.args = ndata.get("args", [])
             self.kwargs = ndata.get("kwargs", [])
