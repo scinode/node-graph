@@ -2,13 +2,14 @@ from typing import Callable, Dict, Any, Union
 
 
 class NodeProperty:
-    """Node property.
+    """Base class for Node properties.
 
-    Property is the data which can be shown in the GUI.
+    A property holds data that can be shown or modified in a GUI, with an optional update callback.
     """
 
     property_entry: str = "node_graph.property"
     identifier: str = "NodeProperty"
+    allowed_types = (object,)  # Allow any type
 
     def __init__(
         self,
@@ -17,24 +18,24 @@ class NodeProperty:
         default: Any = None,
         update: Callable[[], None] = None,
     ) -> None:
-        """_summary_
+        """
+        Initialize a NodeProperty.
 
         Args:
-            name (str): name of the variable
-            description (str, optional): _description_. Defaults to "".
-            default (Any, optional): _description_. Defaults to None.
-            update (Callable[[], None], optional): The callback function when
-                update the item. Defaults to None.
+            name (str): The name of the property.
+            description (str, optional): A description of the property. Defaults to "".
+            default (Any, optional): The default value of the property. Defaults to None.
+            update (Callable[[], None], optional): Callback to invoke when the value changes. Defaults to None.
         """
         self.name: str = name
         self.description: str = description
         self.default: Any = default
         self.update: Callable[[], None] = update
-        self._value: Any = self.default
+        self._value = self.default
 
     def to_dict(self) -> Dict[str, Any]:
-        """Data to be saved to database."""
-        data: Dict[str, Any] = {
+        """Serialize the property to a dictionary for database storage."""
+        return {
             "value": self.value,
             "name": self.name,
             "identifier": self.identifier,
@@ -42,20 +43,21 @@ class NodeProperty:
             "deserialize": self.get_deserialize(),
             "metadata": self.get_metadata(),
         }
-        return data
 
     def get_metadata(self) -> Dict[str, Any]:
-        metadata: Dict[str, Any] = {"default": self.default}
-        return metadata
+        """Return metadata related to this property."""
+        return {"default": self.default}
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "NodeProperty":
-        p: NodeProperty = cls(data["name"])
-        p.identifier = data["identifier"]
-        p.value = data["value"]
-        return p
+        """Create a NodeProperty from a serialized dictionary."""
+        prop = cls(data["name"])
+        prop.identifier = data["identifier"]
+        prop.value = data["value"]
+        return prop
 
     def update_from_dict(self, data: Dict[str, Any]) -> None:
+        """Update the value of the property from a dictionary."""
         self.value = data["value"]
 
     @property
@@ -67,20 +69,25 @@ class NodeProperty:
         self.set_value(value)
 
     def set_value(self, value: Any) -> None:
-        # run the callback function
+        """Set the value and invoke the update callback if present."""
+        self.validate(value)
         self._value = value
-        if self.update is not None:
+        if self.update:
             self.update()
 
+    def validate(self, value: any) -> None:
+        """Validate the given value based on allowed types."""
+        if not isinstance(value, self.allowed_types):
+            raise TypeError(
+                f"Expected value of type {self.allowed_types}, got {type(value).__name__} instead."
+            )
+
     def copy(self) -> "NodeProperty":
-        """Copy the property.
-        We should not use this function! Because can not copy the callback function!!!
+        """Create a shallow copy of the property.
+
+        Note: Callback functions are not copied.
         """
-        p: NodeProperty = self.__class__(
-            self.name, self.description, self.value, self.update
-        )
-        p._value = self._value
-        return p
+        return self.__class__(self.name, self.description, self.value, self.update)
 
     @classmethod
     def new(
@@ -90,30 +97,30 @@ class NodeProperty:
         data: Dict[str, Any] = {},
         property_pool: Dict[str, "NodeProperty"] = None,
     ) -> "NodeProperty":
-        """Create a property from an identifier.
-        When a plugin creates a property, it should provide its own property pool.
-        Then call super().new(identifier, name, property_pool) to create a property.
+        """Create a new property from an identifier.
+
+        Args:
+            identifier (Union[str, type]): The identifier for the property class.
+            name (str, optional): The name of the property. Defaults to None.
+            data (Dict[str, Any], optional): Additional data for property initialization. Defaults to {}.
+            property_pool (Dict[str, NodeProperty], optional): A pool of available properties. Defaults to None.
         """
         if property_pool is None:
-            from node_graph.properties import property_pool
+            from node_graph.properties import (
+                property_pool,
+            )  # Late import to avoid circular imports
+
         if isinstance(identifier, str):
-            ItemClass: "NodeProperty" = property_pool[identifier.upper()]
+            ItemClass = property_pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
             ItemClass = identifier
         else:
-            raise Exception(
-                f"Identifier {identifier} is not a property or property name."
-            )
+            raise ValueError(f"Invalid identifier: {identifier}")
 
-        item: NodeProperty = ItemClass(name, **data)
-        return item
+        return ItemClass(name, **data)
 
     def __str__(self) -> str:
-        return '{}(name="{}", value={})'.format(
-            self.__class__.__name__, self.name, self._value
-        )
+        return f'{self.__class__.__name__}(name="{self.name}", value={self._value})'
 
     def __repr__(self) -> str:
-        return '{}(name="{}", value={})'.format(
-            self.__class__.__name__, self.name, self._value
-        )
+        return self.__str__()
