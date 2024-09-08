@@ -1,91 +1,41 @@
 from node_graph.property import NodeProperty
 from node_graph.serializer import SerializeJson, SerializePickle
+from typing import Any
 
 
 class PropertyAny(NodeProperty, SerializePickle):
     """A new class for Any type."""
 
     identifier: str = "node_graph.any"
-    data_type = "Any"
-
-    def __init__(self, name, description="", default=None, update=None) -> None:
-        super().__init__(name, description, default, update)
+    allowed_types = (object,)  # Allow any type
 
 
 class PropertyInt(NodeProperty, SerializeJson):
     """A new class for integer type."""
 
     identifier: str = "node_graph.int"
-    data_type = "Int"
-
-    def __init__(self, name, description="", default=None, update=None) -> None:
-        super().__init__(name, description, default, update)
-
-    def set_value(self, value):
-        # run the callback function
-        if isinstance(value, (int, type(None))):
-            self._value = value
-            if self.update is not None:
-                self.update()
-        else:
-            raise Exception("{} is not a integer.".format(value))
+    allowed_types = (int, type(None))
 
 
 class PropertyFloat(NodeProperty, SerializeJson):
     """A new class for float type."""
 
     identifier: str = "node_graph.float"
-    data_type = "Float"
-
-    def __init__(self, name, description="", default=None, update=None) -> None:
-        super().__init__(name, description, default, update)
-
-    def set_value(self, value):
-        # run the callback function
-        if isinstance(value, (int, float, type(None))):
-            self._value = value
-            if self.update is not None:
-                self.update()
-        else:
-            raise Exception("{} is not a float.".format(value))
+    allowed_types = (int, float, type(None))
 
 
 class PropertyBool(NodeProperty, SerializeJson):
     """A new class for bool type."""
 
     identifier: str = "node_graph.bool"
-    data_type = "Bool"
-
-    def __init__(self, name, description="", default=None, update=None) -> None:
-        super().__init__(name, description, default, update)
-
-    def set_value(self, value):
-        # run the callback function
-        if isinstance(value, (bool, int, type(None))):
-            self._value = bool(value)
-            if self.update is not None:
-                self.update()
-        else:
-            raise Exception("{} is not a bool.".format(value))
+    allowed_types = (bool, int, type(None))
 
 
 class PropertyString(NodeProperty, SerializeJson):
     """A new class for string type."""
 
     identifier: str = "node_graph.string"
-    data_type = "String"
-
-    def __init__(self, name, description="", default=None, update=None) -> None:
-        super().__init__(name, description, default, update)
-
-    def set_value(self, value):
-        if isinstance(value, (str, type(None))):
-            self._value = value
-            # run the callback function
-            if self.update is not None:
-                self.update()
-        else:
-            raise Exception("{} is not a string.".format(value))
+    allowed_types = (str, type(None))
 
 
 class PropertyEnum(NodeProperty, SerializeJson):
@@ -109,16 +59,15 @@ class PropertyEnum(NodeProperty, SerializeJson):
     """
 
     identifier: str = "node_graph.enum"
-    data_type = "Enum"
 
     def __init__(
         self, name, options=[], description="", default=None, update=None
     ) -> None:
-        super().__init__(name, description, default, update)
         self._options = options
         # set the default value
         if default is None and None not in options:
-            self._value = options[0][0]
+            default = options[0][0]
+        super().__init__(name, description, default, update)
 
     @property
     def keys(self):
@@ -159,11 +108,38 @@ class PropertyVector(NodeProperty, SerializePickle):
     """node_graph Vector property"""
 
     identifier: str = "node_graph.vector"
-    data_type = "Vector"
+    allowed_types = (list, tuple, type(None))
+    allowed_item_types = (object, type(None))
 
-    def __init__(self, name, description="", size=3, default=[], update=None) -> None:
-        super().__init__(name, description, default, update)
+    def __init__(self, name, description="", size=3, default=None, update=None) -> None:
         self.size = size
+        default = [] if default is None else default
+        super().__init__(name, description, default, update)
+
+    def validate(self, value: Any) -> None:
+        """Validate the given value based on allowed types."""
+        if value is not None:
+            if len(value) != self.size:
+                raise ValueError(
+                    f"Invalid size: Expected {self.size}, got {len(value)} instead."
+                )
+            for v in value:
+                self.validate_item(v)
+
+        return super().validate(value)
+
+    def validate_item(self, value: Any) -> None:
+        """Validate the given value based on allowed types."""
+        if not isinstance(value, self.allowed_item_types):
+            raise TypeError(
+                f"Expected value of type {self.allowed_item_types}, got {type(value).__name__} instead."
+            )
+
+    def set_value(self, value: Any) -> None:
+        self.validate(value)
+        self._value = value
+        if self.update:
+            self.update()
 
     def copy(self):
         p = self.__class__(
@@ -172,92 +148,42 @@ class PropertyVector(NodeProperty, SerializePickle):
         p.value = self.value
         return p
 
+    def get_metadata(self):
+        metadata = {"default": self.default, "size": self.size}
+        return metadata
+
 
 class PropertyIntVector(PropertyVector):
     """A new class for integer vector type."""
 
     identifier: str = "node_graph.int_vector"
-    data_type = "IntVector"
+    allowed_item_types = (int, type(None))
 
-    def __init__(
-        self, name, description="", size=3, default=[0, 0, 0], update=None
-    ) -> None:
+    def __init__(self, name, description="", size=3, default=None, update=None) -> None:
+        default = [0] * size if default is None else default
         super().__init__(name, description, size, default, update)
-
-    def set_value(self, value):
-        # run the callback function
-        if len(value) == self.size:
-            for i in range(self.size):
-                if isinstance(value[i], int):
-                    self._value[i] = value[i]
-                    if self.update is not None:
-                        self.update()
-                else:
-                    raise Exception(
-                        f"Set property {self.name} failed. {value[i]} is not a integer."
-                    )
-        else:
-            raise Exception(
-                "Length {} is not equal to the size {}.".format(len(value), self.size)
-            )
 
 
 class PropertyFloatVector(PropertyVector):
     """A new class for float vector type."""
 
     identifier: str = "node_graph.float_vector"
-    data_type = "FloatVector"
+    allowed_item_types = (int, float, type(None))
 
-    def __init__(
-        self, name, description="", size=3, default=[0, 0, 0], update=None
-    ) -> None:
+    def __init__(self, name, description="", size=3, default=None, update=None) -> None:
+        default = [0.0] * size if default is None else default
         super().__init__(name, description, size, default, update)
-
-    def set_value(self, value):
-        # run the callback function
-        if len(value) == self.size:
-            for i in range(self.size):
-                if isinstance(value[i], (int, float)):
-                    self._value[i] = value[i]
-                    if self.update is not None:
-                        self.update()
-                else:
-                    raise Exception("{} is not a float.".format(value[i]))
-        else:
-            raise Exception(
-                "Length {} is not equal to the size {}.".format(len(value), self.size)
-            )
-
-    def get_metadata(self):
-        metadata = {"default": self.default, "size": self.size}
-        return metadata
 
 
 class PropertyBoolVector(PropertyVector):
     """A new class for bool vector type."""
 
     identifier: str = "node_graph.bool_vector"
-    data_type = "BoolVector"
+    allowed_item_types = (int, bool, type(None))
 
-    def __init__(
-        self, name, description="", size=3, default=[0, 0, 0], update=None
-    ) -> None:
+    def __init__(self, name, description="", size=3, default=None, update=None) -> None:
+        default = [False] * size if default is None else default
         super().__init__(name, description, size, default, update)
-
-    def set_value(self, value):
-        # run the callback function
-        if len(value) == self.size:
-            for i in range(self.size):
-                if isinstance(value[i], (bool, int)):
-                    self._value[i] = value[i]
-                    if self.update is not None:
-                        self.update()
-                else:
-                    raise Exception("{} is not a bool.".format(value[i]))
-        else:
-            raise Exception(
-                "Length {} is not equal to the size {}.".format(len(value), self.size)
-            )
 
 
 # =======================================
@@ -266,13 +192,33 @@ class MatrixProperty(NodeProperty, SerializePickle):
     """node_graph Matrix property"""
 
     identifier: str = "node_graph.matrix"
-    data_type = "Matrix"
 
     def __init__(
-        self, name, description="", size=[3, 3], default=[], update=None
+        self, name, description="", size=[3, 3], default=None, update=None
     ) -> None:
-        super().__init__(name, description, default, update)
         self.size = size
+        self._value = [] if default is None else default
+        super().__init__(name, description, default, update)
+
+    def validate(self, value: Any) -> None:
+        """Validate the given value based on allowed types."""
+        length = self.size[0] * self.size[1]
+        if value is not None:
+            if not (len(value) == length):
+                raise ValueError(
+                    f"Invalid size: Expected {length}, got {len(value)} instead."
+                )
+            for v in value:
+                self.validate_item(v)
+
+        return super().validate(value)
+
+    def validate_item(self, value: Any) -> None:
+        """Validate the given value based on allowed types."""
+        if not isinstance(value, self.allowed_item_types):
+            raise TypeError(
+                f"Expected value of type {self.allowed_item_types}, got {type(value).__name__} instead."
+            )
 
     def copy(self):
         p = self.__class__(
@@ -286,33 +232,17 @@ class PropertyFloatMatrix(MatrixProperty):
     """A new class for float matrix type."""
 
     identifier: str = "node_graph.float_matrix"
-    data_type = "FloatMatrix"
 
     def __init__(
         self,
         name,
         description="",
         size=[3, 3],
-        default=[0, 0, 0, 0, 0, 0, 0, 0, 0],
+        default=None,
         update=None,
     ) -> None:
+        default = [0.0] * size[0] * size[1] if default is None else default
         super().__init__(name, description, size, default, update)
-
-    def set_value(self, value):
-        import numpy as np
-
-        # run the callback function
-        self._value = np.zeros(self.size)
-        if len(value) == self.size[0] and len(value[0]) == self.size[1]:
-            for i in range(self.size[0]):
-                for j in range(self.size[1]):
-                    self._value[i][j] = value[i][j]
-                    if self.update is not None:
-                        self.update()
-        else:
-            raise Exception(
-                "Length {} is not equal to the size {}.".format(len(value), self.size)
-            )
 
 
 # =======================================
@@ -337,9 +267,9 @@ class PropertyBaseDict(NodeProperty, SerializePickle):
     """
 
     identifier: str = "node_graph.base_dict"
-    data_type = "BaseDict"
 
     def __init__(self, name, description="", default={}, update=None) -> None:
+        default = {} if default is None else default
         super().__init__(name, description, default, update)
 
     def set_value(self, value):
@@ -359,9 +289,9 @@ class PropertyBaseList(NodeProperty, SerializePickle):
     """
 
     identifier: str = "BaseList"
-    data_type = "BaseList"
 
-    def __init__(self, name, description="", default=[], update=None) -> None:
+    def __init__(self, name, description="", default=None, update=None) -> None:
+        default = [] if default is None else default
         super().__init__(name, description, default, update)
 
     def set_value(self, value):
