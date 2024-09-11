@@ -47,7 +47,7 @@ def test_to_dict():
     math = nt.nodes.new("node_graph.test_add", "Math")
     math.inputs["x"].property.value = 2
     data = math.to_dict()
-    assert data["metadata"]["identifier"] == "node_graph.test_add"
+    assert data["identifier"] == "node_graph.test_add"
 
 
 def test_copy():

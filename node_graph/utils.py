@@ -1,4 +1,4 @@
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Callable
 from importlib.metadata import entry_points
 import sys
 import difflib
@@ -45,7 +45,7 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     for node in nodes:
         # metadata
         metadata = node.get("metadata", {})
-        metadata["identifier"] = node.pop("identifier")
+        node["identifier"] = node.pop("identifier")
         node["metadata"] = metadata
         # properties
         properties = {}
@@ -75,3 +75,65 @@ def deep_copy_only_dicts(
     else:
         # Return the original value if it's not a dictionary
         return original
+
+
+def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
+    """Create a node class from node data.
+
+    Args:
+        ndata (Dict[str, Any]): node data
+
+    Returns:
+        Callable[..., Any]: _description_
+    """
+    from copy import deepcopy
+    from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
+    from node_graph.node import Node
+
+    NodeClass = ndata.get("node_class", Node)
+    type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
+
+    class DecoratedNode(NodeClass):
+        identifier: str = ndata["identifier"]
+        node_type: str = ndata.get("metadata", {}).get("node_type", "NORMAL")
+        catalog: str = ndata.get("metadata", {}).get("catalog", "Others")
+        is_dynamic: bool = True
+
+        def create_properties(self):
+            properties = deepcopy(ndata.get("properties", []))
+            for prop in properties:
+                self.properties.new(
+                    prop.pop("identifier", type_mapping["default"]), **prop
+                )
+
+        def create_sockets(self):
+            outputs = deepcopy(ndata.get("outputs", []))
+            inputs = deepcopy(ndata.get("inputs", []))
+
+            for input in inputs:
+                if isinstance(input, str):
+                    input = {"identifier": type_mapping["default"], "name": input}
+                inp = self.inputs.new(
+                    input.get("identifier", type_mapping["default"]), input["name"]
+                )
+                prop = input.get("property", None)
+                if prop is not None:
+                    prop["name"] = input["name"]
+                    # identifer, name, kwargs
+                    inp.add_property(**prop)
+                inp.link_limit = input.get("link_limit", 1)
+            for output in outputs:
+                if isinstance(output, str):
+                    output = {"identifier": type_mapping["default"], "name": output}
+                identifier = output.pop("identifier", type_mapping["default"])
+                self.outputs.new(identifier, **output)
+            self.args = ndata.get("args", [])
+            self.kwargs = ndata.get("kwargs", [])
+            self.var_args = ndata.get("var_args", None)
+            self.var_kwargs = ndata.get("var_kwargs", None)
+
+        def get_executor(self):
+            executor = ndata.get("executor", {})
+            return executor
+
+    return DecoratedNode

@@ -3,7 +3,6 @@ from uuid import uuid1
 from node_graph.nodes import node_pool
 from typing import Dict, Any, List, Optional
 from node_graph.version import __version__
-import cloudpickle as pickle
 import yaml
 from node_graph.utils import yaml_to_dict
 import time
@@ -197,6 +196,8 @@ class NodeGraph:
         Returns:
             NodeGraph: The rebuilt node graph.
         """
+        from node_graph.utils import create_node
+
         nt: "NodeGraph" = cls(
             name=ntdata["name"],
             uuid=ntdata.get("uuid"),
@@ -212,10 +213,10 @@ class NodeGraph:
             if ntdata["metadata"].get(key):
                 setattr(nt, key, ntdata["metadata"].get(key))
         for name, ndata in ntdata["nodes"].items():
-            if ndata.get("executor", {}).get("is_pickle", False):
-                node_class = pickle.loads(ndata["node_class"])
+            if ndata.get("metadata", {}).get("is_dynamic", False):
+                node_class = create_node(ndata)
             else:
-                node_class = cls.node_pool[ndata["metadata"]["identifier"].upper()]
+                node_class = cls.node_pool[ndata["identifier"].upper()]
             node = nt.nodes.new(
                 node_class,
                 name=name,

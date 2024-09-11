@@ -4,7 +4,6 @@ from node_graph.properties import property_pool
 from typing import List, Optional, Dict, Any, Union
 import json
 import hashlib
-import cloudpickle as pickle
 from node_graph.utils import deep_copy_only_dicts
 from node_graph.socket import NodeSocket
 
@@ -58,6 +57,7 @@ class Node:
     var_kwargs: Optional[str] = None
     group_inputs: List[List[str]] = []
     group_outputs: List[List[str]] = []
+    is_dynamic: bool = False
 
     def __init__(
         self,
@@ -232,6 +232,7 @@ class Node:
             executor = self.executor_to_dict()
             data = {
                 "version": "node_graph@{}".format(__version__),
+                "identifier": self.identifier,
                 "uuid": self.uuid,
                 "name": self.name,
                 "inner_id": self.inner_id,
@@ -249,7 +250,6 @@ class Node:
                 "description": self.description,
                 "log": self.log,
                 "hash": "",
-                "node_class": pickle.dumps(""),
             }
             # calculate the hash of metadata
             hash_metadata = {
@@ -266,8 +266,6 @@ class Node:
                 ).hexdigest()
             else:
                 data["metadata"]["hash"] = str(uuid1())
-                # we pickle the class so that we can load again
-                data["node_class"] = pickle.dumps(self.__class__)
         # to avoid some dict has the same address with others nodes
         # which happens when {} is used as default value
         # we copy the value only
@@ -279,7 +277,6 @@ class Node:
         metadata = {
             "node_type": self.node_type,
             "catalog": self.catalog,
-            "identifier": self.identifier,
             "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
             "platform": self.platform,
             "args": self.args,
@@ -289,6 +286,7 @@ class Node:
             "group_properties": self.group_properties,
             "group_inputs": self.group_inputs,
             "group_outputs": self.group_outputs,
+            "is_dynamic": self.is_dynamic,
         }
         return metadata
 
@@ -362,13 +360,14 @@ class Node:
         cls, data: Dict[str, Any], node_pool: Optional[Dict[str, Any]] = None
     ) -> Any:
         """Rebuild Node from dict data."""
+        from node_graph.utils import create_node
 
         if node_pool is None:
             from node_graph.nodes import node_pool
 
         # first create the node instance
-        if data.get("executor", {}).get("is_pickle", False):
-            node_class = pickle.loads(data["node_class"])
+        if data.get("metadata", {}).get("is_dynamic", False):
+            node_class = create_node(data)
         else:
             node_class = node_pool[data["metadata"]["identifier"]]
 
