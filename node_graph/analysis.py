@@ -21,7 +21,7 @@ def get_nt_short_data(ngdata):
             node["action"] = "NONE"
         ngdata_short["nodes"][name] = {
             "name": node["name"],
-            "identifier": node["metadata"]["identifier"],
+            "identifier": node["identifier"],
             "node_type": node["metadata"]["node_type"],
             "uuid": node["uuid"],
             "state": node["state"],
