@@ -163,8 +163,6 @@ def decorator_node(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        args (list): node args
-        kwargs (dict): node kwargs
         properties (list): node properties
         inputs (list): node inputs
         outputs (list): node outputs

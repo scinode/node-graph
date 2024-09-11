@@ -68,7 +68,8 @@ def test_enum_update_type():
     nd.properties["function"].value = "sqrt"
     assert len(nd.inputs) == 1
     pdata = nd.properties_to_dict()
-    assert pdata["function"]["value"] == "sqrt"
+    prop = [p for p in pdata if p["name"] == "function"][0]
+    assert prop["value"] == "sqrt"
     # copy
     p1 = nd.properties["function"].copy()
     assert p1.value == "sqrt"

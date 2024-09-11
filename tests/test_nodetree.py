@@ -15,6 +15,7 @@ def test_from_dict(nt_decorator):
     nt1 = NodeGraph.from_dict(ntdata)
     assert len(nt.nodes) == len(nt1.nodes)
     assert len(nt.links) == len(nt1.links)
+    assert nt.to_dict() == nt1.to_dict()
 
 
 def test_new_node(nt):

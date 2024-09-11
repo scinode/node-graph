@@ -41,12 +41,13 @@ class NodeProperty:
             "identifier": self.identifier,
             "serialize": self.get_serialize(),
             "deserialize": self.get_deserialize(),
+            "default": self.default,
             "metadata": self.get_metadata(),
         }
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return metadata related to this property."""
-        return {"default": self.default}
+        return {}
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "NodeProperty":

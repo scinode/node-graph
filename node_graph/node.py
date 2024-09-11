@@ -2,8 +2,6 @@ from uuid import uuid1
 from node_graph.sockets import socket_pool
 from node_graph.properties import property_pool
 from typing import List, Optional, Dict, Any, Union
-import json
-import hashlib
 from node_graph.utils import deep_copy_only_dicts
 from node_graph.socket import NodeSocket
 
@@ -248,24 +246,13 @@ class Node:
                 "executor": executor,
                 "position": self.position,
                 "description": self.description,
-                "log": self.log,
-                "hash": "",
-            }
-            # calculate the hash of metadata
-            hash_metadata = {
-                "executor": executor,
                 "args": self.args,
                 "kwargs": self.kwargs,
                 "var_args": self.var_args,
                 "var_kwargs": self.var_kwargs,
+                "log": self.log,
+                "hash": "",  # we can only calculate the hash during runtime when all the data is ready
             }
-            # we can not hash binary data for the moment
-            if not executor.get("is_pickle", False):
-                data["metadata"]["hash"] = hashlib.md5(
-                    json.dumps(hash_metadata).encode("utf-8")
-                ).hexdigest()
-            else:
-                data["metadata"]["hash"] = str(uuid1())
         # to avoid some dict has the same address with others nodes
         # which happens when {} is used as default value
         # we copy the value only
@@ -279,10 +266,6 @@ class Node:
             "catalog": self.catalog,
             "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
             "platform": self.platform,
-            "args": self.args,
-            "kwargs": self.kwargs,
-            "var_args": self.var_args,
-            "var_kwargs": self.var_kwargs,
             "group_properties": self.group_properties,
             "group_inputs": self.group_inputs,
             "group_outputs": self.group_outputs,
@@ -294,24 +277,17 @@ class Node:
         """Export properties to a dictionary.
         This data will be used for calculation.
         """
-        properties = {}
+        properties = []
         for p in self.properties:
-            properties[p.name] = p.to_dict()
-        # properties from inputs
-        # data from property
-        for input in self.inputs:
-            if input.property is not None:
-                properties[input.name] = input.property.to_dict()
-            else:
-                properties[input.name] = None
+            properties.append(p.to_dict())
         return properties
 
     def input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
         inputs = []
-        for socket in self.inputs:
-            inputs.append(socket.to_dict())
+        for input in self.inputs:
+            inputs.append(input.to_dict())
         return inputs
 
     def output_sockets_to_dict(self) -> List[Dict[str, Any]]:
@@ -391,13 +367,12 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         # properties first, because the socket may be dynamic
-        for name in self.properties.keys():
-            if name in data["properties"]:
-                self.properties[name].value = data["properties"][name]["value"]
+        for prop in data["properties"]:
+            self.properties[prop["name"]].value = prop["value"]
         # inputs
-        for name in self.inputs.keys():
-            if name in data["properties"]:
-                self.inputs[name].property.value = data["properties"][name]["value"]
+        for input in data["inputs"]:
+            if input.get("property", None):
+                self.inputs[input["name"]].property.value = input["property"]["value"]
         # print("inputs: ", data.get("inputs", None))
         if data.get("inputs", None):
             for i in range(len(data["inputs"])):

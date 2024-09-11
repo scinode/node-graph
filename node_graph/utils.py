@@ -41,25 +41,11 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata = data
     nodes = ntdata.pop("nodes")
     ntdata["nodes"] = {}
-    links = []
     for node in nodes:
-        # metadata
-        metadata = node.get("metadata", {})
-        node["identifier"] = node.pop("identifier")
-        node["metadata"] = metadata
-        # properties
-        properties = {}
-        if node.get("properties"):
-            for name, p in node["properties"].items():
-                properties[name] = {"value": p}
-        node["properties"] = properties
-        # links
-        if node.get("inputs"):
-            for input in node["inputs"]:
-                input["to_node"] = node["name"]
-                links.append(input)
+        node.setdefault("metadata", {})
+        node.setdefault("inputs", [])
+        node.setdefault("properties", [])
         ntdata["nodes"][node["name"]] = node
-    ntdata["links"] = links
     ntdata.setdefault("ctrl_links", {})
     return ntdata
 
@@ -120,13 +106,17 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 if prop is not None:
                     prop["name"] = input["name"]
                     # identifer, name, kwargs
-                    inp.add_property(**prop)
+                    inp.add_property(
+                        identifier=prop["identifier"],
+                        name=prop["name"],
+                        default=prop.get("default", None),
+                    )
                 inp.link_limit = input.get("link_limit", 1)
             for output in outputs:
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
                 identifier = output.pop("identifier", type_mapping["default"])
-                self.outputs.new(identifier, **output)
+                self.outputs.new(identifier, name=output["name"])
             self.args = ndata.get("args", [])
             self.kwargs = ndata.get("kwargs", [])
             self.var_args = ndata.get("var_args", None)

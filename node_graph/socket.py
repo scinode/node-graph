@@ -64,7 +64,6 @@ class NodeSocket:
         dbdata: Dict[str, Any] = {
             "name": self.name,
             "identifier": self.identifier,
-            "uuid": self.uuid,
             "node_uuid": self.node.uuid,
             "type": self.type,
             "link_limit": self.link_limit,
@@ -79,7 +78,6 @@ class NodeSocket:
                     {
                         "from_node": link.from_node.name,
                         "from_socket": link.from_socket.name,
-                        "from_socket_uuid": link.from_socket.uuid,
                     }
                 )
             else:
@@ -87,9 +85,14 @@ class NodeSocket:
                     {
                         "to_node": link.to_node.name,
                         "to_socket": link.to_socket.name,
-                        "to_socket_uuid": link.to_socket.uuid,
                     }
                 )
+        # properties from inputs
+        # data from property
+        if self.property is not None:
+            dbdata["property"] = self.property.to_dict()
+        else:
+            dbdata["property"] = None
         return dbdata
 
     def add_link(self, link: "Link") -> None:
