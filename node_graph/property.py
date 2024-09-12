@@ -17,6 +17,7 @@ class NodeProperty:
         description: str = "",
         default: Any = None,
         update: Callable[[], None] = None,
+        list_index: int = 0,
     ) -> None:
         """
         Initialize a NodeProperty.
@@ -29,6 +30,7 @@ class NodeProperty:
         """
         self.name: str = name
         self.description: str = description
+        self.list_index: int = list_index
         self.default: Any = default
         self.update: Callable[[], None] = update
         self._value = self.default
@@ -88,7 +90,12 @@ class NodeProperty:
 
         Note: Callback functions are not copied.
         """
-        return self.__class__(self.name, self.description, self.value, self.update)
+        return self.__class__(
+            name=self.name,
+            description=self.description,
+            default=self.value,
+            update=self.update,
+        )
 
     @classmethod
     def new(

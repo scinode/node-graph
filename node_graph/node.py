@@ -18,7 +18,7 @@ class Node:
     Attributes:
         identifier (str): The identifier is used for loading the Node.
         node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
-        inner_id (int): Node id inside the node graph.
+        list_index (int): Node id inside the node graph.
         parent_uuid (str): UUID of the node graph this node belongs to.
         args (list): Positional arguments of the executor.
         kwargs (list): Keyword arguments of the executor.
@@ -45,7 +45,7 @@ class Node:
 
     identifier: str = "Node"
     node_type: str = "Normal"
-    inner_id: int = 0
+    list_index: int = 0
     parent_uuid: str = ""
     platform: str = "node_graph"
     catalog: str = "Node"
@@ -59,7 +59,7 @@ class Node:
 
     def __init__(
         self,
-        inner_id: int = 0,
+        list_index: int = 0,
         name: Optional[str] = None,
         uuid: Optional[str] = None,
         parent: Optional[Any] = None,
@@ -70,7 +70,7 @@ class Node:
         """Initialize the Node.
 
         Args:
-            inner_id (int, optional): Node id inside the node graph. Defaults to 0.
+            list_index (int, optional): Node id inside the node graph. Defaults to 0.
             name (str, optional): Name of the node. Defaults to None.
             uuid (str, optional): UUID of the node. Defaults to None.
             parent (Any, optional): Parent node. Defaults to None.
@@ -78,8 +78,8 @@ class Node:
             input_collection_class (Any, optional): Input socket collection class. Defaults to InputSocketCollection.
             output_collection_class (Any, optional): Output socket collection class. Defaults to OutputSocketCollection.
         """
-        self.inner_id = inner_id
-        self.name = name or "{}{}".format(self.identifier.split(".")[-1], inner_id)
+        self.list_index = list_index
+        self.name = name or "{}{}".format(self.identifier.split(".")[-1], list_index)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self.properties = property_collection_class(self, pool=self.property_pool)
@@ -90,7 +90,7 @@ class Node:
         self.executor = None
         self.state = "CREATED"
         self.action = "NONE"
-        self.position = [30 * self.inner_id, 30 * self.inner_id]
+        self.position = [30 * self.list_index, 30 * self.list_index]
         self.description = ""
         self.log = ""
         self.ng = self.get_node_group() if self.node_type.upper() == "GROUP" else None
@@ -233,7 +233,7 @@ class Node:
                 "identifier": self.identifier,
                 "uuid": self.uuid,
                 "name": self.name,
-                "inner_id": self.inner_id,
+                "list_index": self.list_index,
                 "state": self.state,
                 "action": self.action,
                 "error": "",
@@ -277,41 +277,46 @@ class Node:
         """Export properties to a dictionary.
         This data will be used for calculation.
         """
-        properties = []
-        for p in self.properties:
-            properties.append(p.to_dict())
+        properties = {}
+        for i, prop in enumerate(self.properties):
+            properties[prop.name] = prop.to_dict()
+            properties[prop.name]["list_index"] = i
         return properties
 
     def input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
-        inputs = []
-        for input in self.inputs:
-            inputs.append(input.to_dict())
+        inputs = {}
+        for i, input in enumerate(self.inputs):
+            inputs[input.name] = input.to_dict()
+            inputs[input.name]["list_index"] = i
         return inputs
 
     def output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export output sockets to a dictionary."""
         # save all relations using links
-        outputs = []
-        for socket in self.outputs:
-            outputs.append(socket.to_dict())
+        outputs = {}
+        for i, output in enumerate(self.outputs):
+            outputs[output.name] = output.to_dict()
+            outputs[output.name]["list_index"] = i
         return outputs
 
     def ctrl_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_input sockets to a dictionary."""
         # save all relations using links
-        ctrl_inputs = []
-        for socket in self.ctrl_inputs:
-            ctrl_inputs.append(socket.to_dict())
+        ctrl_inputs = {}
+        for i, socket in enumerate(self.ctrl_inputs):
+            ctrl_inputs[socket.name] = socket.to_dict()
+            ctrl_inputs[socket.name]["list_index"] = i
         return ctrl_inputs
 
     def ctrl_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_output sockets to a dictionary."""
         # save all relations using links
-        ctrl_outputs = []
-        for socket in self.ctrl_outputs:
-            ctrl_outputs.append(socket.to_dict())
+        ctrl_outputs = {}
+        for i, socket in enumerate(self.ctrl_outputs):
+            ctrl_outputs[socket.name] = socket.to_dict()
+            ctrl_outputs[socket.name]["list_index"] = i
         return ctrl_outputs
 
     def executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
@@ -367,23 +372,19 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         # properties first, because the socket may be dynamic
-        for prop in data["properties"]:
-            self.properties[prop["name"]].value = prop["value"]
+        for name, prop in data["properties"].items():
+            self.properties[name].value = prop["value"]
         # inputs
-        for input in data["inputs"]:
+        for name, input in data["inputs"].items():
             if input.get("property", None):
-                self.inputs[input["name"]].property.value = input["property"]["value"]
+                self.inputs[name].property.value = input["property"]["value"]
         # print("inputs: ", data.get("inputs", None))
-        if data.get("inputs", None):
-            for i in range(len(data["inputs"])):
-                if data["inputs"][i].get("uuid", None):
-                    self.inputs[i].uuid = data["inputs"][i]["uuid"]
+        for name, input in data.get("inputs", {}).items():
+            self.inputs[name].uuid = input.get("uuid", None)
         # outputs
         # print("outputs: ", data.get("outputs", None))
-        if data.get("outputs", None):
-            for i in range(len(data["outputs"])):
-                if data["outputs"][i].get("uuid", None):
-                    self.outputs[i].uuid = data["outputs"][i]["uuid"]
+        for name, output in data.get("outputs", {}).items():
+            self.outputs[name].uuid = output.get("uuid", None)
 
     @classmethod
     def load(cls, uuid: str) -> None:

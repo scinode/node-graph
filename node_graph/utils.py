@@ -44,7 +44,9 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     for node in nodes:
         node.setdefault("metadata", {})
         node.setdefault("inputs", [])
+        node.setdefault("outputs", [])
         node.setdefault("properties", [])
+        build_sorted_names(node)
         ntdata["nodes"][node["name"]] = node
     ntdata.setdefault("ctrl_links", {})
     return ntdata
@@ -63,6 +65,36 @@ def deep_copy_only_dicts(
         return original
 
 
+def build_sorted_names(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build sorted names for the given data.
+
+    Args:
+        data (Dict[str, Any]): The data dictionary containing inputs, outputs, and properties.
+
+    Returns:
+        Dict[str, Any]: The modified data dictionary with sorted names.
+
+    """
+    for key in ["inputs", "outputs", "properties"]:
+        if isinstance(data[key], list):
+            # add list_index to each item
+            for i, item in enumerate(data[key]):
+                item["list_index"] = i
+            sorted_names = [item["name"] for item in data[key]]
+            data[key] = {item["name"]: item for item in data[key]}
+        elif isinstance(data[key], dict):
+            sorted_names = [
+                name
+                for name, _ in sorted(
+                    ((name, item["list_index"]) for name, item in data[key].items()),
+                    key=lambda x: x[1],
+                )
+            ]
+
+        data["sorted_" + key + "_names"] = sorted_names
+
+
 def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     """Create a node class from node data.
 
@@ -76,6 +108,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
     from node_graph.node import Node
 
+    build_sorted_names(ndata)
+
     NodeClass = ndata.get("node_class", Node)
     type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
 
@@ -86,17 +120,19 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         is_dynamic: bool = True
 
         def create_properties(self):
-            properties = deepcopy(ndata.get("properties", []))
-            for prop in properties:
+            properties = deepcopy(ndata.get("properties", {}))
+            for name in ndata["sorted_properties_names"]:
+                prop = properties[name]
                 self.properties.new(
                     prop.pop("identifier", type_mapping["default"]), **prop
                 )
 
         def create_sockets(self):
-            outputs = deepcopy(ndata.get("outputs", []))
-            inputs = deepcopy(ndata.get("inputs", []))
+            outputs = deepcopy(ndata.get("outputs", {}))
+            inputs = deepcopy(ndata.get("inputs", {}))
 
-            for input in inputs:
+            for name in ndata["sorted_inputs_names"]:
+                input = inputs[name]
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
                 inp = self.inputs.new(
@@ -112,7 +148,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                         default=prop.get("default", None),
                     )
                 inp.link_limit = input.get("link_limit", 1)
-            for output in outputs:
+            for name in ndata["sorted_outputs_names"]:
+                output = outputs[name]
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
                 identifier = output.pop("identifier", type_mapping["default"])

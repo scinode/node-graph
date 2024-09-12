@@ -22,15 +22,15 @@ def test_id_name():
     nt = NodeGraph(name="test_id_name")
     # auto generate name for the node
     math1 = nt.nodes.new("node_graph.test_add")
-    assert math1.inner_id == 1
+    assert math1.list_index == 1
     assert math1.name == "test_add1"
     # set node name manually
     math2 = nt.nodes.new("node_graph.test_add", "Math2")
-    assert math2.inner_id == 2
+    assert math2.list_index == 2
     assert math2.name == "Math2"
     math3 = nt.nodes.new("node_graph.test_add", name="Math3")
     assert math3.name == "Math3"
-    assert math3.inner_id == 3
+    assert math3.list_index == 3
 
 
 def test_set_property():
