@@ -17,7 +17,7 @@ class TestFloat(Node):
 
     def get_executor(self):
         return {
-            "path": "scinode.executors.test",
+            "module": "scinode.executors.test",
             "name": "test_float",
         }
 
@@ -38,7 +38,7 @@ class TestString(Node):
 
     def get_executor(self):
         return {
-            "path": "scinode.executors.test",
+            "module": "scinode.executors.test",
             "name": "test_string",
         }
 
@@ -73,7 +73,7 @@ class TestAdd(Node):
 
     def get_executor(self):
         return {
-            "path": "scinode.executors.test",
+            "module": "scinode.executors.test",
             "name": "test_add",
         }
 
@@ -103,7 +103,7 @@ class TestEnum(Node):
 
     def get_executor(self):
         return {
-            "path": "scinode.executors.test",
+            "module": "scinode.executors.test",
             "name": "test_enum",
         }
 
@@ -141,7 +141,7 @@ class TestEnumUpdate(Node):
 
     def get_executor(self):
         return {
-            "path": "scinode.executors.test",
+            "module": "scinode.executors.test",
             "name": self.properties["function"].content,
             "type": "function",
         }

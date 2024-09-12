@@ -332,8 +332,8 @@ class Node:
         executor.setdefault("type", "function")
         executor.setdefault("is_pickle", False)
         if not executor["is_pickle"] and "name" not in executor:
-            executor["name"] = executor["path"].split(".")[-1]
-            executor["path"] = executor["path"][0 : -(len(executor["name"]) + 1)]
+            executor["name"] = executor["module"].split(".")[-1]
+            executor["module"] = executor["module"][0 : -(len(executor["name"]) + 1)]
         return executor
 
     @classmethod
@@ -447,7 +447,7 @@ class Node:
 
     def get_executor(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Get the default executor."""
-        executor = {"path": "", "name": ""}
+        executor = {"module": "", "name": ""}
         return executor
 
     def get_results(self) -> None:

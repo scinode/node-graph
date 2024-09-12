@@ -195,7 +195,7 @@ def decorator_node(
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
-                "node_class": {"path": "node_graph.node", "name": "Node"},
+                "node_class": {"module": "node_graph.node", "name": "Node"},
             },
             "args": args,
             "kwargs": kwargs,
@@ -268,7 +268,7 @@ def decorator_node_group(
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
-                "node_class": {"path": "node_graph.node", "name": "Node"},
+                "node_class": {"module": "node_graph.node", "name": "Node"},
             },
             "properties": properties,
             "inputs": _inputs,
@@ -291,14 +291,14 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     ndata.setdefault("inputs", [])
     ndata.setdefault("outputs", [{"identifier": "node_graph.any", "name": "result"}])
     ndata["metadata"].setdefault(
-        "node_class", {"path": "node_graph.node", "name": "Node"}
+        "node_class", {"module": "node_graph.node", "name": "Node"}
     )
 
     executor = ndata["executor"]
     name = executor.get("name", None)
     if not name:
-        executor["path"], executor["name"] = executor["path"].split(".", 1)
-    module = importlib.import_module("{}".format(executor["path"]))
+        executor["module"], executor["name"] = executor["module"].split(".", 1)
+    module = importlib.import_module("{}".format(executor["module"]))
     func = getattr(module, executor["name"])
     # Get the args and kwargs of the function
     args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(

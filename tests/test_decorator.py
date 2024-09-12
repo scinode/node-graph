@@ -13,7 +13,7 @@ ndata = {
         },
     ],
     "outputs": [{"identifier": "node_graph.any", "name": "result"}],
-    "executor": {"path": "numpy.add"},
+    "executor": {"module": "numpy.add"},
 }
 MyNumpyAdd = create_node(ndata)
 

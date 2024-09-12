@@ -88,7 +88,7 @@ def test_vector(id, size, default, data):
 
     nt = NodeGraph(name="test_vector")
     nd = nt.nodes.new(Node)
-    nd.executor = {"path": "numpy.sqrt"}
+    nd.executor = {"module": "numpy.sqrt"}
     nd.args = ["x"]
     nd.properties.new(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
