@@ -55,13 +55,13 @@ class Collection:
         else:
             raise AttributeError(f"{name} not available in an empty collection")
 
-    def get_inner_id(self) -> int:
+    def get_list_index(self) -> int:
         """Get the inner id for the next item.
 
-        inner_id is the index of the item in the collection.
+        list_index is the index of the item in the collection.
         """
-        inner_id = max([0] + [item.inner_id for item in self._items]) + 1
-        return inner_id
+        list_index = max([0] + [item.list_index for item in self._items]) + 1
+        return list_index
 
     def new(self, identifier: str, name: Optional[str] = None) -> object:
         """Add new item into this collection.
@@ -84,7 +84,7 @@ class Collection:
         """Append item into this collection."""
         if item.name in self.keys():
             raise Exception(f"{item.name} already exist, please choose another name.")
-        item.inner_id = self.get_inner_id()
+        item.list_index = self.get_list_index()
         setattr(item, "parent", self.parent)
         self._items.append(item)
 
@@ -240,7 +240,7 @@ class NodeCollection(Collection):
     ) -> object:
         from node_graph.node import Node
 
-        inner_id = self.get_inner_id()
+        list_index = self.get_list_index()
         if isinstance(identifier, str):
             ItemClass = self.pool[identifier.upper()]
         elif isinstance(identifier, type) and issubclass(identifier, Node):
@@ -251,7 +251,9 @@ class NodeCollection(Collection):
             ItemClass = identifier.node
         else:
             raise Exception(f"Identifier {identifier} is not a node or node name.")
-        item = ItemClass(inner_id=inner_id, name=name, uuid=uuid, parent=self.parent)
+        item = ItemClass(
+            list_index=list_index, name=name, uuid=uuid, parent=self.parent
+        )
         self.append(item)
         item.set(kwargs)
         # Execute post creation hooks
@@ -337,8 +339,8 @@ class InputSocketCollection(Collection):
             ItemClass = identifier
         else:
             raise Exception(f"Identifier {identifier} is not a socket or socket name.")
-        inner_id = self.get_inner_id()
-        item = ItemClass(name, type="INPUT", index=inner_id, **kwargs)
+        list_index = self.get_list_index()
+        item = ItemClass(name, type="INPUT", index=list_index, **kwargs)
         self.append(item)
         return item
 

@@ -97,7 +97,6 @@ class NodeLink:
         dbdata = {
             "from_socket": self.from_socket.name,
             "from_node": self.from_node.name,
-            "from_socket_uuid": self.from_socket.uuid,
             "to_socket": self.to_socket.name,
             "to_node": self.to_node.name,
             "state": self.state,

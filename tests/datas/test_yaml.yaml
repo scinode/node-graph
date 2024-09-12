@@ -7,12 +7,16 @@ nodes:
   - identifier: node_graph.test_float
     name: float1
     properties:
-      value: 2.0
+      - name: value
+        value: 2.0
   - identifier: node_graph.test_add
     name: add1
-    properties:
-      y: 3.0
     inputs:
-    - to_socket: x
-      from_node: float1
-      from_socket: 0
+      - name: y
+        property:
+          value: 3.0
+links:
+  - to_node: add1
+    to_socket: "x"
+    from_node: float1
+    from_socket: 0

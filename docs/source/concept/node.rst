@@ -118,7 +118,7 @@ One can define a new node by extend the `Node` class.
 
       def get_executor(self):
          return {
-               "path": "scinode.executors.test",
+               "module": "scinode.executors.test",
                "name": "test_add",
          }
 

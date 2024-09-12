@@ -1,13 +1,6 @@
 from node_graph import NodeGraph
 
 
-def test_to_dict(nt):
-    """Export NodeGraph to dict."""
-    ntdata = nt.to_dict()
-    assert len(ntdata["nodes"]) == len(nt.nodes)
-    assert len(ntdata["links"]) == len(nt.links)
-
-
 def test_from_dict(nt_decorator):
     """Export NodeGraph to dict."""
     nt = nt_decorator
@@ -15,6 +8,7 @@ def test_from_dict(nt_decorator):
     nt1 = NodeGraph.from_dict(ntdata)
     assert len(nt.nodes) == len(nt1.nodes)
     assert len(nt.links) == len(nt1.links)
+    assert nt.to_dict() == nt1.to_dict()
 
 
 def test_new_node(nt):

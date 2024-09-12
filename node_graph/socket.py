@@ -12,7 +12,7 @@ class NodeSocket:
         name (str): socket name.
         node (Node): node this socket belongs to.
         type (str): socket type.
-        inner_id (int): inner_id of this socket in the SocketCollection.
+        list_index (int): list_index of this socket in the SocketCollection.
         links (List[Link]): links
         property (Optional[NodeProperty]):
         link_limit (int): maximum number of links.
@@ -29,7 +29,7 @@ class NodeSocket:
         name: str,
         parent=None,
         type: str = "INPUT",
-        inner_id: int = 0,
+        list_index: int = 0,
         uuid: Optional[str] = None,
         link_limit: int = 1,
     ) -> None:
@@ -39,14 +39,14 @@ class NodeSocket:
             name (str): name of the socket
             parent (Optional[Node]): parent node. Defaults to None.
             type (str, optional): socket type. Defaults to "INPUT".
-            inner_id (int, optional): inner id. Defaults to 0.
+            list_index (int, optional): inner id. Defaults to 0.
             uuid (Optional[str], optional): unique identifier. Defaults to None.
             link_limit (int, optional): maximum number of links. Defaults to 1.
         """
         self.name: str = name
         self.parent: Optional["Node"] = parent
         self.type: str = type
-        self.inner_id: int = inner_id
+        self.list_index: int = list_index
         self.uuid: str = uuid or str(uuid1())
         self.links: List["Link"] = []
         self.property: Optional[NodeProperty] = None
@@ -64,13 +64,13 @@ class NodeSocket:
         dbdata: Dict[str, Any] = {
             "name": self.name,
             "identifier": self.identifier,
-            "uuid": self.uuid,
             "node_uuid": self.node.uuid,
             "type": self.type,
             "link_limit": self.link_limit,
             "links": [],
             "serialize": self.get_serialize(),
             "deserialize": self.get_deserialize(),
+            "list_index": self.list_index,
         }
         # data from linked sockets
         for link in self.links:
@@ -79,7 +79,6 @@ class NodeSocket:
                     {
                         "from_node": link.from_node.name,
                         "from_socket": link.from_socket.name,
-                        "from_socket_uuid": link.from_socket.uuid,
                     }
                 )
             else:
@@ -87,9 +86,14 @@ class NodeSocket:
                     {
                         "to_node": link.to_node.name,
                         "to_socket": link.to_socket.name,
-                        "to_socket_uuid": link.to_socket.uuid,
                     }
                 )
+        # properties from inputs
+        # data from property
+        if self.property is not None:
+            dbdata["property"] = self.property.to_dict()
+        else:
+            dbdata["property"] = None
         return dbdata
 
     def add_link(self, link: "Link") -> None:
@@ -133,7 +137,7 @@ class NodeSocket:
         """
         node = self.node if node is None else node
         uuid = self.uuid if is_ref else None
-        s = self.__class__(self.name, node, self.type, self.inner_id, uuid=uuid)
+        s = self.__class__(self.name, node, self.type, self.list_index, uuid=uuid)
         if self.property:
             s.property = self.property.copy()
         return s

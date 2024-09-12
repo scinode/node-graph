@@ -6,14 +6,14 @@ import pickle
 class SerializeNone:
     def get_serialize(self) -> Dict[str, str]:
         serialize: Dict[str, str] = {
-            "path": "node_graph.serializer",
+            "module": "node_graph.serializer",
             "name": "serialize_none",
         }
         return serialize
 
     def get_deserialize(self) -> Dict[str, str]:
         deserialize: Dict[str, str] = {
-            "path": "node_graph.serializer",
+            "module": "node_graph.serializer",
             "name": "deserialize_none",
         }
         return deserialize
@@ -22,14 +22,14 @@ class SerializeNone:
 class SerializeJson:
     def get_serialize(self) -> Dict[str, str]:
         serialize: Dict[str, str] = {
-            "path": "node_graph.serializer",
+            "module": "node_graph.serializer",
             "name": "serialize_json",
         }
         return serialize
 
     def get_deserialize(self) -> Dict[str, str]:
         deserialize: Dict[str, str] = {
-            "path": "node_graph.serializer",
+            "module": "node_graph.serializer",
             "name": "deserialize_json",
         }
         return deserialize
@@ -38,14 +38,14 @@ class SerializeJson:
 class SerializePickle:
     def get_serialize(self) -> Dict[str, str]:
         serialize: Dict[str, str] = {
-            "path": "node_graph.serializer",
+            "module": "node_graph.serializer",
             "name": "serialize_pickle",
         }
         return serialize
 
     def get_deserialize(self) -> Dict[str, str]:
         deserialize: Dict[str, str] = {
-            "path": "node_graph.serializer",
+            "module": "node_graph.serializer",
             "name": "deserialize_pickle",
         }
         return deserialize

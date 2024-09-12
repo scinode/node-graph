@@ -21,7 +21,7 @@ def get_nt_short_data(ngdata):
             node["action"] = "NONE"
         ngdata_short["nodes"][name] = {
             "name": node["name"],
-            "identifier": node["metadata"]["identifier"],
+            "identifier": node["identifier"],
             "node_type": node["metadata"]["node_type"],
             "uuid": node["uuid"],
             "state": node["state"],
@@ -326,13 +326,32 @@ class DifferenceAnalysis:
                 try:
                     if inputs1[key]["value"] != inputs2[key]["value"]:
                         modified.add(name)
-                except Exception as e:
-                    print(e)
+                except Exception:
+                    pass
                 try:
                     if not (inputs1[key]["value"] == inputs2[key]["value"]).all():
                         modified.add(name)
-                except Exception as e:
-                    print(e)
+                except Exception:
+                    pass
+            inputs1 = self.nt1["nodes"][name]["inputs"]
+            inputs2 = self.nt2["nodes"][name]["inputs"]
+            for key in inputs1:
+                try:
+                    if (
+                        inputs1[key]["property"]["value"]
+                        != inputs2[key]["property"]["value"]
+                    ):
+                        modified.add(name)
+                except Exception:
+                    pass
+                try:
+                    if not (
+                        inputs1[key]["property"]["value"]
+                        == inputs2[key]["property"]["value"]
+                    ).all():
+                        modified.add(name)
+                except Exception:
+                    pass
         return modified
 
     def check_socket(self) -> Set[str]:

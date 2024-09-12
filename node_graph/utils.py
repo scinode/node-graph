@@ -1,4 +1,4 @@
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Callable
 from importlib.metadata import entry_points
 import sys
 import difflib
@@ -41,25 +41,13 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata = data
     nodes = ntdata.pop("nodes")
     ntdata["nodes"] = {}
-    links = []
     for node in nodes:
-        # metadata
-        metadata = node.get("metadata", {})
-        metadata["identifier"] = node.pop("identifier")
-        node["metadata"] = metadata
-        # properties
-        properties = {}
-        if node.get("properties"):
-            for name, p in node["properties"].items():
-                properties[name] = {"value": p}
-        node["properties"] = properties
-        # links
-        if node.get("inputs"):
-            for input in node["inputs"]:
-                input["to_node"] = node["name"]
-                links.append(input)
+        node.setdefault("metadata", {})
+        node.setdefault("inputs", [])
+        node.setdefault("outputs", [])
+        node.setdefault("properties", [])
+        build_sorted_names(node)
         ntdata["nodes"][node["name"]] = node
-    ntdata["links"] = links
     ntdata.setdefault("ctrl_links", {})
     return ntdata
 
@@ -75,3 +63,122 @@ def deep_copy_only_dicts(
     else:
         # Return the original value if it's not a dictionary
         return original
+
+
+def build_sorted_names(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build sorted names for the given data.
+
+    Args:
+        data (Dict[str, Any]): The data dictionary containing inputs, outputs, and properties.
+
+    Returns:
+        Dict[str, Any]: The modified data dictionary with sorted names.
+
+    """
+    for key in ["inputs", "outputs", "properties"]:
+        data.setdefault(key, {})
+        if isinstance(data[key], list):
+            # add list_index to each item
+            for i, item in enumerate(data[key]):
+                item["list_index"] = i
+            sorted_names = [item["name"] for item in data[key]]
+            data[key] = {item["name"]: item for item in data[key]}
+        elif isinstance(data[key], dict):
+            sorted_names = [
+                name
+                for name, _ in sorted(
+                    ((name, item["list_index"]) for name, item in data[key].items()),
+                    key=lambda x: x[1],
+                )
+            ]
+        else:
+            raise ValueError("Invalid data type for key: {}".format(key))
+
+        data["sorted_" + key + "_names"] = sorted_names
+
+
+def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
+    """Create a node class from node data.
+
+    Args:
+        ndata (Dict[str, Any]): node data
+
+    Returns:
+        Callable[..., Any]: _description_
+    """
+    from copy import deepcopy
+    from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
+    import importlib
+
+    build_sorted_names(ndata)
+
+    ndata.setdefault("metadata", {})
+
+    node_class = ndata["metadata"].get(
+        "node_class", {"module": "node_graph.node", "name": "Node"}
+    )
+    try:
+        module = importlib.import_module("{}".format(node_class.get("module", "")))
+        NodeClass = getattr(module, node_class["name"])
+    except Exception as e:
+        raise Exception("Error loading node class: {}".format(e))
+
+    type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
+
+    class DecoratedNode(NodeClass):
+        identifier: str = ndata["identifier"]
+        node_type: str = ndata.get("metadata", {}).get("node_type", "NORMAL")
+        catalog: str = ndata.get("metadata", {}).get("catalog", "Others")
+        is_dynamic: bool = True
+
+        def create_properties(self):
+            properties = deepcopy(ndata.get("properties", {}))
+            for name in ndata["sorted_properties_names"]:
+                prop = properties[name]
+                self.properties.new(
+                    prop.pop("identifier", type_mapping["default"]), **prop
+                )
+
+        def create_sockets(self):
+            outputs = deepcopy(ndata.get("outputs", {}))
+            inputs = deepcopy(ndata.get("inputs", {}))
+
+            for name in ndata["sorted_inputs_names"]:
+                input = inputs[name]
+                if isinstance(input, str):
+                    input = {"identifier": type_mapping["default"], "name": input}
+                inp = self.inputs.new(
+                    input.get("identifier", type_mapping["default"]), input["name"]
+                )
+                prop = input.get("property", None)
+                if prop is not None:
+                    prop["name"] = input["name"]
+                    # identifer, name, kwargs
+                    inp.add_property(
+                        identifier=prop["identifier"],
+                        name=prop["name"],
+                        default=prop.get("default", None),
+                    )
+                inp.link_limit = input.get("link_limit", 1)
+            for name in ndata["sorted_outputs_names"]:
+                output = outputs[name]
+                if isinstance(output, str):
+                    output = {"identifier": type_mapping["default"], "name": output}
+                identifier = output.pop("identifier", type_mapping["default"])
+                self.outputs.new(identifier, name=output["name"])
+            self.args = ndata.get("args", [])
+            self.kwargs = ndata.get("kwargs", [])
+            self.var_args = ndata.get("var_args", None)
+            self.var_kwargs = ndata.get("var_kwargs", None)
+
+        def get_executor(self):
+            executor = ndata.get("executor", {})
+            return executor
+
+        def get_metadata(self):
+            metadata = super().get_metadata()
+            metadata["node_class"] = node_class
+            return metadata
+
+    return DecoratedNode

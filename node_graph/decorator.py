@@ -1,9 +1,10 @@
 from typing import Any, List, Dict, Tuple, Union, Optional, Callable
 import inspect
-from copy import deepcopy
 import cloudpickle as pickle
 import importlib
 from node_graph.node import Node
+from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
+from node_graph.utils import create_node
 
 
 def inspect_function(
@@ -55,15 +56,6 @@ def inspect_function(
             var_kwargs = name
 
     return args, kwargs, var_args, var_kwargs
-
-
-node_graph_type_mapping = {
-    "default": "node_graph.any",
-    int: "node_graph.int",
-    float: "node_graph.float",
-    str: "node_graph.string",
-    bool: "node_graph.bool",
-}
 
 
 def generate_input_sockets(
@@ -130,64 +122,6 @@ def generate_input_sockets(
     return arg_names, kwarg_names, var_args, var_kwargs, inputs
 
 
-def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
-    """Create a node class from node data.
-
-    Args:
-        ndata (Dict[str, Any]): node data
-
-    Returns:
-        Callable[..., Any]: _description_
-    """
-
-    NodeClass = ndata.get("node_class", Node)
-    type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
-
-    class DecoratedNode(NodeClass):
-        identifier: str = ndata["identifier"]
-        node_type: str = ndata.get("node_type", "NORMAL")
-        catalog: str = ndata.get("catalog", "Others")
-
-        def create_properties(self):
-            properties = deepcopy(ndata.get("properties", []))
-            for prop in properties:
-                self.properties.new(
-                    prop.pop("identifier", type_mapping["default"]), **prop
-                )
-
-        def create_sockets(self):
-            outputs = deepcopy(ndata.get("outputs", []))
-            inputs = deepcopy(ndata.get("inputs", []))
-
-            for input in inputs:
-                if isinstance(input, str):
-                    input = {"identifier": type_mapping["default"], "name": input}
-                inp = self.inputs.new(
-                    input.get("identifier", type_mapping["default"]), input["name"]
-                )
-                prop = input.get("property", None)
-                if prop is not None:
-                    prop["name"] = input["name"]
-                    # identifer, name, kwargs
-                    inp.add_property(**prop)
-                inp.link_limit = input.get("link_limit", 1)
-            for output in outputs:
-                if isinstance(output, str):
-                    output = {"identifier": type_mapping["default"], "name": output}
-                identifier = output.pop("identifier", type_mapping["default"])
-                self.outputs.new(identifier, **output)
-            self.args = ndata.get("args", [])
-            self.kwargs = ndata.get("kwargs", [])
-            self.var_args = ndata.get("var_args", None)
-            self.var_kwargs = ndata.get("var_kwargs", None)
-
-        def get_executor(self):
-            executor = ndata.get("executor", {})
-            return executor
-
-    return DecoratedNode
-
-
 def create_node_group(ngdata: Dict[str, Any]) -> Callable[..., Any]:
     """Create a node group class from node group data.
 
@@ -229,8 +163,6 @@ def decorator_node(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        args (list): node args
-        kwargs (dict): node kwargs
         properties (list): node properties
         inputs (list): node inputs
         outputs (list): node outputs
@@ -259,9 +191,12 @@ def decorator_node(
             func, inputs, properties
         )
         ndata = {
-            "node_class": Node,
             "identifier": identifier,
-            "node_type": node_type,
+            "metadata": {
+                "node_type": node_type,
+                "catalog": catalog,
+                "node_class": {"module": "node_graph.node", "name": "Node"},
+            },
             "args": args,
             "kwargs": kwargs,
             "var_args": var_args,
@@ -270,7 +205,6 @@ def decorator_node(
             "inputs": _inputs,
             "outputs": outputs,
             "executor": executor,
-            "catalog": catalog,
         }
         node = create_node(ndata)
         func.identifier = identifier
@@ -326,18 +260,20 @@ def decorator_node_group(
         #
         node_type = "nodegroup"
         ndata = {
-            "node_class": Node,
             "identifier": identifier,
             "args": args,
             "kwargs": kwargs,
             "var_args": var_args,
             "var_kwargs": var_kwargs,
-            "node_type": node_type,
+            "metadata": {
+                "node_type": node_type,
+                "catalog": catalog,
+                "node_class": {"module": "node_graph.node", "name": "Node"},
+            },
             "properties": properties,
             "inputs": _inputs,
             "outputs": node_outputs,
             "executor": executor,
-            "catalog": catalog,
         }
         node = create_node(ndata)
         node.group_inputs = inputs
@@ -350,16 +286,19 @@ def decorator_node_group(
 
 def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
+    ndata.setdefault("metadata", {})
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
     ndata.setdefault("outputs", [{"identifier": "node_graph.any", "name": "result"}])
-    ndata.setdefault("node_class", Node)
+    ndata["metadata"].setdefault(
+        "node_class", {"module": "node_graph.node", "name": "Node"}
+    )
 
     executor = ndata["executor"]
     name = executor.get("name", None)
     if not name:
-        executor["path"], executor["name"] = executor["path"].split(".", 1)
-    module = importlib.import_module("{}".format(executor["path"]))
+        executor["module"], executor["name"] = executor["module"].split(".", 1)
+    module = importlib.import_module("{}".format(executor["module"]))
     func = getattr(module, executor["name"])
     # Get the args and kwargs of the function
     args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
