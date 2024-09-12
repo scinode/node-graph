@@ -193,7 +193,10 @@ def decorator_node(
         ndata = {
             "node_class": Node,
             "identifier": identifier,
-            "node_type": node_type,
+            "metadata": {
+                "node_type": node_type,
+                "catalog": catalog,
+            },
             "args": args,
             "kwargs": kwargs,
             "var_args": var_args,
@@ -202,7 +205,6 @@ def decorator_node(
             "inputs": _inputs,
             "outputs": outputs,
             "executor": executor,
-            "catalog": catalog,
         }
         node = create_node(ndata)
         func.identifier = identifier
@@ -264,12 +266,14 @@ def decorator_node_group(
             "kwargs": kwargs,
             "var_args": var_args,
             "var_kwargs": var_kwargs,
-            "node_type": node_type,
+            "metadata": {
+                "node_type": node_type,
+                "catalog": catalog,
+            },
             "properties": properties,
             "inputs": _inputs,
             "outputs": node_outputs,
             "executor": executor,
-            "catalog": catalog,
         }
         node = create_node(ndata)
         node.group_inputs = inputs

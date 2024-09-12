@@ -70,6 +70,7 @@ class NodeSocket:
             "links": [],
             "serialize": self.get_serialize(),
             "deserialize": self.get_deserialize(),
+            "list_index": self.list_index,
         }
         # data from linked sockets
         for link in self.links:

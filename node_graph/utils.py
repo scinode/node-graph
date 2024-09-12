@@ -77,6 +77,7 @@ def build_sorted_names(data: Dict[str, Any]) -> Dict[str, Any]:
 
     """
     for key in ["inputs", "outputs", "properties"]:
+        data.setdefault(key, {})
         if isinstance(data[key], list):
             # add list_index to each item
             for i, item in enumerate(data[key]):

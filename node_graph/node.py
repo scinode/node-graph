@@ -278,45 +278,40 @@ class Node:
         This data will be used for calculation.
         """
         properties = {}
-        for i, prop in enumerate(self.properties):
+        for prop in self.properties:
             properties[prop.name] = prop.to_dict()
-            properties[prop.name]["list_index"] = i
         return properties
 
     def input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
         inputs = {}
-        for i, input in enumerate(self.inputs):
+        for input in self.inputs:
             inputs[input.name] = input.to_dict()
-            inputs[input.name]["list_index"] = i
         return inputs
 
     def output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export output sockets to a dictionary."""
         # save all relations using links
         outputs = {}
-        for i, output in enumerate(self.outputs):
+        for output in self.outputs:
             outputs[output.name] = output.to_dict()
-            outputs[output.name]["list_index"] = i
         return outputs
 
     def ctrl_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_input sockets to a dictionary."""
         # save all relations using links
         ctrl_inputs = {}
-        for i, socket in enumerate(self.ctrl_inputs):
+        for socket in self.ctrl_inputs:
             ctrl_inputs[socket.name] = socket.to_dict()
-            ctrl_inputs[socket.name]["list_index"] = i
         return ctrl_inputs
 
     def ctrl_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_output sockets to a dictionary."""
         # save all relations using links
         ctrl_outputs = {}
-        for i, socket in enumerate(self.ctrl_outputs):
+        for socket in self.ctrl_outputs:
             ctrl_outputs[socket.name] = socket.to_dict()
-            ctrl_outputs[socket.name]["list_index"] = i
         return ctrl_outputs
 
     def executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:

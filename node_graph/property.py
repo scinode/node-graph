@@ -45,6 +45,7 @@ class NodeProperty:
             "deserialize": self.get_deserialize(),
             "default": self.default,
             "metadata": self.get_metadata(),
+            "list_index": self.list_index,
         }
 
     def get_metadata(self) -> Dict[str, Any]:
