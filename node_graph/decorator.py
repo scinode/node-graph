@@ -191,11 +191,11 @@ def decorator_node(
             func, inputs, properties
         )
         ndata = {
-            "node_class": Node,
             "identifier": identifier,
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
+                "node_class": {"path": "node_graph.node", "name": "Node"},
             },
             "args": args,
             "kwargs": kwargs,
@@ -260,7 +260,6 @@ def decorator_node_group(
         #
         node_type = "nodegroup"
         ndata = {
-            "node_class": Node,
             "identifier": identifier,
             "args": args,
             "kwargs": kwargs,
@@ -269,6 +268,7 @@ def decorator_node_group(
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
+                "node_class": {"path": "node_graph.node", "name": "Node"},
             },
             "properties": properties,
             "inputs": _inputs,
@@ -286,10 +286,13 @@ def decorator_node_group(
 
 def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
 
+    ndata.setdefault("metadata", {})
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
     ndata.setdefault("outputs", [{"identifier": "node_graph.any", "name": "result"}])
-    ndata.setdefault("node_class", Node)
+    ndata["metadata"].setdefault(
+        "node_class", {"path": "node_graph.node", "name": "Node"}
+    )
 
     executor = ndata["executor"]
     name = executor.get("name", None)

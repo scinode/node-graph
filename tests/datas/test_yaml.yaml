@@ -13,7 +13,8 @@ nodes:
     name: add1
     inputs:
       - name: y
-        value: 3.0
+        property:
+          value: 3.0
 links:
   - to_node: add1
     to_socket: "x"

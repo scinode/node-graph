@@ -92,6 +92,8 @@ def build_sorted_names(data: Dict[str, Any]) -> Dict[str, Any]:
                     key=lambda x: x[1],
                 )
             ]
+        else:
+            raise ValueError("Invalid data type for key: {}".format(key))
 
         data["sorted_" + key + "_names"] = sorted_names
 
@@ -107,11 +109,21 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     """
     from copy import deepcopy
     from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
-    from node_graph.node import Node
+    import importlib
 
     build_sorted_names(ndata)
 
-    NodeClass = ndata.get("node_class", Node)
+    ndata.setdefault("metadata", {})
+
+    node_class = ndata["metadata"].get(
+        "node_class", {"path": "node_graph.node", "name": "Node"}
+    )
+    try:
+        module = importlib.import_module("{}".format(node_class.get("path", "")))
+        NodeClass = getattr(module, node_class["name"])
+    except Exception as e:
+        raise Exception("Error loading node class: {}".format(e))
+
     type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
 
     class DecoratedNode(NodeClass):
@@ -163,5 +175,10 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         def get_executor(self):
             executor = ndata.get("executor", {})
             return executor
+
+        def get_metadata(self):
+            metadata = super().get_metadata()
+            metadata["node_class"] = node_class
+            return metadata
 
     return DecoratedNode

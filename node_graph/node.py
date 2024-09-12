@@ -271,6 +271,11 @@ class Node:
             "group_outputs": self.group_outputs,
             "is_dynamic": self.is_dynamic,
         }
+        # also save the parent class information
+        metadata["node_class"] = {
+            "name": super().__class__.__name__,
+            "module": super().__class__.__module__,
+        }
         return metadata
 
     def properties_to_dict(self) -> Dict[str, Any]:
