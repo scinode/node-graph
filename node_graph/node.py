@@ -57,6 +57,7 @@ class Node:
     group_inputs: List[List[str]] = None
     group_outputs: List[List[str]] = None
     is_dynamic: bool = False
+    _executor: Optional[dict] = None
 
     def __init__(
         self,
@@ -451,8 +452,7 @@ class Node:
 
     def get_executor(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Get the default executor."""
-        executor = {"module": "", "name": ""}
-        return executor
+        return self._executor
 
     def get_results(self) -> None:
         """Item data from database"""
