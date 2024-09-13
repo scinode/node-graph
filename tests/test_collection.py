@@ -4,8 +4,8 @@ def test_base_collection():
     from node_graph.node import Node
     from node_graph import NodeGraph
 
-    nt = NodeGraph(name="test_base_collection")
-    coll = Collection(parent=nt)
+    ng = NodeGraph(name="test_base_collection")
+    coll = Collection(parent=ng)
     coll.path = "builtins"
     node1 = Node(name="node1")
     node2 = Node(name="node2")
@@ -13,7 +13,7 @@ def test_base_collection():
     coll.append(node1)
     coll.append(node2)
     assert len(coll) == 2
-    assert node1.parent == nt
+    assert node1.parent == ng
     # copy
     coll1 = coll.copy()
     assert len(coll1) == 2

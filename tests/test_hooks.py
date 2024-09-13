@@ -12,10 +12,10 @@ def node_deletion_hook(self, node):
     del self.parent.links[link_index]
 
 
-def test_from_dict(nt_decorator):
+def test_from_dict(ng_decorator):
     """Export NodeGraph to dict."""
-    nt = nt_decorator
-    assert len(nt.links) == 3
-    nt.nodes.post_deletion_hooks = [node_deletion_hook]
-    nt.nodes.delete("add2")
-    assert len(nt.links) == 1
+    ng = ng_decorator
+    assert len(ng.links) == 3
+    ng.nodes.post_deletion_hooks = [node_deletion_hook]
+    ng.nodes.delete("add2")
+    assert len(ng.links) == 1

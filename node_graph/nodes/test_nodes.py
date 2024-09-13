@@ -157,25 +157,25 @@ class TestAddGroup(Node):
     def get_default_node_group(self):
         from node_graph import NodeGraph
 
-        nt = NodeGraph(
+        ng = NodeGraph(
             name=self.name,
             uuid=self.uuid,
             parent_node=self.uuid,
             worker_name=self.worker_name,
             type="NODE_GROUP",
         )
-        add1 = nt.nodes.new("node_graph.test_add", "add1")
-        add2 = nt.nodes.new("node_graph.test_add", "add2")
-        add3 = nt.nodes.new("node_graph.test_add", "add1")
-        nt.links.new(add1.outputs[0], add3.inputs[0])
-        nt.links.new(add2.outputs[0], add3.inputs[1])
-        nt.group_properties = [
+        add1 = ng.nodes.new("node_graph.test_add", "add1")
+        add2 = ng.nodes.new("node_graph.test_add", "add2")
+        add3 = ng.nodes.new("node_graph.test_add", "add1")
+        ng.links.new(add1.outputs[0], add3.inputs[0])
+        ng.links.new(add2.outputs[0], add3.inputs[1])
+        ng.group_properties = [
             ("add1.t", "t1"),
             ("add1.t", "t2"),
         ]
-        nt.group_inputs = [
+        ng.group_inputs = [
             ("add1.x", "x"),
             ("add2.x", "y"),
         ]
-        nt.group_outputs = [("add3.result", "result")]
-        return nt
+        ng.group_outputs = [("add3.result", "result")]
+        return ng

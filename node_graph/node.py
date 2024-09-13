@@ -28,14 +28,14 @@ class Node:
 
     Examples:
         Add nodes:
-        >>> float1 = nt.nodes.new("TestFloat", name="float1")
-        >>> add1 = nt.nodes.new("TestDelayAdd", name="add1")
+        >>> float1 = ng.nodes.new("TestFloat", name="float1")
+        >>> add1 = ng.nodes.new("TestDelayAdd", name="add1")
 
         Copy node:
         >>> n = node.copy(name="new_name")
 
         Append node to node graph:
-        >>> nt.nodes.append(node)
+        >>> ng.nodes.append(node)
 
     """
 
@@ -203,11 +203,11 @@ class Node:
     def get_default_node_group(self) -> Any:
         from node_graph import NodeGraph
 
-        nt = NodeGraph(
+        ng = NodeGraph(
             name=self.name,
             uuid=self.uuid,
         )
-        return nt
+        return ng
 
     def to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
@@ -350,7 +350,7 @@ class Node:
         if data.get("metadata", {}).get("is_dynamic", False):
             node_class = create_node(data)
         else:
-            node_class = node_pool[data["metadata"]["identifier"]]
+            node_class = node_pool[data["identifier"]]
 
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
@@ -461,15 +461,11 @@ class Node:
         return self.get_results()
 
     def __repr__(self) -> str:
-        s = ""
-        s += '{}(name="{}", properties = ['.format(self.__class__.__name__, self.name)
-        s += ", ".join([f'"{x}"' for x in self.properties.keys()])
-        s += "], inputs = ["
-        s += ", ".join([f'"{x}"' for x in self.inputs.keys()])
-        s += "], outputs = ["
-        s += ", ".join([f'"{x}"' for x in self.outputs.keys()])
-        s += "])\n"
-        return s
+        return (
+            f"{self.__class__.__name__}(name='{self.name}', properties=[{', '.join(repr(k) for k in self.properties.keys())}], "
+            f"inputs=[{', '.join(repr(k) for k in self.inputs.keys())}], "
+            f"outputs=[{', '.join(repr(k) for k in self.outputs.keys())}])"
+        )
 
     def set(self, data: Dict[str, Any]) -> None:
         """Set properties by a dict.

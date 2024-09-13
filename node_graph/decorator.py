@@ -140,11 +140,11 @@ def create_node_group(ngdata: Dict[str, Any]) -> Callable[..., Any]:
         catalog: str = ngdata.get("catalog", "Others")
 
         def get_default_node_group(self):
-            nt = ngdata["nt"]
-            nt.name = self.name
-            nt.uuid = self.uuid
-            nt.parent_node = self.uuid
-            return ngdata["nt"]
+            ng = ngdata["ng"]
+            ng.name = self.name
+            ng.uuid = self.uuid
+            ng.parent_node = self.uuid
+            return ngdata["ng"]
 
     return MyNodeGroup
 
