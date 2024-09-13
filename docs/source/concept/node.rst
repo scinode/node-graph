@@ -104,6 +104,11 @@ One can define a new node by extend the `Node` class.
       identifier: str = "TestAdd"
       name = "TestAdd"
       catalog = "Test"
+
+      _executor = {
+               "module": "scinode.executors.test",
+               "name": "test_add",
+         }
       kwargs = ["t", "x", "y"]
 
       def create_properties(self):
@@ -115,12 +120,6 @@ One can define a new node by extend the `Node` class.
          self.inputs.new("node_graph.float", "x")
          self.inputs.new("node_graph.float", "y")
          self.outputs.new("node_graph.float", "Result")
-
-      def get_executor(self):
-         return {
-               "module": "scinode.executors.test",
-               "name": "test_add",
-         }
 
 
 Use Node
