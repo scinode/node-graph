@@ -49,12 +49,13 @@ class Node:
     parent_uuid: str = ""
     platform: str = "node_graph"
     catalog: str = "Node"
-    args: List[Any] = []
-    kwargs: List[Any] = []
+    args: List[Any] = None
+    kwargs: List[Any] = None
     var_args: Optional[str] = None
     var_kwargs: Optional[str] = None
-    group_inputs: List[List[str]] = []
-    group_outputs: List[List[str]] = []
+    group_properties: List[List[str]] = None
+    group_inputs: List[List[str]] = None
+    group_outputs: List[List[str]] = None
     is_dynamic: bool = False
 
     def __init__(
@@ -108,7 +109,8 @@ class Node:
 
     def create_group_properties(self) -> None:
         """Create properties based on the exposed properties."""
-        for prop in self.group_properties:
+        group_properties = self.group_properties if self.group_properties else []
+        for prop in group_properties:
             node_prop, new_prop_name = prop
             node, prop_name = node_prop.split(".")
             if prop_name not in self.ng.nodes[node].properties.keys():
@@ -150,7 +152,8 @@ class Node:
             ["add1.x", "x"],
             ["add1.y", "y"]]
         """
-        for input in self.group_inputs:
+        group_inputs = self.group_inputs if self.group_inputs else []
+        for input in group_inputs:
             node_socket, name = input
             node, socket = node_socket.split(".")
             if socket not in self.ng.nodes[node].inputs.keys():
@@ -161,7 +164,8 @@ class Node:
                 )
             identifier = self.ng.nodes[node].inputs[socket].identifier
             self.inputs.new(identifier, name)
-        for output in self.group_outputs:
+        group_outputs = self.group_outputs if self.group_outputs else []
+        for output in group_outputs:
             node_socket, name = output
             node, socket = node_socket.split(".")
             if socket not in self.ng.nodes[node].outputs.keys():
@@ -176,17 +180,17 @@ class Node:
     def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
 
-    @property
-    def group_properties(self) -> List[List[str]]:
-        return self.ng.group_properties if self.ng else []
+    # @property
+    # def group_properties(self) -> List[List[str]]:
+    #     return self.ng.group_properties if self.ng else []
 
-    @property
-    def group_inputs(self) -> List[List[str]]:
-        return self.ng.group_inputs if self.ng else []
+    # @property
+    # def group_inputs(self) -> List[List[str]]:
+    #     return self.ng.group_inputs if self.ng else []
 
-    @property
-    def group_outputs(self) -> List[List[str]]:
-        return self.ng.group_outputs if self.ng else []
+    # @property
+    # def group_outputs(self) -> List[List[str]]:
+    #     return self.ng.group_outputs if self.ng else []
 
     @property
     def node_group(self) -> Any:
@@ -246,8 +250,8 @@ class Node:
                 "executor": executor,
                 "position": self.position,
                 "description": self.description,
-                "args": self.args,
-                "kwargs": self.kwargs,
+                "args": self.args if self.args else [],
+                "kwargs": self.kwargs if self.kwargs else [],
                 "var_args": self.var_args,
                 "var_kwargs": self.var_kwargs,
                 "log": self.log,
@@ -266,9 +270,9 @@ class Node:
             "catalog": self.catalog,
             "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
             "platform": self.platform,
-            "group_properties": self.group_properties,
-            "group_inputs": self.group_inputs,
-            "group_outputs": self.group_outputs,
+            "group_properties": self.group_properties if self.group_properties else [],
+            "group_inputs": self.group_inputs if self.group_inputs else [],
+            "group_outputs": self.group_outputs if self.group_outputs else [],
             "is_dynamic": self.is_dynamic,
         }
         # also save the parent class information
