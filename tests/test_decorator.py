@@ -22,7 +22,7 @@ def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
     @node(
-        inputs=[{"name": "c"}, {"name": "kwargs", "link_limit": 1000}],
+        inputs=[{"name": "c"}, {"name": "kwargs"}],
         properties=[{"name": "d", "default": 3}],
         outputs=[{"name": "sum"}, {"name": "product"}],
     )
@@ -30,7 +30,8 @@ def test_decorator_parameters() -> None:
         return {"sum": a + b, "product": a * b}
 
     test1 = test.node()
-    assert test1.inputs["kwargs"].link_limit == 1000
+    assert test1.inputs["kwargs"].link_limit == 1e6
+    assert test1.inputs["kwargs"].identifier == "node_graph.namespace"
     # user defined the c input manually
     assert "c" in test1.inputs.keys()
     assert "d" in test1.properties.keys()
