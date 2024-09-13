@@ -18,8 +18,8 @@ def test_base_socket_type(id, data):
     """Test base type socket.
     Should be able to set the correct value to socket's property."""
 
-    nt = NodeGraph(name="test_base_socket_type")
-    n = nt.nodes.new("node_graph.test_add", "test")
+    ng = NodeGraph(name="test_base_socket_type")
+    n = ng.nodes.new("node_graph.test_add", "test")
     socket = n.inputs.new(id, id)
     socket.property.value = data
     assert socket.property.value == data
@@ -44,8 +44,8 @@ def test_base_socket_type_validation(id, data):
     Should raise a error when the input data is not
     the same type as the socket."""
 
-    nt = NodeGraph(name="test_base_socket_type")
-    n = nt.nodes.new("node_graph.test_add", "test")
+    ng = NodeGraph(name="test_base_socket_type")
+    n = ng.nodes.new("node_graph.test_add", "test")
     socket = n.inputs.new(id, id)
     try:
         socket.property.value = data
@@ -58,8 +58,8 @@ def test_base_socket_type_validation(id, data):
 def test_general_socket_property():
     from node_graph.node import Node
 
-    nt = NodeGraph(name="test_base_socket_type")
-    n = nt.nodes.new(Node, "test")
+    ng = NodeGraph(name="test_base_socket_type")
+    n = ng.nodes.new(Node, "test")
     socket = n.inputs.new("node_graph.any", "test")
     socket.property.value = np.ones((3, 3))
     assert np.isclose(socket.property.value, np.ones((3, 3))).all()
@@ -68,15 +68,15 @@ def test_general_socket_property():
     assert np.isclose(socket1.property.value, np.ones((3, 3))).all()
 
 
-def test_socket_match(nt):
+def test_socket_match(ng):
     """Test simple math."""
 
-    nt = NodeGraph(name="test_socket_match")
-    str1 = nt.nodes.new("node_graph.test_string", "str1", value="abc")
-    math1 = nt.nodes.new("node_graph.test_add", "math")
+    ng = NodeGraph(name="test_socket_match")
+    str1 = ng.nodes.new("node_graph.test_string", "str1", value="abc")
+    math1 = ng.nodes.new("node_graph.test_add", "math")
     try:
-        nt.links.new(str1.outputs[0], math1.inputs[1])
+        ng.links.new(str1.outputs[0], math1.inputs[1])
     except Exception as e:
         print(e)
     # the link will fails.
-    assert len(nt.links) == 0
+    assert len(ng.links) == 0

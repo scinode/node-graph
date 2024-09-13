@@ -28,14 +28,14 @@ class Node:
 
     Examples:
         Add nodes:
-        >>> float1 = nt.nodes.new("TestFloat", name="float1")
-        >>> add1 = nt.nodes.new("TestDelayAdd", name="add1")
+        >>> float1 = ng.nodes.new("TestFloat", name="float1")
+        >>> add1 = ng.nodes.new("TestDelayAdd", name="add1")
 
         Copy node:
         >>> n = node.copy(name="new_name")
 
         Append node to node graph:
-        >>> nt.nodes.append(node)
+        >>> ng.nodes.append(node)
 
     """
 
@@ -49,13 +49,15 @@ class Node:
     parent_uuid: str = ""
     platform: str = "node_graph"
     catalog: str = "Node"
-    args: List[Any] = []
-    kwargs: List[Any] = []
+    args: List[Any] = None
+    kwargs: List[Any] = None
     var_args: Optional[str] = None
     var_kwargs: Optional[str] = None
-    group_inputs: List[List[str]] = []
-    group_outputs: List[List[str]] = []
+    group_properties: List[List[str]] = None
+    group_inputs: List[List[str]] = None
+    group_outputs: List[List[str]] = None
     is_dynamic: bool = False
+    _executor: Optional[dict] = None
 
     def __init__(
         self,
@@ -108,7 +110,8 @@ class Node:
 
     def create_group_properties(self) -> None:
         """Create properties based on the exposed properties."""
-        for prop in self.group_properties:
+        group_properties = self.group_properties if self.group_properties else []
+        for prop in group_properties:
             node_prop, new_prop_name = prop
             node, prop_name = node_prop.split(".")
             if prop_name not in self.ng.nodes[node].properties.keys():
@@ -150,7 +153,8 @@ class Node:
             ["add1.x", "x"],
             ["add1.y", "y"]]
         """
-        for input in self.group_inputs:
+        group_inputs = self.group_inputs if self.group_inputs else []
+        for input in group_inputs:
             node_socket, name = input
             node, socket = node_socket.split(".")
             if socket not in self.ng.nodes[node].inputs.keys():
@@ -161,7 +165,8 @@ class Node:
                 )
             identifier = self.ng.nodes[node].inputs[socket].identifier
             self.inputs.new(identifier, name)
-        for output in self.group_outputs:
+        group_outputs = self.group_outputs if self.group_outputs else []
+        for output in group_outputs:
             node_socket, name = output
             node, socket = node_socket.split(".")
             if socket not in self.ng.nodes[node].outputs.keys():
@@ -176,17 +181,17 @@ class Node:
     def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
 
-    @property
-    def group_properties(self) -> List[List[str]]:
-        return self.ng.group_properties if self.ng else []
+    # @property
+    # def group_properties(self) -> List[List[str]]:
+    #     return self.ng.group_properties if self.ng else []
 
-    @property
-    def group_inputs(self) -> List[List[str]]:
-        return self.ng.group_inputs if self.ng else []
+    # @property
+    # def group_inputs(self) -> List[List[str]]:
+    #     return self.ng.group_inputs if self.ng else []
 
-    @property
-    def group_outputs(self) -> List[List[str]]:
-        return self.ng.group_outputs if self.ng else []
+    # @property
+    # def group_outputs(self) -> List[List[str]]:
+    #     return self.ng.group_outputs if self.ng else []
 
     @property
     def node_group(self) -> Any:
@@ -203,11 +208,11 @@ class Node:
     def get_default_node_group(self) -> Any:
         from node_graph import NodeGraph
 
-        nt = NodeGraph(
+        ng = NodeGraph(
             name=self.name,
             uuid=self.uuid,
         )
-        return nt
+        return ng
 
     def to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
@@ -246,8 +251,8 @@ class Node:
                 "executor": executor,
                 "position": self.position,
                 "description": self.description,
-                "args": self.args,
-                "kwargs": self.kwargs,
+                "args": self.args if self.args else [],
+                "kwargs": self.kwargs if self.kwargs else [],
                 "var_args": self.var_args,
                 "var_kwargs": self.var_kwargs,
                 "log": self.log,
@@ -266,9 +271,9 @@ class Node:
             "catalog": self.catalog,
             "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
             "platform": self.platform,
-            "group_properties": self.group_properties,
-            "group_inputs": self.group_inputs,
-            "group_outputs": self.group_outputs,
+            "group_properties": self.group_properties if self.group_properties else [],
+            "group_inputs": self.group_inputs if self.group_inputs else [],
+            "group_outputs": self.group_outputs if self.group_outputs else [],
             "is_dynamic": self.is_dynamic,
         }
         # also save the parent class information
@@ -350,7 +355,7 @@ class Node:
         if data.get("metadata", {}).get("is_dynamic", False):
             node_class = create_node(data)
         else:
-            node_class = node_pool[data["metadata"]["identifier"]]
+            node_class = node_pool[data["identifier"]]
 
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
@@ -447,8 +452,7 @@ class Node:
 
     def get_executor(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Get the default executor."""
-        executor = {"module": "", "name": ""}
-        return executor
+        return self._executor
 
     def get_results(self) -> None:
         """Item data from database"""
@@ -461,15 +465,11 @@ class Node:
         return self.get_results()
 
     def __repr__(self) -> str:
-        s = ""
-        s += '{}(name="{}", properties = ['.format(self.__class__.__name__, self.name)
-        s += ", ".join([f'"{x}"' for x in self.properties.keys()])
-        s += "], inputs = ["
-        s += ", ".join([f'"{x}"' for x in self.inputs.keys()])
-        s += "], outputs = ["
-        s += ", ".join([f'"{x}"' for x in self.outputs.keys()])
-        s += "])\n"
-        return s
+        return (
+            f"{self.__class__.__name__}(name='{self.name}', properties=[{', '.join(repr(k) for k in self.properties.keys())}], "
+            f"inputs=[{', '.join(repr(k) for k in self.inputs.keys())}], "
+            f"outputs=[{', '.join(repr(k) for k in self.outputs.keys())}])"
+        )
 
     def set(self, data: Dict[str, Any]) -> None:
         """Set properties by a dict.

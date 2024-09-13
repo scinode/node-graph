@@ -34,7 +34,7 @@ One can set the value of a property by:
 
 .. code:: Python
 
-   float1 = nt.nodes.new("node_graph.test_float")
+   float1 = ng.nodes.new("node_graph.test_float")
    # set the value for Float property
    float1.properties["Float"].value = 2.0
    # or by
@@ -63,7 +63,7 @@ Assigning to Existing Node
 
 .. code:: Python
 
-   node1 = nt.nodes.new("ScinodeNode", "pow")
+   node1 = ng.nodes.new("ScinodeNode", "pow")
    node1.properties.new("node_graph.float", "x")
 
 

@@ -6,6 +6,11 @@ class TestFloat(Node):
     name = "TestFloat"
     catalog = "Test"
 
+    _executor = {
+        "module": "scinode.executors.test",
+        "name": "test_float",
+    }
+
     kwargs = ["t", "value"]
 
     def create_properties(self):
@@ -15,18 +20,16 @@ class TestFloat(Node):
     def create_sockets(self):
         self.outputs.new("node_graph.float", "float")
 
-    def get_executor(self):
-        return {
-            "module": "scinode.executors.test",
-            "name": "test_float",
-        }
-
 
 class TestString(Node):
     identifier = "node_graph.test_string"
     name = "String"
     catalog = "Test"
 
+    _executor = {
+        "module": "scinode.executors.test",
+        "name": "test_string",
+    }
     kwargs = ["t", "value"]
 
     def create_properties(self):
@@ -35,12 +38,6 @@ class TestString(Node):
 
     def create_sockets(self):
         self.outputs.new("node_graph.string", "string")
-
-    def get_executor(self):
-        return {
-            "module": "scinode.executors.test",
-            "name": "test_string",
-        }
 
 
 class TestAdd(Node):
@@ -59,6 +56,11 @@ class TestAdd(Node):
     identifier: str = "node_graph.test_add"
     name = "TestAdd"
     catalog = "Test"
+
+    _executor = {
+        "module": "scinode.executors.test",
+        "name": "test_add",
+    }
     kwargs = ["t", "x", "y"]
 
     def create_properties(self):
@@ -71,18 +73,17 @@ class TestAdd(Node):
         self.inputs.new("node_graph.float", "y")
         self.outputs.new("node_graph.float", "result")
 
-    def get_executor(self):
-        return {
-            "module": "scinode.executors.test",
-            "name": "test_add",
-        }
-
 
 class TestEnum(Node):
 
     identifier: str = "node_graph.test_enum"
     name = "Enum"
     catalog = "Test"
+
+    _executor = {
+        "module": "scinode.executors.test",
+        "name": "test_enum",
+    }
     kwargs = ["t", "function"]
 
     def create_properties(self):
@@ -100,12 +101,6 @@ class TestEnum(Node):
         self.inputs.clear()
         self.outputs.clear()
         self.outputs.new("node_graph.any", "result")
-
-    def get_executor(self):
-        return {
-            "module": "scinode.executors.test",
-            "name": "test_enum",
-        }
 
 
 class TestEnumUpdate(Node):
@@ -157,25 +152,25 @@ class TestAddGroup(Node):
     def get_default_node_group(self):
         from node_graph import NodeGraph
 
-        nt = NodeGraph(
+        ng = NodeGraph(
             name=self.name,
             uuid=self.uuid,
             parent_node=self.uuid,
             worker_name=self.worker_name,
             type="NODE_GROUP",
         )
-        add1 = nt.nodes.new("node_graph.test_add", "add1")
-        add2 = nt.nodes.new("node_graph.test_add", "add2")
-        add3 = nt.nodes.new("node_graph.test_add", "add1")
-        nt.links.new(add1.outputs[0], add3.inputs[0])
-        nt.links.new(add2.outputs[0], add3.inputs[1])
-        nt.group_properties = [
+        add1 = ng.nodes.new("node_graph.test_add", "add1")
+        add2 = ng.nodes.new("node_graph.test_add", "add2")
+        add3 = ng.nodes.new("node_graph.test_add", "add1")
+        ng.links.new(add1.outputs[0], add3.inputs[0])
+        ng.links.new(add2.outputs[0], add3.inputs[1])
+        ng.group_properties = [
             ("add1.t", "t1"),
             ("add1.t", "t2"),
         ]
-        nt.group_inputs = [
+        ng.group_inputs = [
             ("add1.x", "x"),
             ("add2.x", "y"),
         ]
-        nt.group_outputs = [("add3.result", "result")]
-        return nt
+        ng.group_outputs = [("add3.result", "result")]
+        return ng

@@ -25,8 +25,8 @@ Metadata
 .. code-block:: python
 
    # identifier: node_graph.test_float, name: float1
-   node1 = nt.nodes.new("node_graph.test_float", name="float1")
-   node2 = nt.nodes.new("node_graph.test_float", name="float2")
+   node1 = ng.nodes.new("node_graph.test_float", name="float1")
+   node2 = ng.nodes.new("node_graph.test_float", name="float2")
 
 Executor
 ===========================================
@@ -73,9 +73,9 @@ then you can use the node in a nodegraph:
    from custom_node import myadd
    import time
 
-   nt = NodeGraph(name="test_decorator")
+   ng = NodeGraph(name="test_decorator")
    # here we use the myadd
-   add1 = nt.nodes.new(myadd, "add1")
+   add1 = ng.nodes.new(myadd, "add1")
    add1.set({"x": 8})
    nt.launch()
    time.sleep(5)
@@ -104,6 +104,11 @@ One can define a new node by extend the `Node` class.
       identifier: str = "TestAdd"
       name = "TestAdd"
       catalog = "Test"
+
+      _executor = {
+               "module": "scinode.executors.test",
+               "name": "test_add",
+         }
       kwargs = ["t", "x", "y"]
 
       def create_properties(self):
@@ -116,12 +121,6 @@ One can define a new node by extend the `Node` class.
          self.inputs.new("node_graph.float", "y")
          self.outputs.new("node_graph.float", "Result")
 
-      def get_executor(self):
-         return {
-               "module": "scinode.executors.test",
-               "name": "test_add",
-         }
-
 
 Use Node
 ==================
@@ -132,15 +131,15 @@ Create a Node inside a NodeGraph
    from node_graph import NodeGraph
 
    # create a nodegraph
-   nt = NodeGraph(name="test_node")
+   ng = NodeGraph(name="test_node")
    # create a node using the Node identifier, e.g. node_graph.test_float
-   float1 = nt.nodes.new("node_graph.test_float")
+   float1 = ng.nodes.new("node_graph.test_float")
    # set node properties
    float1.set({"Float": 8})
    # copy a node
    float2 = float1.copy()
    # append a node to the nodegraph
-   nt.nodes.append(float2)
+   ng.nodes.append(float2)
 
 Load node from database
 

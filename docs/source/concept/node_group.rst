@@ -36,15 +36,15 @@ One can define a node group using the `node.group` decorator. In the definition 
     )
     def myaddgroup(x, y):
         from node_graph import NodeGraph
-        nt = NodeGraph(name="NodeGroup")
-        sqrt1 = nt.nodes.new("TestSqrt", "sqrt1")
+        ng = NodeGraph(name="NodeGroup")
+        sqrt1 = ng.nodes.new("TestSqrt", "sqrt1")
         sqrt1.set({"t":2, "x": x})
-        sqrt2 = nt.nodes.new("TestSqrt", "sqrt2")
+        sqrt2 = ng.nodes.new("TestSqrt", "sqrt2")
         sqrt2.set({"x": y})
-        add1 = nt.nodes.new("node_graph.test_add", "add1")
-        nt.links.new(sqrt1.outputs[0], add1.inputs[0])
-        nt.links.new(sqrt2.outputs[0], add1.inputs[1])
-        return nt
+        add1 = ng.nodes.new("node_graph.test_add", "add1")
+        ng.links.new(sqrt1.outputs[0], add1.inputs[0])
+        ng.links.new(sqrt2.outputs[0], add1.inputs[1])
+        return ng
 
 
 
@@ -62,20 +62,20 @@ One can define a nodegroup use a Node class, and specify the `node_type` to `GRO
 
         def get_default_node_group(self):
             from node_graph import NodeGraph
-            nt = NodeGraph(name=self.name, uuid=self.uuid,
+            ng = NodeGraph(name=self.name, uuid=self.uuid,
                         parent_node=self.uuid,
                         daemon_name=self.daemon_name)
-            sqrt1 = nt.nodes.new("TestSqrt", "sqrt1")
-            sqrt2 = nt.nodes.new("TestSqrt", "sqrt2")
-            add1 = nt.nodes.new("node_graph.test_add", "add1")
-            nt.links.new(sqrt1.outputs[0], add1.inputs[0])
-            nt.links.new(sqrt2.outputs[0], add1.inputs[1])
-            nt.group_properties = [("sqrt1", "t", "t1"),
+            sqrt1 = ng.nodes.new("TestSqrt", "sqrt1")
+            sqrt2 = ng.nodes.new("TestSqrt", "sqrt2")
+            add1 = ng.nodes.new("node_graph.test_add", "add1")
+            ng.links.new(sqrt1.outputs[0], add1.inputs[0])
+            ng.links.new(sqrt2.outputs[0], add1.inputs[1])
+            ng.group_properties = [("sqrt1", "t", "t1"),
                                     ("add1", "t", "t2"),]
-            nt.group_inputs = [("sqrt1", "x", "x"),
+            ng.group_inputs = [("sqrt1", "x", "x"),
                             ("sqrt2", "x", "y"),]
-            nt.group_outputs = [("add1", "Result", "Result")]
-            return nt
+            ng.group_outputs = [("add1", "Result", "Result")]
+            return ng
 
 
 Execution

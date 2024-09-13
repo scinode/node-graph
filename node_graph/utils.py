@@ -130,6 +130,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         identifier: str = ndata["identifier"]
         node_type: str = ndata.get("metadata", {}).get("node_type", "NORMAL")
         catalog: str = ndata.get("metadata", {}).get("catalog", "Others")
+
+        _executor = ndata.get("executor", None)
         is_dynamic: bool = True
 
         def create_properties(self):
@@ -171,10 +173,6 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
             self.kwargs = ndata.get("kwargs", [])
             self.var_args = ndata.get("var_args", None)
             self.var_kwargs = ndata.get("var_kwargs", None)
-
-        def get_executor(self):
-            executor = ndata.get("executor", {})
-            return executor
 
         def get_metadata(self):
             metadata = super().get_metadata()

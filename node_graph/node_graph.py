@@ -19,17 +19,17 @@ class NodeGraph:
 
     Examples:
         >>> from node_graph import NodeGraph
-        >>> nt = NodeGraph(name="my_first_nodegraph")
+        >>> ng = NodeGraph(name="my_first_nodegraph")
 
         Add nodes:
-        >>> float1 = nt.nodes.new("node_graph.test_float", name="float1")
-        >>> add1 = nt.nodes.new("node_graph.test_add", name="add1")
+        >>> float1 = ng.nodes.new("node_graph.test_float", name="float1")
+        >>> add1 = ng.nodes.new("node_graph.test_add", name="add1")
 
         Add links:
-        >>> nt.links.new(float1.outputs[0], add1.inputs[0])
+        >>> ng.links.new(float1.outputs[0], add1.inputs[0])
 
         Export to dict:
-        >>> nt.to_dict()
+        >>> ng.to_dict()
 
     """
 
@@ -198,42 +198,42 @@ class NodeGraph:
         """
         from node_graph.utils import create_node
 
-        nt: "NodeGraph" = cls(
+        ng: "NodeGraph" = cls(
             name=ntdata["name"],
             uuid=ntdata.get("uuid"),
         )
         for key in ["state", "action", "description"]:
             if ntdata.get(key):
-                setattr(nt, key, ntdata.get(key))
+                setattr(ng, key, ntdata.get(key))
         for key in [
             "group_properties",
             "group_inputs",
             "group_outputs",
         ]:
             if ntdata["metadata"].get(key):
-                setattr(nt, key, ntdata["metadata"].get(key))
+                setattr(ng, key, ntdata["metadata"].get(key))
         for name, ndata in ntdata["nodes"].items():
             if ndata.get("metadata", {}).get("is_dynamic", False):
                 node_class = create_node(ndata)
             else:
                 node_class = cls.node_pool[ndata["identifier"].upper()]
-            node = nt.nodes.new(
+            node = ng.nodes.new(
                 node_class,
                 name=name,
                 uuid=ndata.pop("uuid", None),
             )
             node.update_from_dict(ndata)
         for link in ntdata.get("links", []):
-            nt.links.new(
-                nt.nodes[link["from_node"]].outputs[link["from_socket"]],
-                nt.nodes[link["to_node"]].inputs[link["to_socket"]],
+            ng.links.new(
+                ng.nodes[link["from_node"]].outputs[link["from_socket"]],
+                ng.nodes[link["to_node"]].inputs[link["to_socket"]],
             )
         for link in ntdata.get("ctrl_links", []):
-            nt.ctrl_links.new(
-                nt.nodes[link["from_node"]].ctrl_outputs[link["from_socket"]],
-                nt.nodes[link["to_node"]].ctrl_inputs[link["to_socket"]],
+            ng.ctrl_links.new(
+                ng.nodes[link["from_node"]].ctrl_outputs[link["from_socket"]],
+                ng.nodes[link["to_node"]].ctrl_inputs[link["to_socket"]],
             )
-        return nt
+        return ng
 
     @classmethod
     def from_yaml(
@@ -256,8 +256,8 @@ class NodeGraph:
         else:
             raise Exception("Please specify a filename or YAML string.")
         ntdata = yaml_to_dict(ntdata)
-        nt = cls.from_dict(ntdata)
-        return nt
+        ng = cls.from_dict(ntdata)
+        return ng
 
     def copy(self, name: Optional[str] = None) -> "NodeGraph":
         """Copies the node graph.
@@ -271,14 +271,14 @@ class NodeGraph:
             NodeGraph: The copied node graph.
         """
         name = f"{self.name}_copy" if name is None else name
-        nt: "NodeGraph" = self.__class__(name=name, uuid=None)
-        nt.nodes = self.nodes.copy(parent=nt)
+        ng: "NodeGraph" = self.__class__(name=name, uuid=None)
+        ng.nodes = self.nodes.copy(parent=nt)
         for link in self.links:
-            nt.links.new(
-                nt.nodes[link.from_node.name].outputs[link.from_socket.name],
-                nt.nodes[link.to_node.name].inputs[link.to_socket.name],
+            ng.links.new(
+                ng.nodes[link.from_node.name].outputs[link.from_socket.name],
+                ng.nodes[link.to_node.name].inputs[link.to_socket.name],
             )
-        return nt
+        return ng
 
     def copy_using_dict(self) -> "NodeGraph":
         """Copies the node graph using dictionary data.
@@ -314,27 +314,27 @@ class NodeGraph:
         Returns:
             NodeGraph: The new node graph.
         """
-        nt: "NodeGraph" = self.__class__(name=name, uuid=None)
+        ng: "NodeGraph" = self.__class__(name=name, uuid=None)
         for node in node_list:
-            nt.nodes.append(self.nodes[node].copy(nodegraph=nt))
+            ng.nodes.append(self.nodes[node].copy(nodegraph=nt))
         for link in self.links:
             if (
                 add_ref
-                and link.from_node.name not in nt.nodes.keys()
-                and link.to_node.name in nt.nodes.keys()
+                and link.from_node.name not in ng.nodes.keys()
+                and link.to_node.name in ng.nodes.keys()
             ):
-                nt.nodes.append(
+                ng.nodes.append(
                     self.nodes[link.from_node.name].copy(nodegraph=nt, is_ref=True)
                 )
             if (
-                link.from_node.name in nt.nodes.keys()
-                and link.to_node.name in nt.nodes.keys()
+                link.from_node.name in ng.nodes.keys()
+                and link.to_node.name in ng.nodes.keys()
             ):
-                nt.links.new(
-                    nt.nodes[link.from_node.name].outputs[link.from_socket.name],
-                    nt.nodes[link.to_node.name].inputs[link.to_socket.name],
+                ng.links.new(
+                    ng.nodes[link.from_node.name].outputs[link.from_socket.name],
+                    ng.nodes[link.to_node.name].inputs[link.to_socket.name],
                 )
-        return nt
+        return ng
 
     def __getitem__(self, keys: List[str]) -> "NodeGraph":
         """Gets a sub-nodegraph by the names of nodes.
@@ -345,8 +345,8 @@ class NodeGraph:
         Returns:
             NodeGraph: The sub-nodegraph.
         """
-        nt: "NodeGraph" = self.copy_subset(keys)
-        return nt
+        ng: "NodeGraph" = self.copy_subset(keys)
+        return ng
 
     def __iadd__(self, other: "NodeGraph") -> "NodeGraph":
         """Adds another node graph to this node graph.

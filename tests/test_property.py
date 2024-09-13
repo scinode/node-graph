@@ -51,8 +51,8 @@ def test_base_type_validation(id, data):
 def test_enum_type():
     """Test simple math."""
 
-    nt = NodeGraph(name="test_enum_type")
-    nd = nt.nodes.new("node_graph.test_enum")
+    ng = NodeGraph(name="test_enum_type")
+    nd = ng.nodes.new("node_graph.test_enum")
     assert nd.properties["function"].content == "test_add"
     nd.properties["function"].value = "sqrt"
     assert nd.properties["function"].content == "test_sqrt"
@@ -61,8 +61,8 @@ def test_enum_type():
 def test_enum_update_type():
     """Test simple math."""
 
-    nt = NodeGraph(name="test_enum_update_type")
-    nd = nt.nodes.new("node_graph.test_enum_update")
+    ng = NodeGraph(name="test_enum_update_type")
+    nd = ng.nodes.new("node_graph.test_enum_update")
     assert nd.properties["function"].content == "test_add"
     assert len(nd.inputs) == 2
     nd.properties["function"].value = "sqrt"
@@ -86,8 +86,8 @@ def test_vector(id, size, default, data):
     """Test simple math."""
     from node_graph.node import Node
 
-    nt = NodeGraph(name="test_vector")
-    nd = nt.nodes.new(Node)
+    ng = NodeGraph(name="test_vector")
+    nd = ng.nodes.new(Node)
     nd.executor = {"module": "numpy.sqrt"}
     nd.args = ["x"]
     nd.properties.new(id, "x", **{"size": size, "default": default})
