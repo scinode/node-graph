@@ -14,6 +14,18 @@ class SocketAny(NodeSocket, SerializePickle):
         self.add_property("node_graph.any", name, **kwargs)
 
 
+class SocketNamespace(NodeSocket, SerializePickle):
+    """Any socket."""
+
+    identifier: str = "node_graph.namespace"
+
+    def __init__(
+        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
+    ) -> None:
+        super().__init__(name, node, type, index, uuid=uuid)
+        self.add_property("node_graph.any", name, **kwargs)
+
+
 class SocketFloat(NodeSocket, SerializeJson):
     """Float socket."""
 

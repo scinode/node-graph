@@ -103,11 +103,51 @@ def generate_input_sockets(
                     "default": kwarg["default"],
                 }
             inputs.append(input)
-    input_names = [input["name"] for input in inputs]
-    if var_args is not None and var_args not in input_names:
-        inputs.append({"identifier": type_mapping["default"], "name": var_args})
-    if var_kwargs is not None and var_kwargs not in input_names:
-        inputs.append({"identifier": type_mapping["default"], "name": var_kwargs})
+    # if var_args in input_names, set the link_limit to 1e6 and the identifier to namespace
+    if var_args is not None:
+        has_var_args = False
+        for input in inputs:
+            if input["name"] == var_args:
+                input.setdefault("link_limit", 1e6)
+                if (
+                    input.get("identifier", type_mapping["namespace"])
+                    != type_mapping["namespace"]
+                ):
+                    raise ValueError(
+                        "Socket with var_args must have namespace identifier"
+                    )
+                input["identifier"] = type_mapping["namespace"]
+                has_var_args = True
+        if not has_var_args:
+            inputs.append(
+                {
+                    "identifier": type_mapping["namespace"],
+                    "name": var_args,
+                    "link_limit": 1e6,
+                }
+            )
+    if var_kwargs is not None:
+        has_var_kwargs = False
+        for input in inputs:
+            if input["name"] == var_kwargs:
+                input.setdefault("link_limit", 1e6)
+                if (
+                    input.get("identifier", type_mapping["namespace"])
+                    != type_mapping["namespace"]
+                ):
+                    raise ValueError(
+                        "Socket with var_args must have namespace identifier"
+                    )
+                input["identifier"] = type_mapping["namespace"]
+                has_var_kwargs = True
+        if not has_var_kwargs:
+            inputs.append(
+                {
+                    "identifier": type_mapping["namespace"],
+                    "name": var_kwargs,
+                    "link_limit": 1e6,
+                }
+            )
     #
     arg_names = [arg[0] for arg in args]
     kwarg_names = [name for name in kwargs.keys()]

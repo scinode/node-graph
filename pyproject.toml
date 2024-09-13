@@ -66,6 +66,7 @@ tests = [
 
 [project.entry-points."node_graph.socket"]
 "node_graph.any" = "node_graph.sockets.builtins:SocketAny"
+"node_graph.namespace" = "node_graph.sockets.builtins:SocketNamespace"
 "node_graph.int" = "node_graph.sockets.builtins:SocketInt"
 "node_graph.float" = "node_graph.sockets.builtins:SocketFloat"
 "node_graph.string" = "node_graph.sockets.builtins:SocketString"
