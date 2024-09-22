@@ -284,14 +284,13 @@ def decorator_node_group(
             identifier = func.__name__
         # use cloudpickle to serialize function
         func.identifier = identifier
-        func.group_outputs = outputs
         executor = {
             "executor": pickle.dumps(func),
             "type": executor_type,
             "is_pickle": True,
         }
         # Get the args and kwargs of the function
-        args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
+        args, kwargs, var_args, var_kwargs, node_inputs = generate_input_sockets(
             func, inputs, properties
         )
         node_outputs = [
@@ -309,15 +308,15 @@ def decorator_node_group(
                 "node_type": node_type,
                 "catalog": catalog,
                 "node_class": {"module": "node_graph.node", "name": "Node"},
+                "group_inputs": inputs,
+                "group_outputs": outputs,
             },
             "properties": properties,
-            "inputs": _inputs,
+            "inputs": node_inputs,
             "outputs": node_outputs,
             "executor": executor,
         }
         node = create_node(ndata)
-        node.group_inputs = inputs
-        node.group_outputs = outputs
         func.node = node
         return func
 

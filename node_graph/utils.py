@@ -127,9 +127,12 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
 
     class DecoratedNode(NodeClass):
-        identifier: str = ndata["identifier"]
+        identifier: str = ndata["identifier"].upper()
         node_type: str = ndata.get("metadata", {}).get("node_type", "NORMAL")
         catalog: str = ndata.get("metadata", {}).get("catalog", "Others")
+        # group
+        group_inputs = ndata["metadata"].get("group_inputs", [])
+        group_outputs = ndata["metadata"].get("group_outputs", [])
 
         _executor = ndata.get("executor", None)
         is_dynamic: bool = True
