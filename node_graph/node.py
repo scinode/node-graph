@@ -355,7 +355,7 @@ class Node:
         if data.get("metadata", {}).get("is_dynamic", False):
             node_class = create_node(data)
         else:
-            node_class = node_pool[data["identifier"]]
+            node_class = node_pool[data["identifier"].upper()]
 
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
