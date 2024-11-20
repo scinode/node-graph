@@ -13,9 +13,8 @@ def get_entries(entry_point_name: str) -> Dict[str, Any]:
     else:
         group = eps.get(entry_point_name, [])
     for entry_point in group:
-        entry = entry_point.load()
         if entry_point.name.upper() not in pool:
-            pool[entry_point.name.upper()] = entry
+            pool[entry_point.name.upper()] = entry_point
         else:
             raise Exception("Entry: {} is already registered.".format(entry_point.name))
     return pool
@@ -183,3 +182,20 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
             return metadata
 
     return DecoratedNode
+
+
+def get_item_class(identifier: str, pool: Dict[str, Any], base_class) -> Any:
+    """Get the item class from the identifier."""
+    if isinstance(identifier, str):
+        identifier = pool[identifier.upper()].load()
+    if isinstance(identifier, type) and issubclass(identifier, base_class):
+        ItemClass = identifier
+    elif isinstance(getattr(identifier, "node", None), type) and issubclass(
+        identifier.node, base_class
+    ):
+        ItemClass = identifier.node
+    else:
+        raise Exception(
+            f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
+        )
+    return ItemClass

@@ -2,6 +2,7 @@ import importlib
 from node_graph.utils import get_entries
 from typing import List, Union, Optional, Callable
 import difflib
+from node_graph.utils import get_item_class
 
 
 class Collection:
@@ -241,16 +242,7 @@ class NodeCollection(Collection):
         from node_graph.node import Node
 
         list_index = self.get_list_index()
-        if isinstance(identifier, str):
-            ItemClass = self.pool[identifier.upper()]
-        elif isinstance(identifier, type) and issubclass(identifier, Node):
-            ItemClass = identifier
-        elif isinstance(getattr(identifier, "node", None), type) and issubclass(
-            identifier.node, Node
-        ):
-            ItemClass = identifier.node
-        else:
-            raise Exception(f"Identifier {identifier} is not a node or node name.")
+        ItemClass = get_item_class(identifier, self.pool, Node)
         item = ItemClass(
             list_index=list_index, name=name, uuid=uuid, parent=self.parent
         )
@@ -293,14 +285,7 @@ class PropertyCollection(Collection):
     ) -> object:
         from node_graph.property import NodeProperty
 
-        if isinstance(identifier, str):
-            ItemClass = self.pool[identifier.upper()]
-        elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
-            ItemClass = identifier
-        else:
-            raise Exception(
-                f"Identifier {identifier} is not a property or property name."
-            )
+        ItemClass = get_item_class(identifier, self.pool, NodeProperty)
         item = ItemClass(name, **kwargs)
         self.append(item)
         return item
@@ -333,12 +318,7 @@ class InputSocketCollection(Collection):
     ) -> object:
         from node_graph.socket import NodeSocket
 
-        if isinstance(identifier, str):
-            ItemClass = self.pool[identifier.upper()]
-        elif isinstance(identifier, type) and issubclass(identifier, NodeSocket):
-            ItemClass = identifier
-        else:
-            raise Exception(f"Identifier {identifier} is not a socket or socket name.")
+        ItemClass = get_item_class(identifier, self.pool, NodeSocket)
         list_index = self.get_list_index()
         item = ItemClass(name, type="INPUT", index=list_index, **kwargs)
         self.append(item)
@@ -384,12 +364,7 @@ class OutputSocketCollection(Collection):
     def new(self, identifier: Union[str, type], name: Optional[str] = None) -> object:
         from node_graph.socket import NodeSocket
 
-        if isinstance(identifier, str):
-            ItemClass = self.pool[identifier.upper()]
-        elif isinstance(identifier, type) and issubclass(identifier, NodeSocket):
-            ItemClass = identifier
-        else:
-            raise Exception(f"Identifier {identifier} is not a socket or socket name.")
+        ItemClass = get_item_class(identifier, self.pool, NodeSocket)
         item = ItemClass(name, type="OUTPUT", index=len(self._items))
         self.append(item)
         return item
