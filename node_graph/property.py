@@ -37,16 +37,22 @@ class NodeProperty:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the property to a dictionary for database storage."""
-        return {
+        data = {
             "value": self.value,
             "name": self.name,
             "identifier": self.identifier,
-            "serialize": self.get_serialize(),
-            "deserialize": self.get_deserialize(),
             "default": self.default,
             "metadata": self.get_metadata(),
             "list_index": self.list_index,
         }
+        # Conditionally add serializer/deserializer if they are defined
+        if hasattr(self, "get_serialize") and callable(self.get_serialize):
+            data["serialize"] = self.get_serialize()
+
+        if hasattr(self, "get_deserialize") and callable(self.get_deserialize):
+            data["deserialize"] = self.get_deserialize()
+
+        return data
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return metadata related to this property."""
@@ -114,18 +120,14 @@ class NodeProperty:
             data (Dict[str, Any], optional): Additional data for property initialization. Defaults to {}.
             property_pool (Dict[str, NodeProperty], optional): A pool of available properties. Defaults to None.
         """
+        from node_graph.utils import get_item_class
+
         if property_pool is None:
             from node_graph.properties import (
                 property_pool,
             )  # Late import to avoid circular imports
 
-        if isinstance(identifier, str):
-            ItemClass = property_pool[identifier.upper()]
-        elif isinstance(identifier, type) and issubclass(identifier, NodeProperty):
-            ItemClass = identifier
-        else:
-            raise ValueError(f"Invalid identifier: {identifier}")
-
+        ItemClass = get_item_class(identifier, property_pool, NodeProperty)
         return ItemClass(name, **data)
 
     def __str__(self) -> str:

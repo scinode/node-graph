@@ -214,11 +214,11 @@ class NodeGraph:
                 setattr(ng, key, ntdata["metadata"].get(key))
         for name, ndata in ntdata["nodes"].items():
             if ndata.get("metadata", {}).get("is_dynamic", False):
-                node_class = create_node(ndata)
+                identifier = create_node(ndata)
             else:
-                node_class = cls.node_pool[ndata["identifier"].upper()]
+                identifier = ndata["identifier"]
             node = ng.nodes.new(
-                node_class,
+                identifier,
                 name=name,
                 uuid=ndata.pop("uuid", None),
             )

@@ -406,10 +406,12 @@ class Node:
         When a plugin create a node, it should provide its own node pool.
         Then call super().new(identifier, name, node_pool) to create a node.
         """
+        from node_graph.utils import get_item_class
+
         if node_pool is None:
             from node_graph.nodes import node_pool
 
-        ItemClass = node_pool[identifier.upper()]
+        ItemClass = get_item_class(identifier, node_pool, Node)
         node = ItemClass(name=name)
         return node
 

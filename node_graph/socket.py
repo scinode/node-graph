@@ -68,8 +68,6 @@ class NodeSocket:
             "type": self.type,
             "link_limit": self.link_limit,
             "links": [],
-            "serialize": self.get_serialize(),
-            "deserialize": self.get_deserialize(),
             "list_index": self.list_index,
         }
         # data from linked sockets
@@ -94,6 +92,12 @@ class NodeSocket:
             dbdata["property"] = self.property.to_dict()
         else:
             dbdata["property"] = None
+        # Conditionally add serializer/deserializer if they are defined
+        if hasattr(self, "get_serialize") and callable(self.get_serialize):
+            dbdata["serialize"] = self.get_serialize()
+
+        if hasattr(self, "get_deserialize") and callable(self.get_deserialize):
+            dbdata["deserialize"] = self.get_deserialize()
         return dbdata
 
     def add_link(self, link: "Link") -> None:
