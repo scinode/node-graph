@@ -1,10 +1,10 @@
-from typing import Callable, Dict, Any, Union
+from typing import Optional, Callable, Dict, Any, Union
 
 
 class NodeProperty:
     """Base class for Node properties.
 
-    A property holds data that can be shown or modified in a GUI, with an optional update callback.
+    A property holds data that can be displayed or modified in a GUI, with an optional update callback.
     """
 
     property_entry: str = "node_graph.property"
@@ -16,7 +16,7 @@ class NodeProperty:
         name: str,
         description: str = "",
         default: Any = None,
-        update: Callable[[], None] = None,
+        update: Optional[Callable[[], None]] = None,
         list_index: int = 0,
     ) -> None:
         """
@@ -27,13 +27,14 @@ class NodeProperty:
             description (str, optional): A description of the property. Defaults to "".
             default (Any, optional): The default value of the property. Defaults to None.
             update (Callable[[], None], optional): Callback to invoke when the value changes. Defaults to None.
+            list_index (int, optional): Index of the property in a collection. Defaults to 0.
         """
         self.name: str = name
         self.description: str = description
         self.list_index: int = list_index
         self.default: Any = default
-        self.update: Callable[[], None] = update
-        self._value = self.default
+        self.update: Optional[Callable[[], None]] = update
+        self._value: Any = default
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the property to a dictionary for database storage."""
@@ -61,13 +62,17 @@ class NodeProperty:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "NodeProperty":
         """Create a NodeProperty from a serialized dictionary."""
-        prop = cls(data["name"])
+        prop = cls(
+            name=data["name"],
+            description=data.get("description", ""),
+            default=data.get("default"),
+        )
         prop.identifier = data["identifier"]
         prop.value = data["value"]
         return prop
 
     def update_from_dict(self, data: Dict[str, Any]) -> None:
-        """Update the value of the property from a dictionary."""
+        """Update the property from a dictionary."""
         self.value = data["value"]
 
     @property
@@ -85,7 +90,7 @@ class NodeProperty:
         if self.update:
             self.update()
 
-    def validate(self, value: any) -> None:
+    def validate(self, value: Any) -> None:
         """Validate the given value based on allowed types."""
         if not isinstance(value, self.allowed_types):
             raise TypeError(
@@ -93,14 +98,11 @@ class NodeProperty:
             )
 
     def copy(self) -> "NodeProperty":
-        """Create a shallow copy of the property.
-
-        Note: Callback functions are not copied.
-        """
+        """Create a shallow copy of the property."""
         return self.__class__(
             name=self.name,
             description=self.description,
-            default=self.value,
+            default=self._value,
             update=self.update,
         )
 
@@ -112,23 +114,14 @@ class NodeProperty:
         data: Dict[str, Any] = {},
         property_pool: Dict[str, "NodeProperty"] = None,
     ) -> "NodeProperty":
-        """Create a new property from an identifier.
-
-        Args:
-            identifier (Union[str, type]): The identifier for the property class.
-            name (str, optional): The name of the property. Defaults to None.
-            data (Dict[str, Any], optional): Additional data for property initialization. Defaults to {}.
-            property_pool (Dict[str, NodeProperty], optional): A pool of available properties. Defaults to None.
-        """
+        """Create a new property from an identifier."""
         from node_graph.utils import get_item_class
 
         if property_pool is None:
-            from node_graph.properties import (
-                property_pool,
-            )  # Late import to avoid circular imports
+            from node_graph.properties import property_pool
 
         ItemClass = get_item_class(identifier, property_pool, NodeProperty)
-        return ItemClass(name, **data)
+        return ItemClass(name=name, **data)
 
     def __str__(self) -> str:
         return f'{self.__class__.__name__}(name="{self.name}", value={self._value})'
