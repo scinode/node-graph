@@ -3,120 +3,70 @@ from node_graph.serializer import SerializeJson, SerializePickle
 
 
 class SocketAny(NodeSocket, SerializePickle):
-    """Any socket."""
+    """Socket that accepts any type of data."""
 
     identifier: str = "node_graph.any"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.any", name, **kwargs)
+    property_identifier: str = "node_graph.any"
 
 
 class SocketNamespace(NodeSocket, SerializePickle):
-    """Any socket."""
+    """Socket that holds a namespace."""
 
     identifier: str = "node_graph.namespace"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.any", name, **kwargs)
+    property_identifier: str = "node_graph.any"
 
 
 class SocketFloat(NodeSocket, SerializeJson):
-    """Float socket."""
+    """Socket for float data."""
 
     identifier: str = "node_graph.float"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.float", name, **kwargs)
+    property_identifier: str = "node_graph.float"
 
 
 class SocketInt(NodeSocket, SerializeJson):
-    """Int socket."""
+    """Socket for integer data."""
 
     identifier: str = "node_graph.int"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.int", name, **kwargs)
+    property_identifier: str = "node_graph.int"
 
 
 class SocketString(NodeSocket, SerializeJson):
-    """String socket."""
+    """Socket for string data."""
 
     identifier: str = "node_graph.string"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.string", name, **kwargs)
+    property_identifier: str = "node_graph.string"
 
 
 class SocketBool(NodeSocket, SerializeJson):
-    """Bool socket."""
+    """Socket for boolean data."""
 
     identifier: str = "node_graph.bool"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.bool", name, **kwargs)
+    property_identifier: str = "node_graph.bool"
 
 
 class SocketBaseList(NodeSocket, SerializeJson):
     """Socket with a BaseList property."""
 
     identifier: str = "node_graph.base_list"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.base_list", name, **kwargs)
+    property_identifier: str = "node_graph.base_list"
 
 
 class SocketBaseDict(NodeSocket, SerializeJson):
     """Socket with a BaseDict property."""
 
     identifier: str = "node_graph.base_dict"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.base_dict", name, **kwargs)
+    property_identifier: str = "node_graph.base_dict"
 
 
 class SocketIntVector(NodeSocket, SerializeJson):
-    """Socket with a IntVector property."""
+    """Socket for integer vector data."""
 
     identifier: str = "node_graph.int_vector"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.int_vector", name, **kwargs)
+    property_identifier: str = "node_graph.int_vector"
 
 
 class SocketFloatVector(NodeSocket, SerializeJson):
-    """Socket with a FloatVector property."""
+    """Socket for float vector data."""
 
     identifier: str = "node_graph.float_vector"
-
-    def __init__(
-        self, name, node=None, type="INPUT", index=0, uuid=None, **kwargs
-    ) -> None:
-        super().__init__(name, node, type, index, uuid=uuid)
-        self.add_property("node_graph.float_vector", name, **kwargs)
+    property_identifier: str = "node_graph.float_vector"

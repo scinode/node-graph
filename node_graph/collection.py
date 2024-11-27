@@ -320,7 +320,7 @@ class InputSocketCollection(Collection):
 
         ItemClass = get_item_class(identifier, self.pool, NodeSocket)
         list_index = self.get_list_index()
-        item = ItemClass(name, type="INPUT", index=list_index, **kwargs)
+        item = ItemClass(name, socket_type="INPUT", list_index=list_index, **kwargs)
         self.append(item)
         return item
 
@@ -365,7 +365,7 @@ class OutputSocketCollection(Collection):
         from node_graph.socket import NodeSocket
 
         ItemClass = get_item_class(identifier, self.pool, NodeSocket)
-        item = ItemClass(name, type="OUTPUT", index=len(self._items))
+        item = ItemClass(name, socket_type="OUTPUT", list_index=len(self._items))
         self.append(item)
         return item
 

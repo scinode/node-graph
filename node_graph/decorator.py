@@ -361,7 +361,9 @@ class NodeDecoratorCollection:
     node: Callable[..., Any] = staticmethod(decorator_node)
     group: Callable[..., Any] = staticmethod(decorator_node_group)
 
-    __call__: Any = node  # Alias '@node' to '@node.node'.
+    # Alias '@node' to '@node.node'.
+    def __call__(self, *args, **kwargs):
+        return self.node(*args, **kwargs)
 
 
 node: NodeDecoratorCollection = NodeDecoratorCollection()
