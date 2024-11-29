@@ -47,6 +47,22 @@ def test_add(ng):
     ng1 = NodeGraph(name="test_node_group")
     ng1.nodes.new("node_graph.test_float", "float3", value=4.0, t=3)
     ng1.nodes.new("node_graph.test_float", "float4", value=3.0)
-    ng += ng1
+    ng = ng + ng1
     assert len(ng.nodes) == n + 2
     assert len(ng.links) == nlink
+
+
+def test_copy_subset(ng):
+    """Test copy subset of nodes."""
+    ng1 = ng.copy_subset(["add1", "add2"])
+    assert len(ng1.nodes) == 3
+    assert len(ng1.links) == 2
+    assert "float1" in ng1.nodes.keys()
+
+
+def test_get_items(ng):
+    """Test get items."""
+    ng1 = ng[["add1", "add2"]]
+    assert len(ng1.nodes) == 3
+    assert len(ng1.links) == 2
+    assert "float1" in ng1.nodes.keys()

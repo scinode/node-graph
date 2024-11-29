@@ -20,3 +20,9 @@ def test_base_collection():
     # delete
     coll.delete(node1.name)
     assert len(coll) == 1
+    # get
+    assert coll.get("node2") == node2
+    # get by uuid
+    assert coll.get_by_uuid(node2.uuid) == node2
+    # __repr__
+    assert repr(coll) == "Collection()\n"

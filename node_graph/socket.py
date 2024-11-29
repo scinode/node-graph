@@ -103,15 +103,6 @@ class NodeSocket:
             dbdata["deserialize"] = self.get_deserialize()
         return dbdata
 
-    def add_link(self, link: "NodeLink") -> None:
-        """Add a link to this socket."""
-        if len(self.links) < self.link_limit or self.link_limit == 0:
-            self.links.append(link)
-        else:
-            raise ValueError(
-                f"Link limit of {self.link_limit} reached for socket '{self.name}'."
-            )
-
     def add_property(
         self, identifier: str, name: Optional[str] = None, **kwargs: Any
     ) -> None:

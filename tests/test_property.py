@@ -1,5 +1,7 @@
 import pytest
 from node_graph import NodeGraph
+from node_graph.property import NodeProperty
+from node_graph.node import Node
 
 
 @pytest.mark.parametrize(
@@ -15,7 +17,6 @@ from node_graph import NodeGraph
 )
 def test_base_type(id, data):
     """Test base type property."""
-    from node_graph.property import NodeProperty
 
     p = NodeProperty.new(id)
     p.value = data
@@ -38,7 +39,6 @@ def test_base_type(id, data):
 )
 def test_base_type_validation(id, data):
     """Test base type validation."""
-    from node_graph.property import NodeProperty
 
     p = NodeProperty.new(id)
     try:
@@ -84,7 +84,6 @@ def test_enum_update_type():
 )
 def test_vector(id, size, default, data):
     """Test simple math."""
-    from node_graph.node import Node
 
     ng = NodeGraph(name="test_vector")
     nd = ng.nodes.new(Node)
@@ -92,8 +91,34 @@ def test_vector(id, size, default, data):
     nd.args = ["x"]
     nd.properties.new(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
-    print(nd.properties[0].value)
     assert nd.properties[0].value == data
     # copy
     p1 = nd.properties[0].copy()
     assert p1.value == data
+
+
+@pytest.mark.parametrize(
+    "id, size, default, data",
+    (("node_graph.float_matrix", [2, 2], [0.0, 0.0, 0.0, 0.0], [1.0, 2.0, 3.0, 4.0]),),
+)
+def test_matrix(id, size, default, data):
+    ng = NodeGraph(name="test_vector")
+    nd = ng.nodes.new(Node)
+    nd.executor = {"module": "numpy.sqrt"}
+    nd.args = ["x"]
+    nd.properties.new(id, "x", **{"size": size, "default": default})
+    nd.properties[0].value = data
+    assert nd.properties[0].value == data
+    # copy
+    p1 = nd.properties[0].copy()
+    assert p1.value == data
+
+
+def test_repr():
+    """Test __repr__ method."""
+    ng = NodeGraph(name="test_repr")
+    node = ng.nodes.new("node_graph.test_enum", "node1")
+    assert (
+        repr(node.properties)
+        == 'PropertyCollection(node = "node1", properties = ["t", "function"])'
+    )
