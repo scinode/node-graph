@@ -26,6 +26,8 @@ def test_base_socket_type(id, data):
     # copy
     socket1 = socket.copy()
     assert socket1.property.value == data
+    # set value directly
+    socket1.value = data
 
 
 @pytest.mark.parametrize(
