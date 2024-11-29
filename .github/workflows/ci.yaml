@@ -1,4 +1,4 @@
-name: Test SciNode package
+name: CI
 
 on: [push]
 
