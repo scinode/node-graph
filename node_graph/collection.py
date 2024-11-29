@@ -1,4 +1,3 @@
-import importlib
 from node_graph.utils import get_entries
 from typing import List, Union, Optional, Callable
 import difflib
@@ -65,21 +64,8 @@ class Collection:
         return list_index
 
     def new(self, identifier: str, name: Optional[str] = None) -> object:
-        """Add new item into this collection.
-
-        Args:
-            identifier (str): Class for the new item
-            name (str, optional): name of the new item. Defaults to None.
-
-        Returns:
-            object: A instance of the class.
-        """
-        module = importlib.import_module(self.path)
-        ItemClass = getattr(module, identifier)
-        item = ItemClass(name)
-        setattr(item, self.parent_name, self.parent)
-        self.append(item)
-        return item
+        """Add new item into this collection."""
+        raise NotImplementedError("new method is not implemented.")
 
     def append(self, item: object) -> None:
         """Append item into this collection."""
@@ -192,19 +178,15 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
         if isinstance(identifier, str) and identifier.upper() not in args[0].pool:
             items = difflib.get_close_matches(identifier.upper(), args[0].pool)
             if len(items) == 0:
-                msg = "Identifier: {} is not defined.".format(identifier)
+                msg = f"Identifier: {identifier} is not defined."
             else:
-                msg = "Identifier: {} is not defined. Do you mean {}".format(
-                    identifier, ", ".join(items)
-                )
-            raise Exception(msg)
+                msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
+            raise ValueError(msg)
         if len(args) > 2 and args[2] in args[0].keys():
-            raise Exception(
-                "{} already exist, please choose another name.".format(args[2])
-            )
+            raise ValueError(f"{args[2]} already exists, please choose another name.")
         if kwargs.get("name", None) in args[0].keys():
-            raise Exception(
-                "{} already exist, please choose another name.".format(args[1])
+            raise ValueError(
+                f"{kwargs.get('name')} already exists, please choose another name."
             )
         item = func(*args, **kwargs)
         return item

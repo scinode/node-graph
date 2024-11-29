@@ -80,3 +80,13 @@ def test_socket_match(ng):
         print(e)
     # the link will fails.
     assert len(ng.links) == 0
+
+
+def test_repr():
+    """Test __repr__ method."""
+    ng = NodeGraph(name="test_repr")
+    node = ng.nodes.new("node_graph.test_add", "node1")
+    assert repr(node.inputs) == 'InputCollection(node = "node1", sockets = ["x", "y"])'
+    assert (
+        repr(node.outputs) == 'OutputCollection(node = "node1", sockets = ["result"])'
+    )

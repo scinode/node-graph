@@ -1,5 +1,6 @@
 import pytest
 from node_graph import NodeGraph
+from node_graph.property import NodeProperty
 
 
 @pytest.mark.parametrize(
@@ -15,7 +16,6 @@ from node_graph import NodeGraph
 )
 def test_base_type(id, data):
     """Test base type property."""
-    from node_graph.property import NodeProperty
 
     p = NodeProperty.new(id)
     p.value = data
@@ -97,3 +97,13 @@ def test_vector(id, size, default, data):
     # copy
     p1 = nd.properties[0].copy()
     assert p1.value == data
+
+
+def test_repr():
+    """Test __repr__ method."""
+    ng = NodeGraph(name="test_repr")
+    node = ng.nodes.new("node_graph.test_enum", "node1")
+    assert (
+        repr(node.properties)
+        == 'PropertyCollection(node = "node1", properties = ["t", "function"])'
+    )

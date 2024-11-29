@@ -67,3 +67,33 @@ def test_copy():
     #
     ng.nodes.append(math1)
     assert len(ng.nodes) == 2
+
+
+def test_check_name():
+    """Check name when creating a node."""
+    ng = NodeGraph(name="test_check_name")
+    ng.nodes.new("node_graph.test_add", "add1")
+    # check if it raises an error if the name is already taken
+    try:
+        ng.nodes.new("node_graph.test_add", "add1")
+    except ValueError as e:
+        assert str(e) == "add1 already exists, please choose another name."
+    else:
+        raise AssertionError("Name already exists.")
+
+    try:
+        ng.nodes.new("node_graph.test_ad", "add2")
+    except ValueError as e:
+        assert (
+            "Identifier: node_graph.test_ad is not defined. Did you mean node_graph.test_add"
+            in str(e)
+        )
+    else:
+        raise AssertionError("Name already exists.")
+
+
+def test_repr():
+    """Test __repr__ method."""
+    ng = NodeGraph(name="test_repr")
+    ng.nodes.new("node_graph.test_add", "add1")
+    assert repr(ng.nodes) == 'NodeCollection(parent = "test_repr", nodes = ["add1"])'
