@@ -192,6 +192,7 @@ class MatrixProperty(NodeProperty, SerializePickle):
     """node_graph Matrix property"""
 
     identifier: str = "node_graph.matrix"
+    allowed_item_types = (int, float, type(None))
 
     def __init__(
         self, name, description="", size=[3, 3], default=None, update=None
