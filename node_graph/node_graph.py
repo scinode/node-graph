@@ -166,25 +166,8 @@ class NodeGraph:
         return yaml.dump(data, sort_keys=False)
 
     def update(self) -> None:
-        """Updates the node graph."""
+        """Updates the node graph from the database."""
         raise NotImplementedError("The 'update' method is not implemented.")
-
-    def update_nodes(self, data: Dict[str, Any]) -> None:
-        """Updates the nodes in the node graph.
-
-        Args:
-            data (Dict[str, Any]): The updated node data.
-        """
-        for node in self.nodes:
-            node_data = data.get(node.name)
-            if node_data:
-                node.state = node_data.get("state", node.state)
-                node.counter = node_data.get("counter", node.counter)
-                node.action = node_data.get("action", node.action)
-                node.update()
-            else:
-                # Handle the case where node data is missing
-                pass
 
     @classmethod
     def from_dict(cls, ngdata: Dict[str, Any]) -> "NodeGraph":
@@ -278,23 +261,6 @@ class NodeGraph:
             )
         return ng
 
-    def copy_using_dict(self) -> "NodeGraph":
-        """Copies the node graph using dictionary data.
-
-        First exports the node graph to dictionary data.
-        Then resets the UUID of the node graph and nodes.
-        Finally, rebuilds the node graph from the dictionary data.
-
-        Returns:
-            NodeGraph: The copied node graph.
-        """
-        ngdata: Dict[str, Any] = self.to_dict()
-        ngdata["uuid"] = str(uuid1())
-        for node_data in ngdata["nodes"].values():
-            node_data["uuid"] = str(uuid1())
-        ng: "NodeGraph" = self.from_dict(ngdata)
-        return ng
-
     @classmethod
     def load(cls, uuid: str) -> None:
         """Loads data from the database."""
@@ -315,7 +281,7 @@ class NodeGraph:
         """
         ng: "NodeGraph" = self.__class__(name=name, uuid=None)
         for node_name in node_list:
-            ng.nodes.append(self.nodes[node_name].copy(nodegraph=ng))
+            ng.nodes.append(self.nodes[node_name].copy(parent=ng))
         for link in self.links:
             if (
                 add_ref
@@ -323,7 +289,7 @@ class NodeGraph:
                 and link.to_node.name in ng.nodes.keys()
             ):
                 ng.nodes.append(
-                    self.nodes[link.from_node.name].copy(nodegraph=ng, is_ref=True)
+                    self.nodes[link.from_node.name].copy(parent=ng, is_ref=True)
                 )
             if (
                 link.from_node.name in ng.nodes.keys()
