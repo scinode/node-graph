@@ -1,21 +1,42 @@
-from node_graph.decorator import create_node, create_node_group
+from node_graph.decorator import create_node_group, build_node
+from node_graph.utils import create_node
 from node_graph.decorator import node
 from node_graph import NodeGraph
 
-ndata = {
-    "identifier": "MyNumpyAdd",
-    "properties": [{"identifier": "node_graph.float", "name": "x", "default": 3}],
-    "inputs": [
-        {
-            "identifier": "node_graph.float",
-            "name": "y",
-            "property": {"identifier": "node_graph.float", "default": 10},
-        },
-    ],
-    "outputs": [{"identifier": "node_graph.any", "name": "result"}],
-    "executor": {"module": "numpy.add"},
-}
-MyNumpyAdd = create_node(ndata)
+
+def test_build_node():
+    """Build node from a callable."""
+    ndata = {
+        "executor": {"module": "math.sqrt"},
+    }
+    MyNumpyAdd = build_node(ndata)
+    ng = NodeGraph(name="test_create_node")
+    ng.nodes.new(MyNumpyAdd, "add1")
+    assert len(ng.nodes) == 1
+    "x" in ng.nodes[0].inputs.keys()
+
+
+def test_create_node():
+    """Build node on-the-fly."""
+    ndata = {
+        "identifier": "MyNumpyAdd",
+        "properties": [{"identifier": "node_graph.float", "name": "x", "default": 3}],
+        "inputs": [
+            {
+                "identifier": "node_graph.float",
+                "name": "y",
+                "property": {"identifier": "node_graph.float", "default": 10},
+            },
+        ],
+        "outputs": [{"identifier": "node_graph.any", "name": "result"}],
+        "executor": {"module": "numpy.add"},
+    }
+    MyNumpyAdd = create_node(ndata)
+    ng = NodeGraph(name="test_create_node")
+    ng.nodes.new(MyNumpyAdd, "add1")
+    assert len(ng.nodes) == 1
+    assert ng.nodes[0].properties[0].default == 3
+    assert ng.nodes[0].inputs[0].property.default == 10
 
 
 def test_decorator_parameters() -> None:
@@ -70,16 +91,6 @@ def test_socket(decorated_myadd):
     assert n.inputs["x"].identifier == "node_graph.float"
     assert n.inputs["y"].identifier == "node_graph.float"
     assert n.inputs["t"].property.default == 1
-
-
-def test_create_node():
-    """Build node on-the-fly."""
-
-    ng = NodeGraph(name="test_create_node")
-    ng.nodes.new(MyNumpyAdd, "add1")
-    assert len(ng.nodes) == 1
-    assert ng.nodes[0].properties[0].default == 3
-    assert ng.nodes[0].inputs[0].property.default == 10
 
 
 def test_create_node_group():

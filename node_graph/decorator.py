@@ -76,8 +76,10 @@ def generate_input_sockets(
 
     if type_mapping is None:
         type_mapping = node_graph_type_mapping
-    inputs = inputs or []
-    properties = properties or []
+    if inputs is None:
+        inputs = []
+    if properties is None:
+        properties = []
     args, kwargs, var_args, var_kwargs = inspect_function(func)
     user_defined_input_names = [input["name"] for input in inputs] + [
         property["name"] for property in properties
@@ -324,7 +326,7 @@ def decorator_node_group(
 
 
 def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
-
+    """Build a node from a callable function."""
     ndata.setdefault("metadata", {})
     ndata.setdefault("properties", [])
     ndata.setdefault("inputs", [])
@@ -343,6 +345,7 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
         func, ndata["inputs"], ndata["properties"]
     )
+    ndata["identifier"] = ndata.get("identifier", func.__name__)
     ndata.update(
         {
             "args": args,
