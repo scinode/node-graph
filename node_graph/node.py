@@ -538,11 +538,7 @@ class Node:
         else:
             return self._widget._ipython_display_(*args, **kwargs)
 
-    def to_html(
-        self, output: str = None, show_socket_depth: Optional[int] = None, **kwargs
-    ):
+    def to_html(self, output: str = None, **kwargs):
         """Write a standalone html file to visualize the task."""
-        if show_socket_depth is None:
-            show_socket_depth = self.show_socket_depth
         self._widget.value = self.to_widget_value()
         return self._widget.to_html(output=output, **kwargs)
