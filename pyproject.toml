@@ -31,7 +31,8 @@ dependencies = [
     "pyyaml",
     "colorama",
     "termcolor",
-    "cloudpickle"
+    "cloudpickle",
+    "node-graph-widget"
 ]
 
 [project.urls]

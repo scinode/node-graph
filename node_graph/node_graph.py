@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional, Union
 from node_graph.version import __version__
 import yaml
 from node_graph.utils import yaml_to_dict, create_node
+from node_graph_widget import NodeGraphWidget
 
 
 class NodeGraph:
@@ -67,6 +68,7 @@ class NodeGraph:
         self.group_properties: List[str] = []
         self.group_inputs: List[str] = []
         self.group_outputs: List[str] = []
+        self._widget = NodeGraphWidget(parent=self)
 
     def launch(self) -> None:
         """Launches the node graph."""
@@ -375,5 +377,24 @@ class NodeGraph:
         """
         return NotImplementedError("The 'wait' method is not implemented.")
 
+    def to_widget_value(self) -> dict:
+        from node_graph.utils import nodegaph_to_short_json
+
+        ngdata = nodegaph_to_short_json(self.to_dict())
+        return ngdata
+
     def __repr__(self) -> str:
         return f'NodeGraph(name="{self.name}", uuid="{self.uuid}")'
+
+    def _repr_mimebundle_(self, *args, **kwargs):
+        # if ipywdigets > 8.0.0, use _repr_mimebundle_ instead of _ipython_display_
+        self._widget.value = self.to_widget_value()
+        if hasattr(self._widget, "_repr_mimebundle_"):
+            return self._widget._repr_mimebundle_(*args, **kwargs)
+        else:
+            return self._widget._ipython_display_(*args, **kwargs)
+
+    def to_html(self, output: str = None, **kwargs):
+        """Write a standalone html file to visualize the workgraph."""
+        self._widget.value = self.to_widget_value()
+        return self._widget.to_html(output=output, **kwargs)
