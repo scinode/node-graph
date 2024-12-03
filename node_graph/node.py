@@ -4,7 +4,7 @@ from node_graph.properties import property_pool
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
 from node_graph.socket import NodeSocket
-
+from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
     InputSocketCollection,
@@ -99,6 +99,10 @@ class Node:
         self.create_properties()
         self.create_sockets()
         self.create_ctrl_sockets()
+        self._widget = NodeGraphWidget(
+            settings={"minmap": False},
+            style={"width": "80%", "height": "600px"},
+        )
 
     def create_properties(self) -> None:
         """Create properties for this node.
@@ -509,3 +513,36 @@ class Node:
 
     def save(self) -> None:
         """Modify and save a node to database."""
+
+    def to_widget_value(self):
+
+        tdata = self.to_dict()
+
+        for key in ("properties", "executor", "node_class", "process"):
+            tdata.pop(key, None)
+        for input in tdata["inputs"].values():
+            input.pop("property")
+
+        tdata["label"] = tdata["identifier"]
+
+        tdata["inputs"] = list(tdata["inputs"].values())
+        tdata["outputs"] = list(tdata["outputs"].values())
+        wgdata = {"name": self.name, "nodes": {self.name: tdata}, "links": []}
+        return wgdata
+
+    def _repr_mimebundle_(self, *args: Any, **kwargs: Any) -> any:
+        # if ipywdigets > 8.0.0, use _repr_mimebundle_ instead of _ipython_display_
+        self._widget.value = self.to_widget_value()
+        if hasattr(self._widget, "_repr_mimebundle_"):
+            return self._widget._repr_mimebundle_(*args, **kwargs)
+        else:
+            return self._widget._ipython_display_(*args, **kwargs)
+
+    def to_html(
+        self, output: str = None, show_socket_depth: Optional[int] = None, **kwargs
+    ):
+        """Write a standalone html file to visualize the task."""
+        if show_socket_depth is None:
+            show_socket_depth = self.show_socket_depth
+        self._widget.value = self.to_widget_value()
+        return self._widget.to_html(output=output, **kwargs)

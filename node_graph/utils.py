@@ -1,7 +1,52 @@
-from typing import Dict, Any, Union, Callable
+from typing import Dict, Any, Union, Callable, List
 from importlib.metadata import entry_points
 import sys
 import difflib
+
+
+def nodegaph_to_short_json(
+    ngdata: Dict[str, Union[str, List, Dict]]
+) -> Dict[str, Union[str, Dict]]:
+    """Export a nodegaph to a rete js editor data."""
+    ngdata_short = {
+        "name": ngdata["name"],
+        "uuid": ngdata["uuid"],
+        "state": ngdata["state"],
+        "nodes": {},
+        "links": ngdata["links"],
+    }
+    #
+    for name, node in ngdata["nodes"].items():
+        # Add required inputs to nodes
+        inputs = [
+            {"name": name, "identifier": input["identifier"]}
+            for name, input in node["inputs"].items()
+            if name in node["args"]
+            or (node["identifier"].upper() == "SHELLJOB" and name.startswith("nodes."))
+        ]
+
+        ngdata_short["nodes"][name] = {
+            "label": node["name"],
+            "node_type": node["metadata"]["node_type"].upper(),
+            "inputs": inputs,
+            "properties": {},
+            "outputs": [],
+            "position": node["position"],
+            "children": node.get("children", []),
+        }
+    # Add links to nodes
+    for link in ngdata["links"]:
+        ngdata_short["nodes"][link["to_node"]]["inputs"].append(
+            {
+                "name": link["to_socket"],
+            }
+        )
+        ngdata_short["nodes"][link["from_node"]]["outputs"].append(
+            {
+                "name": link["from_socket"],
+            }
+        )
+    return ngdata_short
 
 
 def get_entries(entry_point_name: str) -> Dict[str, Any]:
