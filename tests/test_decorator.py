@@ -39,6 +39,19 @@ def test_create_node():
     assert ng.nodes[0].inputs[0].property.default == 10
 
 
+def test_decorator_args() -> None:
+    """Test passing parameters to decorators."""
+
+    @node()
+    def test(a, /, b, *, c, **d):
+        return 1
+
+    test1 = test.node()
+    assert set(test1.get_args_data()["args"]) == set(["a"])
+    assert set(test1.get_args_data()["kwargs"]) == set(["b", "c"])
+    assert test1.get_args_data()["var_kwargs"] == "d"
+
+
 def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
@@ -47,7 +60,7 @@ def test_decorator_parameters() -> None:
         properties=[{"name": "d", "default": 3}],
         outputs=[{"name": "sum"}, {"name": "product"}],
     )
-    def test(a, b=1, **kwargs):
+    def test(*x, a, b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
     test1 = test.node()
@@ -56,7 +69,9 @@ def test_decorator_parameters() -> None:
     # user defined the c input manually
     assert "c" in test1.inputs.keys()
     assert "d" in test1.properties.keys()
-    assert set(test1.kwargs) == set(["b", "c", "d"])
+    assert set(test1.get_args_data()["args"]) == set([])
+    assert set(test1.get_args_data()["kwargs"]) == set(["a", "b", "c", "d"])
+    assert test1.get_args_data()["var_args"] == "x"
     assert "sum" in test1.outputs.keys()
     assert "product" in test1.outputs.keys()
 

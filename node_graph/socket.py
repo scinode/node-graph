@@ -36,6 +36,8 @@ class NodeSocket:
         list_index: int = 0,
         uuid: Optional[str] = None,
         link_limit: int = 1,
+        arg_type: Optional[str] = "kwargs",
+        metadata: Optional[dict] = None,
         property_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize an instance of NodeSocket.
@@ -56,6 +58,8 @@ class NodeSocket:
         self.links: List["NodeLink"] = []
         self.property: Optional[NodeProperty] = None
         self.link_limit: int = link_limit
+        self.arg_type: Optional[str] = arg_type
+        self.metadata: Optional[dict] = metadata
         # Conditionally add a property if property_identifier is provided
         if self.property_identifier:
             self.add_property(self.property_identifier, name, **(property_data or {}))
@@ -74,6 +78,8 @@ class NodeSocket:
             "link_limit": self.link_limit,
             "links": [],
             "list_index": self.list_index,
+            "arg_type": self.arg_type,
+            "metadata": self.metadata,
         }
         for link in self.links:
             if self.socket_type == "INPUT":

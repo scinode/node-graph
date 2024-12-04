@@ -296,13 +296,27 @@ class InputSocketCollection(Collection):
 
     @decorator_check_identifier_name
     def new(
-        self, identifier: Union[str, type], name: Optional[str] = None, **kwargs
+        self,
+        identifier: Union[str, type],
+        name: Optional[str] = None,
+        link_limit: int = 1,
+        arg_type: str = "kwargs",
+        metadata: Optional[dict] = None,
+        property_data: Optional[dict] = None,
     ) -> object:
         from node_graph.socket import NodeSocket
 
         ItemClass = get_item_class(identifier, self.pool, NodeSocket)
         list_index = self.get_list_index()
-        item = ItemClass(name, socket_type="INPUT", list_index=list_index, **kwargs)
+        item = ItemClass(
+            name,
+            socket_type="INPUT",
+            list_index=list_index,
+            link_limit=link_limit,
+            arg_type=arg_type,
+            metadata=metadata,
+            property_data=property_data,
+        )
         self.append(item)
         return item
 
@@ -343,11 +357,18 @@ class OutputSocketCollection(Collection):
         super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
-    def new(self, identifier: Union[str, type], name: Optional[str] = None) -> object:
+    def new(
+        self,
+        identifier: Union[str, type],
+        name: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> object:
         from node_graph.socket import NodeSocket
 
         ItemClass = get_item_class(identifier, self.pool, NodeSocket)
-        item = ItemClass(name, socket_type="OUTPUT", list_index=len(self._items))
+        item = ItemClass(
+            name, socket_type="OUTPUT", list_index=len(self._items), metadata=metadata
+        )
         self.append(item)
         return item
 

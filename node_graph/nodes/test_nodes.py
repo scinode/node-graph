@@ -7,11 +7,9 @@ class TestFloat(Node):
     catalog = "Test"
 
     _executor = {
-        "module": "scinode.executors.test",
+        "module": "node_graph.executors.test",
         "name": "test_float",
     }
-
-    kwargs = ["t", "value"]
 
     def create_properties(self):
         self.properties.new("node_graph.int", "t", default=1)
@@ -27,10 +25,9 @@ class TestString(Node):
     catalog = "Test"
 
     _executor = {
-        "module": "scinode.executors.test",
+        "module": "node_graph.executors.test",
         "name": "test_string",
     }
-    kwargs = ["t", "value"]
 
     def create_properties(self):
         self.properties.new("node_graph.int", "t", default=1)
@@ -58,10 +55,9 @@ class TestAdd(Node):
     catalog = "Test"
 
     _executor = {
-        "module": "scinode.executors.test",
+        "module": "node_graph.executors.test",
         "name": "test_add",
     }
-    kwargs = ["t", "x", "y"]
 
     def create_properties(self):
         self.properties.new("node_graph.int", "t", default=1)
@@ -81,10 +77,9 @@ class TestEnum(Node):
     catalog = "Test"
 
     _executor = {
-        "module": "scinode.executors.test",
+        "module": "node_graph.executors.test",
         "name": "test_enum",
     }
-    kwargs = ["t", "function"]
 
     def create_properties(self):
         self.properties.new("node_graph.int", "t", default=1)
@@ -128,15 +123,13 @@ class TestEnumUpdate(Node):
         if self.properties["function"].value in ["add"]:
             self.inputs.new("node_graph.float", "x")
             self.inputs.new("node_graph.float", "y")
-            self.kwargs = ["t", "x", "y"]
         elif self.properties["function"].value in ["sqrt"]:
             self.inputs.new("node_graph.float", "x")
-            self.kwargs = ["t", "x"]
         self.outputs.new("node_graph.any", "result")
 
     def get_executor(self):
         return {
-            "module": "scinode.executors.test",
+            "module": "node_graph.executors.test",
             "name": self.properties["function"].content,
             "type": "function",
         }
