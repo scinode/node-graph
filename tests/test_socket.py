@@ -1,6 +1,20 @@
 import pytest
 import numpy as np
 from node_graph import NodeGraph
+from node_graph.node import Node
+
+
+def test_metadata():
+    ng = NodeGraph(name="test_base_socket_type")
+    n = ng.nodes.new(Node, "test")
+    socket = n.inputs.new(
+        "node_graph.any", "test", arg_type="kwargs", metadata={"dynamic": True}
+    )
+    assert socket.metadata == {"dynamic": True}
+    assert socket.arg_type == "kwargs"
+    data = socket.to_dict()
+    assert data["metadata"] == {"dynamic": True}
+    assert data["arg_type"] == "kwargs"
 
 
 @pytest.mark.parametrize(
@@ -58,7 +72,6 @@ def test_base_socket_type_validation(id, data):
 
 
 def test_general_socket_property():
-    from node_graph.node import Node
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.nodes.new(Node, "test")

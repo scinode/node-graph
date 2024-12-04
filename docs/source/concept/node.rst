@@ -106,7 +106,7 @@ One can define a new node by extend the `Node` class.
       catalog = "Test"
 
       _executor = {
-               "module": "scinode.executors.test",
+               "module": "node_graph.executors.test",
                "name": "test_add",
          }
       kwargs = ["t", "x", "y"]

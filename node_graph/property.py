@@ -18,6 +18,7 @@ class NodeProperty:
         default: Any = None,
         update: Optional[Callable[[], None]] = None,
         list_index: int = 0,
+        arg_type: Optional[str] = "kwargs",
     ) -> None:
         """
         Initialize a NodeProperty.
@@ -34,6 +35,7 @@ class NodeProperty:
         self.list_index: int = list_index
         self.default: Any = default
         self.update: Optional[Callable[[], None]] = update
+        self.arg_type: Optional[str] = arg_type
         self._value: Any = default
 
     def to_dict(self) -> Dict[str, Any]:
@@ -45,6 +47,7 @@ class NodeProperty:
             "default": self.default,
             "metadata": self.get_metadata(),
             "list_index": self.list_index,
+            "arg_type": self.arg_type,
         }
         # Conditionally add serializer/deserializer if they are defined
         if hasattr(self, "get_serialize") and callable(self.get_serialize):

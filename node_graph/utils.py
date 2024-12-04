@@ -244,3 +244,19 @@ def get_item_class(identifier: str, pool: Dict[str, Any], base_class) -> Any:
             f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
         )
     return ItemClass
+
+
+def get_arg_type(input: Any, args_data: dict) -> None:
+    """Get the argument type from the input data."""
+    if input.arg_type == "ARG":
+        args_data["args"].append(input.name)
+    elif input.arg_type == "KWARG":
+        args_data["kwargs"].append(input.name)
+    elif input.arg_type == "VAR_ARGS":
+        if args_data["var_args"] is not None:
+            raise ValueError("Only one VAR_ARGS is allowed")
+        args_data["var_args"] = input.name
+    elif input.arg_type == "VAR_KWARGS":
+        if args_data["var_kwargs"] is not None:
+            raise ValueError("Only one VAR_KWARGS is allowed")
+        args_data["var_kwargs"] = input.name

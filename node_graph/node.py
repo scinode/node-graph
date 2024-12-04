@@ -20,10 +20,6 @@ class Node:
         node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
         list_index (int): Node id inside the node graph.
         parent_uuid (str): UUID of the node graph this node belongs to.
-        args (list): Positional arguments of the executor.
-        kwargs (list): Keyword arguments of the executor.
-        var_args (str): Variable arguments of the executor.
-        var_kwargs (str): Variable keyword arguments of the executor.
         platform (str): Platform that used to create this node.
 
     Examples:
@@ -49,10 +45,6 @@ class Node:
     parent_uuid: str = ""
     platform: str = "node_graph"
     catalog: str = "Node"
-    args: List[Any] = None
-    kwargs: List[Any] = None
-    var_args: Optional[str] = None
-    var_kwargs: Optional[str] = None
     group_properties: List[List[str]] = None
     group_inputs: List[List[str]] = None
     group_outputs: List[List[str]] = None
@@ -255,13 +247,10 @@ class Node:
                 "executor": executor,
                 "position": self.position,
                 "description": self.description,
-                "args": self.args if self.args else [],
-                "kwargs": self.kwargs if self.kwargs else [],
-                "var_args": self.var_args,
-                "var_kwargs": self.var_kwargs,
                 "log": self.log,
                 "hash": "",  # we can only calculate the hash during runtime when all the data is ready
             }
+        data.update(self.get_args_data())
         # to avoid some dict has the same address with others nodes
         # which happens when {} is used as default value
         # we copy the value only
@@ -286,6 +275,22 @@ class Node:
             "module": super().__class__.__module__,
         }
         return metadata
+
+    def get_args_data(self) -> Dict[str, List]:
+        """Get all the args data from properties and inputs."""
+        from node_graph.utils import get_arg_type
+
+        args_data = {
+            "args": [],
+            "kwargs": [],
+            "var_args": None,
+            "var_kwargs": None,
+        }
+        for prop in self.properties:
+            get_arg_type(prop, args_data)
+        for input in self.inputs:
+            get_arg_type(input, args_data)
+        return args_data
 
     def properties_to_dict(self) -> Dict[str, Any]:
         """Export properties to a dictionary.

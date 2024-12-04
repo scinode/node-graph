@@ -63,7 +63,7 @@ Assigning to Existing Node
 
 .. code:: Python
 
-   node1 = ng.nodes.new("ScinodeNode", "pow")
+   node1 = ng.nodes.new(Node, "pow")
    node1.properties.new("node_graph.float", "x")
 
 
