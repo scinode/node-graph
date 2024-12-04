@@ -197,10 +197,13 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 input = inputs[name]
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
+                prop = input.pop("property", None)
                 inp = self.inputs.new(
-                    input.get("identifier", type_mapping["default"]), input["name"]
+                    input.get("identifier", type_mapping["default"]),
+                    name=input["name"],
+                    arg_type=input.get("arg_type", "kwargs"),
+                    metadata=input.get("metadata", {}),
                 )
-                prop = input.get("property", None)
                 if prop is not None:
                     prop["name"] = input["name"]
                     # identifer, name, kwargs
@@ -214,12 +217,10 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 output = outputs[name]
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
-                identifier = output.pop("identifier", type_mapping["default"])
-                self.outputs.new(identifier, name=output["name"])
-            self.args = ndata.get("args", [])
-            self.kwargs = ndata.get("kwargs", [])
-            self.var_args = ndata.get("var_args", None)
-            self.var_kwargs = ndata.get("var_kwargs", None)
+                identifier = output.get("identifier", type_mapping["default"])
+                self.outputs.new(
+                    identifier, name=output["name"], metadata=output.get("metadata", {})
+                )
 
         def get_metadata(self):
             metadata = super().get_metadata()
@@ -248,15 +249,15 @@ def get_item_class(identifier: str, pool: Dict[str, Any], base_class) -> Any:
 
 def get_arg_type(input: Any, args_data: dict) -> None:
     """Get the argument type from the input data."""
-    if input.arg_type == "ARG":
+    if input.arg_type.upper() == "ARGS":
         args_data["args"].append(input.name)
-    elif input.arg_type == "KWARG":
+    elif input.arg_type.upper() == "KWARGS":
         args_data["kwargs"].append(input.name)
-    elif input.arg_type == "VAR_ARGS":
+    elif input.arg_type.upper() == "VAR_ARGS":
         if args_data["var_args"] is not None:
             raise ValueError("Only one VAR_ARGS is allowed")
         args_data["var_args"] = input.name
-    elif input.arg_type == "VAR_KWARGS":
+    elif input.arg_type.upper() == "VAR_KWARGS":
         if args_data["var_kwargs"] is not None:
             raise ValueError("Only one VAR_KWARGS is allowed")
         args_data["var_kwargs"] = input.name

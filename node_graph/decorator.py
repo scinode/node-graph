@@ -42,14 +42,19 @@ def inspect_function(
         if parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
             arg: List[Union[str, Any]] = [name, parameter.annotation]
             args.append(arg)
-        elif parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
-            if parameter.default is not inspect.Parameter.empty:
-                kwargs[name] = {
-                    "type": parameter.annotation,
-                    "default": parameter.default,
-                }
-            else:
-                args.append([name, parameter.annotation])
+        elif parameter.kind in [
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ]:
+            default_value = (
+                parameter.default
+                if parameter.default is not inspect.Parameter.empty
+                else None
+            )
+            kwargs[name] = {
+                "type": parameter.annotation,
+                "default": default_value,
+            }
         elif parameter.kind == inspect.Parameter.VAR_POSITIONAL:
             var_args = name
         elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
@@ -63,13 +68,7 @@ def generate_input_sockets(
     inputs: Optional[List[Dict[str, Any]]] = None,
     properties: Optional[List[Dict[str, Any]]] = None,
     type_mapping: Optional[Dict[type, str]] = None,
-) -> Tuple[
-    List[str],
-    List[str],
-    Optional[str],
-    Optional[str],
-    List[Dict[str, Union[str, Dict[str, Union[str, Any]]]]],
-]:
+) -> List[Dict[str, Union[str, Dict[str, Union[str, Any]]]]]:
     """Generate input sockets from a function.
     If the input sockets is not given, then the function
     will be used to update the input sockets."""
@@ -90,6 +89,7 @@ def generate_input_sockets(
                 {
                     "identifier": type_mapping.get(arg[1], type_mapping["default"]),
                     "name": arg[0],
+                    "arg_type": "args",
                 }
             )
     for name, kwarg in kwargs.items():
@@ -97,6 +97,7 @@ def generate_input_sockets(
             input = {
                 "identifier": type_mapping.get(kwarg["type"], type_mapping["default"]),
                 "name": name,
+                "arg_type": "kwargs",
             }
             if kwarg["default"] is not None:
                 # prop: [identifier, kwargs]
@@ -119,12 +120,14 @@ def generate_input_sockets(
                         "Socket with var_args must have namespace identifier"
                     )
                 input["identifier"] = type_mapping["namespace"]
+                input["arg_type"] = "var_args"
                 has_var_args = True
         if not has_var_args:
             inputs.append(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_args,
+                    "arg_type": "var_args",
                     "link_limit": 1e6,
                 }
             )
@@ -141,27 +144,18 @@ def generate_input_sockets(
                         "Socket with var_args must have namespace identifier"
                     )
                 input["identifier"] = type_mapping["namespace"]
+                input["arg_type"] = "var_kwargs"
                 has_var_kwargs = True
         if not has_var_kwargs:
             inputs.append(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_kwargs,
+                    "arg_type": "var_kwargs",
                     "link_limit": 1e6,
                 }
             )
-    #
-    arg_names = [arg[0] for arg in args]
-    kwarg_names = [name for name in kwargs.keys()]
-    # If the function has var_kwargs, and the user define input names does not
-    # included in the args and kwargs, then add the user defined input names
-    if var_kwargs is not None:
-        for key in user_defined_input_names:
-            if key not in args and key not in kwargs:
-                if key == var_kwargs or key == var_args:
-                    continue
-                kwarg_names.append(key)
-    return arg_names, kwarg_names, var_args, var_kwargs, inputs
+    return inputs
 
 
 def create_node_group(ngdata: Dict[str, Any]) -> Callable[..., Any]:
@@ -229,9 +223,7 @@ def decorator_node(
         }
         #
         # Get the args and kwargs of the function
-        args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
-            func, inputs, properties
-        )
+        node_inputs = generate_input_sockets(func, inputs, properties)
         ndata = {
             "identifier": identifier,
             "metadata": {
@@ -239,12 +231,8 @@ def decorator_node(
                 "catalog": catalog,
                 "node_class": {"module": "node_graph.node", "name": "Node"},
             },
-            "args": args,
-            "kwargs": kwargs,
-            "var_args": var_args,
-            "var_kwargs": var_kwargs,
             "properties": properties,
-            "inputs": _inputs,
+            "inputs": node_inputs,
             "outputs": outputs,
             "executor": executor,
         }
@@ -291,10 +279,8 @@ def decorator_node_group(
             "type": executor_type,
             "is_pickle": True,
         }
-        # Get the args and kwargs of the function
-        args, kwargs, var_args, var_kwargs, node_inputs = generate_input_sockets(
-            func, inputs, properties
-        )
+        # Get the inputs of the function
+        node_inputs = generate_input_sockets(func, inputs, properties)
         node_outputs = [
             {"identifier": "node_graph.any", "name": output[1]} for output in outputs
         ]
@@ -302,10 +288,6 @@ def decorator_node_group(
         node_type = "nodegroup"
         ndata = {
             "identifier": identifier,
-            "args": args,
-            "kwargs": kwargs,
-            "var_args": var_args,
-            "var_kwargs": var_kwargs,
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
@@ -341,19 +323,9 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         executor["module"], executor["name"] = executor["module"].split(".", 1)
     module = importlib.import_module("{}".format(executor["module"]))
     func = getattr(module, executor["name"])
-    # Get the args and kwargs of the function
-    args, kwargs, var_args, var_kwargs, _inputs = generate_input_sockets(
-        func, ndata["inputs"], ndata["properties"]
-    )
+    # Get the inputs of the function
+    generate_input_sockets(func, ndata["inputs"], ndata["properties"])
     ndata["identifier"] = ndata.get("identifier", func.__name__)
-    ndata.update(
-        {
-            "args": args,
-            "kwargs": kwargs,
-            "var_args": var_args,
-            "var_kwargs": var_kwargs,
-        }
-    )
     node = create_node(ndata)
     return node
 

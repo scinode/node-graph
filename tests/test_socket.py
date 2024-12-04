@@ -8,10 +8,17 @@ def test_metadata():
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.nodes.new(Node, "test")
     socket = n.inputs.new(
-        "node_graph.any", "test", arg_type="kwargs", metadata={"dynamic": True}
+        "node_graph.any",
+        "test",
+        arg_type="kwargs",
+        metadata={"dynamic": True},
+        link_limit=100000,
+        property_data={"default": 1},
     )
     assert socket.metadata == {"dynamic": True}
     assert socket.arg_type == "kwargs"
+    assert socket.link_limit == 100000
+    assert socket.property.default == 1
     data = socket.to_dict()
     assert data["metadata"] == {"dynamic": True}
     assert data["arg_type"] == "kwargs"
