@@ -46,15 +46,12 @@ def inspect_function(
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
             inspect.Parameter.KEYWORD_ONLY,
         ]:
-            default_value = (
-                parameter.default
-                if parameter.default is not inspect.Parameter.empty
-                else None
-            )
-            kwargs[name] = {
-                "type": parameter.annotation,
-                "default": default_value,
-            }
+            kwargs[name] = {"type": parameter.annotation}
+            if parameter.default is not inspect.Parameter.empty:
+                kwargs[name]["default"] = parameter.default
+                kwargs[name]["has_default"] = True
+            else:
+                kwargs[name]["has_default"] = False
         elif parameter.kind == inspect.Parameter.VAR_POSITIONAL:
             var_args = name
         elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
@@ -94,17 +91,17 @@ def generate_input_sockets(
             )
     for name, kwarg in kwargs.items():
         if name not in user_defined_input_names:
+            identifier = type_mapping.get(kwarg["type"], type_mapping["default"])
             input = {
-                "identifier": type_mapping.get(kwarg["type"], type_mapping["default"]),
+                "identifier": identifier,
                 "name": name,
                 "arg_type": "kwargs",
+                "metadata": {"required": True},
+                "property_data": {"identifier": identifier},
             }
-            if kwarg["default"] is not None:
-                # prop: [identifier, kwargs]
-                input["property"] = {
-                    "identifier": input["identifier"],
-                    "default": kwarg["default"],
-                }
+            if kwarg.get("has_default", False):
+                input["property_data"]["default"] = kwarg["default"]
+                input["metadata"]["required"] = False
             inputs.append(input)
     # if var_args in input_names, set the link_limit to 1e6 and the identifier to namespace
     if var_args is not None:
