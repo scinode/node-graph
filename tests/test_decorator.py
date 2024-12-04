@@ -25,7 +25,7 @@ def test_create_node():
             {
                 "identifier": "node_graph.float",
                 "name": "y",
-                "property": {"identifier": "node_graph.float", "default": 10},
+                "property_data": {"identifier": "node_graph.float", "default": 10},
             },
         ],
         "outputs": [{"identifier": "node_graph.any", "name": "result"}],
@@ -43,13 +43,18 @@ def test_decorator_args() -> None:
     """Test passing parameters to decorators."""
 
     @node()
-    def test(a, /, b, *, c, **d):
+    def test(a, /, b, *, c, d=1, **e):
         return 1
 
     test1 = test.node()
+    assert test1.inputs["e"].link_limit > 1
+    assert test1.inputs["e"].identifier == "node_graph.namespace"
+    assert test1.inputs["c"].metadata["required"] is True
+    assert test1.inputs["d"].metadata["required"] is False
+    assert test1.inputs["d"].property.default == 1
     assert set(test1.get_args_data()["args"]) == set(["a"])
-    assert set(test1.get_args_data()["kwargs"]) == set(["b", "c"])
-    assert test1.get_args_data()["var_kwargs"] == "d"
+    assert set(test1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
+    assert test1.get_args_data()["var_kwargs"] == "e"
 
 
 def test_decorator_parameters() -> None:

@@ -392,6 +392,8 @@ class Node:
         for name, input in data["inputs"].items():
             if input.get("property", None):
                 self.inputs[name].property.value = input["property"]["value"]
+                if input["property"].get("default", None):
+                    self.inputs[name].property.default = input["property"]["default"]
         # print("inputs: ", data.get("inputs", None))
         for name, input in data.get("inputs", {}).items():
             self.inputs[name].uuid = input.get("uuid", None)

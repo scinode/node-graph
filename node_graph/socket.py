@@ -62,6 +62,8 @@ class NodeSocket:
         self.metadata: Optional[dict] = metadata
         # Conditionally add a property if property_identifier is provided
         if self.property_identifier:
+            property_data = property_data or {}
+            property_data.pop("identifier", None)
             self.add_property(self.property_identifier, name, **(property_data or {}))
 
     @property

@@ -197,22 +197,15 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 input = inputs[name]
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
-                prop = input.pop("property", None)
-                inp = self.inputs.new(
+                property_data = input.pop("property_data", None)
+                self.inputs.new(
                     input.get("identifier", type_mapping["default"]),
                     name=input["name"],
                     arg_type=input.get("arg_type", "kwargs"),
                     metadata=input.get("metadata", {}),
+                    link_limit=input.get("link_limit", 1),
+                    property_data=property_data,
                 )
-                if prop is not None:
-                    prop["name"] = input["name"]
-                    # identifer, name, kwargs
-                    inp.add_property(
-                        identifier=prop["identifier"],
-                        name=prop["name"],
-                        default=prop.get("default", None),
-                    )
-                inp.link_limit = input.get("link_limit", 1)
             for name in ndata["sorted_outputs_names"]:
                 output = outputs[name]
                 if isinstance(output, str):
