@@ -344,8 +344,8 @@ class Node:
         if executor is None:
             return executor
         executor.setdefault("type", "function")
-        executor.setdefault("is_pickle", False)
-        if not executor["is_pickle"] and "name" not in executor:
+        executor.setdefault("use_module_path", True)
+        if executor["use_module_path"] and "name" not in executor:
             executor["name"] = executor["module"].split(".")[-1]
             executor["module"] = executor["module"][0 : -(len(executor["name"]) + 1)]
         return executor

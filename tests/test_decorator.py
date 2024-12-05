@@ -11,7 +11,8 @@ def test_build_node():
     }
     MyNumpyAdd = build_node(ndata)
     ng = NodeGraph(name="test_create_node")
-    ng.nodes.new(MyNumpyAdd, "add1")
+    task1 = ng.nodes.new(MyNumpyAdd, "add1")
+    assert task1.to_dict()["executor"]["use_module_path"] is True
     assert len(ng.nodes) == 1
     "x" in ng.nodes[0].inputs.keys()
 
@@ -46,15 +47,17 @@ def test_decorator_args() -> None:
     def test(a, /, b, *, c, d=1, **e):
         return 1
 
-    test1 = test.node()
-    assert test1.inputs["e"].link_limit > 1
-    assert test1.inputs["e"].identifier == "node_graph.namespace"
-    assert test1.inputs["c"].metadata["required"] is True
-    assert test1.inputs["d"].metadata["required"] is False
-    assert test1.inputs["d"].property.default == 1
-    assert set(test1.get_args_data()["args"]) == set(["a"])
-    assert set(test1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
-    assert test1.get_args_data()["var_kwargs"] == "e"
+    task1 = test.node()
+    assert task1.get_executor()["use_module_path"] is False
+    assert task1.get_executor()["callable"] == test
+    assert task1.inputs["e"].link_limit > 1
+    assert task1.inputs["e"].identifier == "node_graph.namespace"
+    assert task1.inputs["c"].metadata["required"] is True
+    assert task1.inputs["d"].metadata["required"] is False
+    assert task1.inputs["d"].property.default == 1
+    assert set(task1.get_args_data()["args"]) == set(["a"])
+    assert set(task1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
+    assert task1.get_args_data()["var_kwargs"] == "e"
 
 
 def test_decorator_parameters() -> None:

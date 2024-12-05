@@ -1,6 +1,5 @@
 from typing import Any, List, Dict, Tuple, Union, Optional, Callable
 import inspect
-import cloudpickle as pickle
 import importlib
 from node_graph.node import Node
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
@@ -212,11 +211,10 @@ def decorator_node(
         if identifier is None:
             identifier = func.__name__
 
-        # use cloudpickle to serialize function
         executor = {
-            "executor": pickle.dumps(func),
+            "callable": func,
             "type": executor_type,
-            "is_pickle": True,
+            "use_module_path": False,
         }
         #
         # Get the args and kwargs of the function
@@ -269,12 +267,11 @@ def decorator_node_group(
 
         if identifier is None:
             identifier = func.__name__
-        # use cloudpickle to serialize function
         func.identifier = identifier
         executor = {
-            "executor": pickle.dumps(func),
+            "callable": func,
             "type": executor_type,
-            "is_pickle": True,
+            "use_module_path": False,
         }
         # Get the inputs of the function
         node_inputs = generate_input_sockets(func, inputs, properties)

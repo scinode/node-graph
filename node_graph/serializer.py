@@ -1,6 +1,6 @@
 from typing import Any, Dict
 import json
-import pickle
+import cloudpickle as pickle
 
 
 class SerializeNone:
