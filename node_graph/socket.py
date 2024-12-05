@@ -59,7 +59,7 @@ class NodeSocket:
         self.property: Optional[NodeProperty] = None
         self.link_limit: int = link_limit
         self.arg_type: Optional[str] = arg_type
-        self.metadata: Optional[dict] = metadata
+        self.metadata: Optional[dict] = metadata or {}
         # Conditionally add a property if property_identifier is provided
         if self.property_identifier:
             property_data = property_data or {}
