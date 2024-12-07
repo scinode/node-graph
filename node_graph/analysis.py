@@ -57,7 +57,7 @@ class NodeGraphAnalysis:
         """build inputs and outputs for each node"""
         # inputs
         inputs: Dict[str, Dict[str, List[str]]] = {
-            name: {} for name in self.nodes.keys()
+            name: {} for name in self.get_node_names()
         }
         for link in self.links:
             if link["to_socket"] not in inputs[link["to_node"]]:
@@ -67,10 +67,10 @@ class NodeGraphAnalysis:
         self.inputs = inputs
         # ctrl_inputs
         ctrl_inputs: Dict[str, Dict[str, List[str]]] = {
-            name: {} for name in self.nodes.keys()
+            name: {} for name in self.get_node_names()
         }
         ctrl_input_links: Dict[str, Dict[str, List[int]]] = {
-            name: {} for name in self.nodes.keys()
+            name: {} for name in self.get_node_names()
         }
         for i, link in enumerate(self.ctrl_links):
             if link["to_socket"] not in ctrl_inputs[link["to_node"]]:
@@ -85,7 +85,7 @@ class NodeGraphAnalysis:
         self.ctrl_input_links = ctrl_input_links
         # outputs
         outputs: Dict[str, Dict[str, List[str]]] = {
-            name: {} for name in self.nodes.keys()
+            name: {} for name in self.get_node_names()
         }
         for link in self.links:
             if link["from_socket"] not in outputs[link["from_node"]]:
@@ -95,10 +95,10 @@ class NodeGraphAnalysis:
         self.outputs = outputs
         # ctrl_outputs
         ctrl_outputs: Dict[str, Dict[str, List[str]]] = {
-            name: {} for name in self.nodes.keys()
+            name: {} for name in self.get_node_names()
         }
         ctrl_output_links: Dict[str, Dict[str, List[int]]] = {
-            name: {} for name in self.nodes.keys()
+            name: {} for name in self.get_node_names()
         }
         for i, link in enumerate(self.ctrl_links):
             if link["from_socket"] not in ctrl_outputs[link["from_node"]]:
@@ -119,7 +119,7 @@ class NodeGraphAnalysis:
         for name, node in self.nodes.items():
             node["index"] = i
             i += 1
-            ordered_nodes.append(name)
+            ordered_append_node(name)
         self.ordered_nodes = ordered_nodes
 
 

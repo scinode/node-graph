@@ -52,7 +52,7 @@ def test_enum_type():
     """Test simple math."""
 
     ng = NodeGraph(name="test_enum_type")
-    nd = ng.nodes.new("node_graph.test_enum")
+    nd = ng.add_node("node_graph.test_enum")
     assert nd.properties["function"].content == "test_add"
     nd.properties["function"].value = "sqrt"
     assert nd.properties["function"].content == "test_sqrt"
@@ -62,7 +62,7 @@ def test_enum_update_type():
     """Test simple math."""
 
     ng = NodeGraph(name="test_enum_update_type")
-    nd = ng.nodes.new("node_graph.test_enum_update")
+    nd = ng.add_node("node_graph.test_enum_update")
     assert nd.properties["function"].content == "test_add"
     assert len(nd.inputs) == 2
     nd.properties["function"].value = "sqrt"
@@ -86,10 +86,10 @@ def test_vector(id, size, default, data):
     """Test simple math."""
 
     ng = NodeGraph(name="test_vector")
-    nd = ng.nodes.new(Node)
+    nd = ng.add_node(Node)
     nd.executor = {"module": "numpy.sqrt"}
     nd.args = ["x"]
-    nd.properties.new(id, "x", **{"size": size, "default": default})
+    nd.add_property(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
     assert nd.properties[0].value == data
     # copy
@@ -103,10 +103,10 @@ def test_vector(id, size, default, data):
 )
 def test_matrix(id, size, default, data):
     ng = NodeGraph(name="test_vector")
-    nd = ng.nodes.new(Node)
+    nd = ng.add_node(Node)
     nd.executor = {"module": "numpy.sqrt"}
     nd.args = ["x"]
-    nd.properties.new(id, "x", **{"size": size, "default": default})
+    nd.add_property(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
     assert nd.properties[0].value == data
     # copy
@@ -117,7 +117,7 @@ def test_matrix(id, size, default, data):
 def test_repr():
     """Test __repr__ method."""
     ng = NodeGraph(name="test_repr")
-    node = ng.nodes.new("node_graph.test_enum", "node1")
+    node = ng.add_node("node_graph.test_enum", "node1")
     assert (
         repr(node.properties)
         == 'PropertyCollection(node = "node1", properties = ["t", "function"])'

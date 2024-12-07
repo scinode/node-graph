@@ -10,19 +10,19 @@ def test_base_collection():
     node1 = Node(name="node1")
     node2 = Node(name="node2")
     # apend
-    coll.append(node1)
-    coll.append(node2)
+    coll._append(node1)
+    coll._append(node2)
     assert len(coll) == 2
     assert node1.parent == ng
     # copy
-    coll1 = coll.copy()
+    coll1 = coll._copy()
     assert len(coll1) == 2
     # delete
-    coll.delete(node1.name)
+    coll._delete(node1.name)
     assert len(coll) == 1
     # get
-    assert coll.get("node2") == node2
+    assert coll._get("node2") == node2
     # get by uuid
-    assert coll.get_by_uuid(node2.uuid) == node2
+    assert coll._get_by_uuid(node2.uuid) == node2
     # __repr__
     assert repr(coll) == "Collection()\n"

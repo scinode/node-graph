@@ -11,10 +11,10 @@ def test_build_node():
     }
     MyNumpyAdd = build_node(ndata)
     ng = NodeGraph(name="test_create_node")
-    task1 = ng.nodes.new(MyNumpyAdd, "add1")
+    task1 = ng.add_node(MyNumpyAdd, "add1")
     assert task1.to_dict()["executor"]["use_module_path"] is True
     assert len(ng.nodes) == 1
-    "x" in ng.nodes[0].inputs.keys()
+    "x" in ng.nodes[0].get_input_names()
 
 
 def test_create_node():
@@ -34,7 +34,7 @@ def test_create_node():
     }
     MyNumpyAdd = create_node(ndata)
     ng = NodeGraph(name="test_create_node")
-    ng.nodes.new(MyNumpyAdd, "add1")
+    ng.add_node(MyNumpyAdd, "add1")
     assert len(ng.nodes) == 1
     assert ng.nodes[0].properties[0].default == 3
     assert ng.nodes[0].inputs[0].property.default == 10
@@ -75,22 +75,22 @@ def test_decorator_parameters() -> None:
     assert test1.inputs["kwargs"].link_limit == 1e6
     assert test1.inputs["kwargs"].identifier == "node_graph.namespace"
     # user defined the c input manually
-    assert "c" in test1.inputs.keys()
-    assert "d" in test1.properties.keys()
+    assert "c" in test1.get_input_names()
+    assert "d" in test1.get_property_names()
     assert set(test1.get_args_data()["args"]) == set([])
     assert set(test1.get_args_data()["kwargs"]) == set(["a", "b", "c", "d"])
     assert test1.get_args_data()["var_args"] == "x"
-    assert "sum" in test1.outputs.keys()
-    assert "product" in test1.outputs.keys()
+    assert "sum" in test1.get_output_names()
+    assert "product" in test1.get_output_names()
 
 
 def create_test_node_group():
     ng = NodeGraph()
-    add1 = ng.nodes.new("node_graph.test_add", "add1")
-    add2 = ng.nodes.new("node_graph.test_add", "add2")
-    add3 = ng.nodes.new("node_graph.test_add", "add3")
-    ng.links.new(add1.outputs[0], add3.inputs[0])
-    ng.links.new(add2.outputs[0], add3.inputs[1])
+    add1 = ng.add_node("node_graph.test_add", "add1")
+    add2 = ng.add_node("node_graph.test_add", "add2")
+    add3 = ng.add_node("node_graph.test_add", "add3")
+    ng.add_link(add1.outputs[0], add3.inputs[0])
+    ng.add_link(add2.outputs[0], add3.inputs[1])
     ng.group_properties = [
         ("add1.t", "t1"),
         ("add2.t", "t2"),
@@ -120,7 +120,7 @@ def test_create_node_group():
     """Build node on-the-fly."""
 
     ng = NodeGraph(name="test_create_node_group")
-    ng.nodes.new(MyTestAddGroup, "add1")
+    ng.add_node(MyTestAddGroup, "add1")
     assert len(ng.nodes) == 1
 
 
@@ -134,16 +134,16 @@ def test_decorator_node(ng_decorator):
 
 def test_decorator_node_group(decorated_myadd, decorated_myadd_group):
     ng = NodeGraph(name="test_decorator_node_group")
-    addgroup1 = ng.nodes.new(decorated_myadd_group, "addgroup1", y=9)
-    add1 = ng.nodes.new(decorated_myadd, "add1", x=8)
-    ng.links.new(add1.outputs["result"], addgroup1.inputs[0])
+    addgroup1 = ng.add_node(decorated_myadd_group, "addgroup1", y=9)
+    add1 = ng.add_node(decorated_myadd, "add1", x=8)
+    ng.add_link(add1.outputs["result"], addgroup1.inputs[0])
     assert len(ng.nodes) == 2
 
 
 def test_decorator_node_in_decorator_node(decorated_myadd, node_with_decorated_node):
 
     ng = NodeGraph(name="test_decorator_node_in_decorator_node")
-    add1 = ng.nodes.new(decorated_myadd, "add1", x=8)
-    add2 = ng.nodes.new(node_with_decorated_node, y=9)
-    ng.links.new(add1.outputs["result"], add2.inputs[0])
+    add1 = ng.add_node(decorated_myadd, "add1", x=8)
+    add2 = ng.add_node(node_with_decorated_node, y=9)
+    ng.add_link(add1.outputs["result"], add2.inputs[0])
     assert len(ng.nodes) == 2

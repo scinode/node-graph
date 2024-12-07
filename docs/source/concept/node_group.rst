@@ -37,13 +37,13 @@ One can define a node group using the `node.group` decorator. In the definition 
     def myaddgroup(x, y):
         from node_graph import NodeGraph
         ng = NodeGraph(name="NodeGroup")
-        sqrt1 = ng.nodes.new("TestSqrt", "sqrt1")
+        sqrt1 = ng.add_node("TestSqrt", "sqrt1")
         sqrt1.set({"t":2, "x": x})
-        sqrt2 = ng.nodes.new("TestSqrt", "sqrt2")
+        sqrt2 = ng.add_node("TestSqrt", "sqrt2")
         sqrt2.set({"x": y})
-        add1 = ng.nodes.new("node_graph.test_add", "add1")
-        ng.links.new(sqrt1.outputs[0], add1.inputs[0])
-        ng.links.new(sqrt2.outputs[0], add1.inputs[1])
+        add1 = ng.add_node("node_graph.test_add", "add1")
+        ng.add_link(sqrt1.outputs[0], add1.inputs[0])
+        ng.add_link(sqrt2.outputs[0], add1.inputs[1])
         return ng
 
 
@@ -65,11 +65,11 @@ One can define a nodegroup use a Node class, and specify the `node_type` to `GRO
             ng = NodeGraph(name=self.name, uuid=self.uuid,
                         parent_node=self.uuid,
                         daemon_name=self.daemon_name)
-            sqrt1 = ng.nodes.new("TestSqrt", "sqrt1")
-            sqrt2 = ng.nodes.new("TestSqrt", "sqrt2")
-            add1 = ng.nodes.new("node_graph.test_add", "add1")
-            ng.links.new(sqrt1.outputs[0], add1.inputs[0])
-            ng.links.new(sqrt2.outputs[0], add1.inputs[1])
+            sqrt1 = ng.add_node("TestSqrt", "sqrt1")
+            sqrt2 = ng.add_node("TestSqrt", "sqrt2")
+            add1 = ng.add_node("node_graph.test_add", "add1")
+            ng.add_link(sqrt1.outputs[0], add1.inputs[0])
+            ng.add_link(sqrt2.outputs[0], add1.inputs[1])
             ng.group_properties = [("sqrt1", "t", "t1"),
                                     ("add1", "t", "t2"),]
             ng.group_inputs = [("sqrt1", "x", "x"),

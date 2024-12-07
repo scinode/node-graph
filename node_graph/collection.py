@@ -47,15 +47,18 @@ class Collection:
         if isinstance(index, int):
             return self._items[index]
         elif isinstance(index, str):
-            return self.get(index)
+            return self._get(index)
 
     def __getattr__(self, name):
         if self._items:
-            return self.get(name)
+            return self._get(name)
         else:
             raise AttributeError(f"{name} not available in an empty collection")
 
-    def get_list_index(self) -> int:
+    def __dir__(self):
+        return sorted(set(self._keys()))
+
+    def _get_list_index(self) -> int:
         """Get the inner id for the next item.
 
         list_index is the index of the item in the collection.
@@ -63,29 +66,29 @@ class Collection:
         list_index = max([0] + [item.list_index for item in self._items]) + 1
         return list_index
 
-    def new(self, identifier: str, name: Optional[str] = None) -> object:
+    def _new(self, identifier: str, name: Optional[str] = None) -> object:
         """Add new item into this collection."""
         raise NotImplementedError("new method is not implemented.")
 
-    def append(self, item: object) -> None:
+    def _append(self, item: object) -> None:
         """Append item into this collection."""
-        if item.name in self.keys():
+        if item.name in self._keys():
             raise Exception(f"{item.name} already exist, please choose another name.")
-        item.list_index = self.get_list_index()
+        item.list_index = self._get_list_index()
         setattr(item, "parent", self.parent)
         self._items.append(item)
 
-    def extend(self, items: List[object]) -> None:
+    def _extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
-        conflict_names = set(self.keys()).intersection(new_names)
+        conflict_names = set(self._keys()).intersection(new_names)
         if len(conflict_names) > 0:
             raise Exception(
                 f"{conflict_names} already exist, please choose another names."
             )
         for item in items:
-            self.append(item)
+            self._append(item)
 
-    def get(self, name: str) -> object:
+    def _get(self, name: str) -> object:
         """Find item by name
 
         Args:
@@ -99,10 +102,10 @@ class Collection:
                 return item
         raise Exception(
             f""""{name}" is not in the {self.__class__.__name__}.
-Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
+Acceptable names are {self._keys()}. This collection belongs to {self.parent}."""
         )
 
-    def get_by_uuid(self, uuid: str) -> Optional[object]:
+    def _get_by_uuid(self, uuid: str) -> Optional[object]:
         """Find item by uuid
 
         Args:
@@ -116,20 +119,20 @@ Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
                 return item
         return None
 
-    def keys(self) -> List[str]:
+    def _keys(self) -> List[str]:
         keys = []
         for item in self._items:
             keys.append(item.name)
         return keys
 
-    def clear(self) -> None:
+    def _clear(self) -> None:
         """Remove all items from this collection."""
         self._items = []
 
     def __delitem__(self, index: Union[int, List[int]]) -> None:
         del self._items[index]
 
-    def delete(self, name: str) -> None:
+    def _delete(self, name: str) -> None:
         """Delete item by name
 
         Args:
@@ -138,7 +141,7 @@ Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
         for index, item in enumerate(self._items):
             if item.name == name:
                 del self._items[index]
-                self.execute_post_deletion_hooks(item)
+                self._execute_post_deletion_hooks(item)
                 return
 
     def __len__(self) -> int:
@@ -149,17 +152,17 @@ Acceptable names are {self.keys()}. This collection belongs to {self.parent}."""
         s += "Collection()\n"
         return s
 
-    def copy(self, parent: Optional[object] = None) -> object:
+    def _copy(self, parent: Optional[object] = None) -> object:
         coll = self.__class__(parent=parent)
         coll._items = [item.copy() for item in self._items]
         return coll
 
-    def execute_post_creation_hooks(self, item: object) -> None:
+    def _execute_post_creation_hooks(self, item: object) -> None:
         """Execute all functions in post_creation_hooks with the given item."""
         for func in self.post_creation_hooks:
             func(self, item)
 
-    def execute_post_deletion_hooks(self, item: object) -> None:
+    def _execute_post_deletion_hooks(self, item: object) -> None:
         """Execute all functions in post_deletion_hooks with the given item."""
         for func in self.post_deletion_hooks:
             func(self, item)
@@ -182,9 +185,9 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
             else:
                 msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
             raise ValueError(msg)
-        if len(args) > 2 and args[2] in args[0].keys():
+        if len(args) > 2 and args[2] in args[0]._keys():
             raise ValueError(f"{args[2]} already exists, please choose another name.")
-        if kwargs.get("name", None) in args[0].keys():
+        if kwargs.get("name", None) in args[0]._keys():
             raise ValueError(
                 f"{kwargs.get('name')} already exists, please choose another name."
             )
@@ -214,7 +217,7 @@ class NodeCollection(Collection):
         )
 
     @decorator_check_identifier_name
-    def new(
+    def _new(
         self,
         identifier: Union[str, type],
         name: Optional[str] = None,
@@ -223,18 +226,18 @@ class NodeCollection(Collection):
     ) -> object:
         from node_graph.node import Node
 
-        list_index = self.get_list_index()
+        list_index = self._get_list_index()
         ItemClass = get_item_class(identifier, self.pool, Node)
         item = ItemClass(
             list_index=list_index, name=name, uuid=uuid, parent=self.parent
         )
-        self.append(item)
+        self._append(item)
         item.set(kwargs)
         # Execute post creation hooks
-        self.execute_post_creation_hooks(item)
+        self._execute_post_creation_hooks(item)
         return item
 
-    def copy(self, parent: Optional[object] = None) -> object:
+    def _copy(self, parent: Optional[object] = None) -> object:
         coll = self.__class__(parent=parent)
         coll._items = [item.copy(parent=parent) for item in self._items]
         return coll
@@ -243,7 +246,7 @@ class NodeCollection(Collection):
         s = ""
         parent_name = self.parent.name if self.parent else ""
         s += f'NodeCollection(parent = "{parent_name}", nodes = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -262,21 +265,21 @@ class PropertyCollection(Collection):
         super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
-    def new(
+    def _new(
         self, identifier: Union[str, type], name: Optional[str] = None, **kwargs
     ) -> object:
         from node_graph.property import NodeProperty
 
         ItemClass = get_item_class(identifier, self.pool, NodeProperty)
         item = ItemClass(name, **kwargs)
-        self.append(item)
+        self._append(item)
         return item
 
     def __repr__(self) -> str:
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'PropertyCollection(node = "{node_name}", properties = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -295,7 +298,7 @@ class InputSocketCollection(Collection):
         super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
-    def new(
+    def _new(
         self,
         identifier: Union[str, type],
         name: Optional[str] = None,
@@ -307,7 +310,7 @@ class InputSocketCollection(Collection):
         from node_graph.socket import NodeSocket
 
         ItemClass = get_item_class(identifier, self.pool, NodeSocket)
-        list_index = self.get_list_index()
+        list_index = self._get_list_index()
         item = ItemClass(
             name,
             socket_type="INPUT",
@@ -317,10 +320,10 @@ class InputSocketCollection(Collection):
             metadata=metadata,
             property_data=property_data,
         )
-        self.append(item)
+        self._append(item)
         return item
 
-    def copy(self, parent: Optional[object] = None, is_ref: bool = False) -> object:
+    def _copy(self, parent: Optional[object] = None, is_ref: bool = False) -> object:
         """Copy the input socket collection.
 
         Args:
@@ -338,7 +341,7 @@ class InputSocketCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'InputCollection(node = "{node_name}", sockets = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -357,7 +360,7 @@ class OutputSocketCollection(Collection):
         super().__init__(parent, pool=pool, entry_point=entry_point)
 
     @decorator_check_identifier_name
-    def new(
+    def _new(
         self,
         identifier: Union[str, type],
         name: Optional[str] = None,
@@ -369,10 +372,10 @@ class OutputSocketCollection(Collection):
         item = ItemClass(
             name, socket_type="OUTPUT", list_index=len(self._items), metadata=metadata
         )
-        self.append(item)
+        self._append(item)
         return item
 
-    def copy(self, parent: Optional[object] = None, is_ref: bool = False) -> object:
+    def _copy(self, parent: Optional[object] = None, is_ref: bool = False) -> object:
         coll = self.__class__(parent=parent)
         coll._items = [item.copy(node=parent, is_ref=is_ref) for item in self._items]
         return coll
@@ -381,7 +384,7 @@ class OutputSocketCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'OutputCollection(node = "{node_name}", sockets = ['
-        s += ", ".join([f'"{x}"' for x in self.keys()])
+        s += ", ".join([f'"{x}"' for x in self._keys()])
         s += "])"
         return s
 
@@ -392,13 +395,13 @@ class LinkCollection(Collection):
     def __init__(self, parent: object) -> None:
         super().__init__(parent)
 
-    def new(self, input: object, output: object, type: int = 1) -> object:
+    def _new(self, input: object, output: object, type: int = 1) -> object:
         from node_graph.link import NodeLink
 
         item = NodeLink(input, output)
-        self.append(item)
+        self._append(item)
         # Execute post creation hooks
-        self.execute_post_creation_hooks(item)
+        self._execute_post_creation_hooks(item)
         return item
 
     def __delitem__(self, index: Union[int, List[int]]) -> None:

@@ -17,5 +17,5 @@ def test_from_dict(ng_decorator):
     ng = ng_decorator
     assert len(ng.links) == 3
     ng.nodes.post_deletion_hooks = [node_deletion_hook]
-    ng.nodes.delete("add2")
+    ng.delete_nodes("add2")
     assert len(ng.links) == 1

@@ -6,8 +6,8 @@ from node_graph.node import Node
 
 def test_metadata():
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.nodes.new(Node, "test")
-    socket = n.inputs.new(
+    n = ng.add_node(Node, "test")
+    socket = n.add_input(
         "node_graph.any",
         "test",
         arg_type="kwargs",
@@ -40,8 +40,8 @@ def test_base_socket_type(id, data):
     Should be able to set the correct value to socket's property."""
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.nodes.new("node_graph.test_add", "test")
-    socket = n.inputs.new(id, id)
+    n = ng.add_node("node_graph.test_add", "test")
+    socket = n.add_input(id, id)
     socket.property.value = data
     assert socket.property.value == data
     # copy
@@ -68,8 +68,8 @@ def test_base_socket_type_validation(id, data):
     the same type as the socket."""
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.nodes.new("node_graph.test_add", "test")
-    socket = n.inputs.new(id, id)
+    n = ng.add_node("node_graph.test_add", "test")
+    socket = n.add_input(id, id)
     try:
         socket.property.value = data
     except Exception as e:
@@ -81,8 +81,8 @@ def test_base_socket_type_validation(id, data):
 def test_general_socket_property():
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.nodes.new(Node, "test")
-    socket = n.inputs.new("node_graph.any", "test")
+    n = ng.add_node(Node, "test")
+    socket = n.add_input("node_graph.any", "test")
     socket.property.value = np.ones((3, 3))
     assert np.isclose(socket.property.value, np.ones((3, 3))).all()
     # copy
@@ -94,10 +94,10 @@ def test_socket_match(ng):
     """Test simple math."""
 
     ng = NodeGraph(name="test_socket_match")
-    str1 = ng.nodes.new("node_graph.test_string", "str1", value="abc")
-    math1 = ng.nodes.new("node_graph.test_add", "math")
+    str1 = ng.add_node("node_graph.test_string", "str1", value="abc")
+    math1 = ng.add_node("node_graph.test_add", "math")
     try:
-        ng.links.new(str1.outputs[0], math1.inputs[1])
+        ng.add_link(str1.outputs[0], math1.inputs[1])
     except Exception as e:
         print(e)
     # the link will fails.
@@ -107,8 +107,9 @@ def test_socket_match(ng):
 def test_repr():
     """Test __repr__ method."""
     ng = NodeGraph(name="test_repr")
-    node = ng.nodes.new("node_graph.test_add", "node1")
+    node = ng.add_node("node_graph.test_add", "node1")
     assert repr(node.inputs) == 'InputCollection(node = "node1", sockets = ["x", "y"])'
     assert (
-        repr(node.outputs) == 'OutputCollection(node = "node1", sockets = ["result"])'
+        repr(node.outputs)
+        == 'OutputCollection(node = "node1", sockets = ["result", "_outputs"])'
     )

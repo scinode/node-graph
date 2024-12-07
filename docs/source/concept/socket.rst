@@ -38,7 +38,7 @@ Socket has a property, which is used to store the data. The data can be used whe
 
    def create_sockets(self):
       # create a Any type socket.
-      inp = self.inputs.new("node_graph.any", "symbols")
+      inp = self.add_input("node_graph.any", "symbols")
       # add a string property to the socket with default value "H".
       inp.add_property("node_graph.string", "default", default="H"})
 

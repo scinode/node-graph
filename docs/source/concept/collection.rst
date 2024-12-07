@@ -47,7 +47,7 @@ One can get a item by its name or index:
     # by index
     ng.nodes[1].update_state()
     float1.properties[0].value = 2.0
-    ng.links.new(float1.outputs[0], add1.inputs[0])
+    ng.add_link(float1.outputs[0], add1.inputs[0])
 
 
 

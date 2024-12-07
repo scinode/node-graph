@@ -12,11 +12,12 @@ class TestFloat(Node):
     }
 
     def create_properties(self):
-        self.properties.new("node_graph.int", "t", default=1)
-        self.properties.new("node_graph.float", "value", default=0.0)
+        self.add_property("node_graph.int", "t", default=1)
+        self.add_property("node_graph.float", "value", default=0.0)
 
     def create_sockets(self):
-        self.outputs.new("node_graph.float", "float")
+        self.add_output("node_graph.float", "float")
+        self.add_output("node_graph.any", "_outputs")
 
 
 class TestString(Node):
@@ -30,11 +31,12 @@ class TestString(Node):
     }
 
     def create_properties(self):
-        self.properties.new("node_graph.int", "t", default=1)
-        self.properties.new("node_graph.string", "value", default="")
+        self.add_property("node_graph.int", "t", default=1)
+        self.add_property("node_graph.string", "value", default="")
 
     def create_sockets(self):
-        self.outputs.new("node_graph.string", "string")
+        self.add_output("node_graph.string", "string")
+        self.add_output("node_graph.any", "_outputs")
 
 
 class TestAdd(Node):
@@ -60,14 +62,15 @@ class TestAdd(Node):
     }
 
     def create_properties(self):
-        self.properties.new("node_graph.int", "t", default=1)
+        self.add_property("node_graph.int", "t", default=1)
 
     def create_sockets(self):
-        self.inputs.clear()
-        self.outputs.clear()
-        self.inputs.new("node_graph.float", "x")
-        self.inputs.new("node_graph.float", "y")
-        self.outputs.new("node_graph.float", "result")
+        self.inputs._clear()
+        self.outputs._clear()
+        self.add_input("node_graph.float", "x")
+        self.add_input("node_graph.float", "y")
+        self.add_output("node_graph.float", "result")
+        self.add_output("node_graph.any", "_outputs")
 
 
 class TestEnum(Node):
@@ -82,8 +85,8 @@ class TestEnum(Node):
     }
 
     def create_properties(self):
-        self.properties.new("node_graph.int", "t", default=1)
-        self.properties.new(
+        self.add_property("node_graph.int", "t", default=1)
+        self.add_property(
             "node_graph.enum",
             "function",
             options=[
@@ -93,9 +96,10 @@ class TestEnum(Node):
         )
 
     def create_sockets(self):
-        self.inputs.clear()
-        self.outputs.clear()
-        self.outputs.new("node_graph.any", "result")
+        self.inputs._clear()
+        self.outputs._clear()
+        self.add_output("node_graph.any", "result")
+        self.add_output("node_graph.any", "_outputs")
 
 
 class TestEnumUpdate(Node):
@@ -105,8 +109,8 @@ class TestEnumUpdate(Node):
     catalog = "Test"
 
     def create_properties(self):
-        self.properties.new("node_graph.int", "t", default=1)
-        self.properties.new(
+        self.add_property("node_graph.int", "t", default=1)
+        self.add_property(
             "node_graph.enum",
             "function",
             default="add",
@@ -118,14 +122,15 @@ class TestEnumUpdate(Node):
         )
 
     def create_sockets(self):
-        self.inputs.clear()
-        self.outputs.clear()
+        self.inputs._clear()
+        self.outputs._clear()
         if self.properties["function"].value in ["add"]:
-            self.inputs.new("node_graph.float", "x")
-            self.inputs.new("node_graph.float", "y")
+            self.add_input("node_graph.float", "x")
+            self.add_input("node_graph.float", "y")
         elif self.properties["function"].value in ["sqrt"]:
-            self.inputs.new("node_graph.float", "x")
-        self.outputs.new("node_graph.any", "result")
+            self.add_input("node_graph.float", "x")
+        self.add_output("node_graph.any", "result")
+        self.add_output("node_graph.any", "_outputs")
 
     def get_executor(self):
         return {
@@ -152,11 +157,11 @@ class TestAddGroup(Node):
             worker_name=self.worker_name,
             type="NODE_GROUP",
         )
-        add1 = ng.nodes.new("node_graph.test_add", "add1")
-        add2 = ng.nodes.new("node_graph.test_add", "add2")
-        add3 = ng.nodes.new("node_graph.test_add", "add1")
-        ng.links.new(add1.outputs[0], add3.inputs[0])
-        ng.links.new(add2.outputs[0], add3.inputs[1])
+        add1 = ng.add_node("node_graph.test_add", "add1")
+        add2 = ng.add_node("node_graph.test_add", "add2")
+        add3 = ng.add_node("node_graph.test_add", "add1")
+        ng.add_link(add1.outputs[0], add3.inputs[0])
+        ng.add_link(add2.outputs[0], add3.inputs[1])
         ng.group_properties = [
             ("add1.t", "t1"),
             ("add1.t", "t2"),

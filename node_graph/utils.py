@@ -185,7 +185,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
             properties = deepcopy(ndata.get("properties", {}))
             for name in ndata["sorted_properties_names"]:
                 prop = properties[name]
-                self.properties.new(
+                self.add_property(
                     prop.pop("identifier", type_mapping["default"]), **prop
                 )
 
@@ -198,7 +198,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
                 property_data = input.pop("property_data", None)
-                self.inputs.new(
+                self.add_input(
                     input.get("identifier", type_mapping["default"]),
                     name=input["name"],
                     arg_type=input.get("arg_type", "kwargs"),
@@ -211,7 +211,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
                 identifier = output.get("identifier", type_mapping["default"])
-                self.outputs.new(
+                self.add_output(
                     identifier, name=output["name"], metadata=output.get("metadata", {})
                 )
 
