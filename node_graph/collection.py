@@ -8,12 +8,7 @@ class Collection:
     """Collection of instances of a property.
     Like an extended list, with the functions: new, find, delete, clear.
 
-    Attributes:
-        path (str): path to import the module.
     """
-
-    path: str = ""
-    parent_name: str = "parent"
 
     def __init__(
         self,
@@ -77,6 +72,8 @@ class Collection:
         item.list_index = self._get_list_index()
         setattr(item, "parent", self.parent)
         self._items.append(item)
+        # Set the item as an attribute on the instance
+        setattr(self, item.name, item)
 
     def _extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
@@ -100,7 +97,7 @@ class Collection:
         for item in self._items:
             if item.name == name:
                 return item
-        raise Exception(
+        raise AttributeError(
             f""""{name}" is not in the {self.__class__.__name__}.
 Acceptable names are {self._keys()}. This collection belongs to {self.parent}."""
         )
@@ -200,8 +197,6 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
 class NodeCollection(Collection):
     """Node colleciton"""
 
-    parent_name = "node_graph"
-
     def __init__(
         self,
         parent: Optional[object] = None,
@@ -254,8 +249,6 @@ class NodeCollection(Collection):
 class PropertyCollection(Collection):
     """Property colleciton"""
 
-    parent_name = "node"
-
     def __init__(
         self,
         parent: Optional[object] = None,
@@ -286,8 +279,6 @@ class PropertyCollection(Collection):
 
 class InputSocketCollection(Collection):
     """Input Socket colleciton"""
-
-    parent_name = "node"
 
     def __init__(
         self,
@@ -348,8 +339,6 @@ class InputSocketCollection(Collection):
 
 class OutputSocketCollection(Collection):
     """Output Socket colleciton"""
-
-    parent_name = "node"
 
     def __init__(
         self,

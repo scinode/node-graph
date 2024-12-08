@@ -115,7 +115,7 @@ class NodeGraph:
             Dict[str, Any]: The node graph data.
         """
         metadata: Dict[str, Any] = self.get_metadata()
-        nodes: Dict[str, Any] = self.nodes_to_dict(short=short)
+        nodes: Dict[str, Any] = self.export_nodes_to_dict(short=short)
         links: List[Dict[str, Any]] = self.links_to_dict()
         ctrl_links: List[Dict[str, Any]] = self.ctrl_links_to_dict()
         data: Dict[str, Any] = {
@@ -149,7 +149,7 @@ class NodeGraph:
         }
         return metadata
 
-    def nodes_to_dict(self, short: bool = False) -> Dict[str, Any]:
+    def export_nodes_to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Converts the nodes to a dictionary.
 
         Args:

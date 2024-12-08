@@ -255,10 +255,10 @@ class Node:
         else:
             metadata = self.get_metadata()
             properties = self.properties_to_dict()
-            input_sockets = self.input_sockets_to_dict()
-            output_sockets = self.output_sockets_to_dict()
-            ctrl_input_sockets = self.ctrl_input_sockets_to_dict()
-            ctrl_output_sockets = self.ctrl_output_sockets_to_dict()
+            input_sockets = self.export_input_sockets_to_dict()
+            output_sockets = self.export_output_sockets_to_dict()
+            ctrl_input_sockets = self.export_ctrl_input_sockets_to_dict()
+            ctrl_output_sockets = self.export_ctrl_output_sockets_to_dict()
             executor = self.executor_to_dict()
             data = {
                 "version": "node_graph@{}".format(__version__),
@@ -332,7 +332,7 @@ class Node:
             properties[prop.name] = prop.to_dict()
         return properties
 
-    def input_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
         inputs = {}
@@ -340,7 +340,7 @@ class Node:
             inputs[input.name] = input.to_dict()
         return inputs
 
-    def output_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export output sockets to a dictionary."""
         # save all relations using links
         outputs = {}
@@ -348,7 +348,7 @@ class Node:
             outputs[output.name] = output.to_dict()
         return outputs
 
-    def ctrl_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_ctrl_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_input sockets to a dictionary."""
         # save all relations using links
         ctrl_inputs = {}
@@ -356,7 +356,7 @@ class Node:
             ctrl_inputs[socket.name] = socket.to_dict()
         return ctrl_inputs
 
-    def ctrl_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_ctrl_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
         """Export ctrl_output sockets to a dictionary."""
         # save all relations using links
         ctrl_outputs = {}
