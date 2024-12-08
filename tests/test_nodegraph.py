@@ -14,7 +14,7 @@ def test_from_dict(ng_decorator):
 def test_new_node(ng):
     """Test new node."""
     n = len(ng.nodes)
-    ng.nodes.new("node_graph.test_add")
+    ng.add_node("node_graph.test_add")
     assert len(ng.nodes) == n + 1
 
 
@@ -22,8 +22,8 @@ def test_delete_node(ng):
     """Test delete node."""
     n = len(ng.nodes)
     nlink = len(ng.links)
-    ng.nodes.new("node_graph.test_add", name="add3")
-    ng.links.new(ng.nodes["add1"].outputs[0], ng.nodes["add3"].inputs["y"])
+    ng.add_node("node_graph.test_add", name="add3")
+    ng.add_link(ng.nodes["add1"].outputs[0], ng.nodes["add3"].inputs["y"])
     assert len(ng.nodes) == n + 1
     assert len(ng.links) == nlink + 1
     ng.delete_nodes(["add3"])
@@ -45,8 +45,8 @@ def test_add(ng):
     n = len(ng.nodes)
     nlink = len(ng.links)
     ng1 = NodeGraph(name="test_node_group")
-    ng1.nodes.new("node_graph.test_float", "float3", value=4.0, t=3)
-    ng1.nodes.new("node_graph.test_float", "float4", value=3.0)
+    ng1.add_node("node_graph.test_float", "float3", value=4.0, t=3)
+    ng1.add_node("node_graph.test_float", "float4", value=3.0)
     ng = ng + ng1
     assert len(ng.nodes) == n + 2
     assert len(ng.links) == nlink
@@ -57,7 +57,7 @@ def test_copy_subset(ng):
     ng1 = ng.copy_subset(["add1", "add2"])
     assert len(ng1.nodes) == 3
     assert len(ng1.links) == 2
-    assert "float1" in ng1.nodes.keys()
+    assert "float1" in ng1.get_node_names()
 
 
 def test_get_items(ng):
@@ -65,4 +65,4 @@ def test_get_items(ng):
     ng1 = ng[["add1", "add2"]]
     assert len(ng1.nodes) == 3
     assert len(ng1.links) == 2
-    assert "float1" in ng1.nodes.keys()
+    assert "float1" in ng1.get_node_names()

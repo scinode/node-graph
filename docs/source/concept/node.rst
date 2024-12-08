@@ -25,8 +25,8 @@ Metadata
 .. code-block:: python
 
    # identifier: node_graph.test_float, name: float1
-   node1 = ng.nodes.new("node_graph.test_float", name="float1")
-   node2 = ng.nodes.new("node_graph.test_float", name="float2")
+   node1 = ng.add_node("node_graph.test_float", name="float1")
+   node2 = ng.add_node("node_graph.test_float", name="float2")
 
 Executor
 ===========================================
@@ -75,7 +75,7 @@ then you can use the node in a nodegraph:
 
    ng = NodeGraph(name="test_decorator")
    # here we use the myadd
-   add1 = ng.nodes.new(myadd, "add1")
+   add1 = ng.add_node(myadd, "add1")
    add1.set({"x": 8})
    nt.launch()
    time.sleep(5)
@@ -112,14 +112,14 @@ One can define a new node by extend the `Node` class.
       kwargs = ["t", "x", "y"]
 
       def create_properties(self):
-         self.properties.new("node_graph.int", "t", default=1)
+         self.add_property("node_graph.int", "t", default=1)
 
       def create_sockets(self):
-         self.inputs.clear()
-         self.outputs.clear()
-         self.inputs.new("node_graph.float", "x")
-         self.inputs.new("node_graph.float", "y")
-         self.outputs.new("node_graph.float", "Result")
+         self.inputs._clear()
+         self.outputs._clear()
+         self.add_input("node_graph.float", "x")
+         self.add_input("node_graph.float", "y")
+         self.add_output("node_graph.float", "Result")
 
 
 Use Node
@@ -133,13 +133,13 @@ Create a Node inside a NodeGraph
    # create a nodegraph
    ng = NodeGraph(name="test_node")
    # create a node using the Node identifier, e.g. node_graph.test_float
-   float1 = ng.nodes.new("node_graph.test_float")
+   float1 = ng.add_node("node_graph.test_float")
    # set node properties
    float1.set({"Float": 8})
    # copy a node
    float2 = float1.copy()
    # append a node to the nodegraph
-   ng.nodes.append(float2)
+   ng.append_node(float2)
 
 Load node from database
 

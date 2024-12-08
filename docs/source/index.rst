@@ -11,11 +11,11 @@ NodeGraph is an open-source platform for designing node-based workflows.
 
     from node_graph import NodeGraph
     ng = NodeGraph(name="my_first_nodegraph")
-    float1 = ng.nodes.new("node_graph.test_float", value=2.0)
-    float2 = ng.nodes.new("node_graph.test_float", value=3.0)
-    add1 = ng.nodes.new("node_graph.test_add")
-    ng.links.new(float1.outputs[0], add1.inputs[0])
-    ng.links.new(float2.outputs[0], add1.inputs[1])
+    float1 = ng.add_node("node_graph.test_float", value=2.0)
+    float2 = ng.add_node("node_graph.test_float", value=3.0)
+    add1 = ng.add_node("node_graph.test_add")
+    ng.add_link(float1.outputs[0], add1.inputs[0])
+    ng.add_link(float2.outputs[0], add1.inputs[1])
 
 
 Installation

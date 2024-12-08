@@ -293,18 +293,18 @@ class DifferenceAnalysis:
 
     def __init__(
         self,
-        nt1: Dict[str, Union[List[Dict[str, str]], Dict[str, Dict[str, str]]]] = None,
-        nt2: Dict[str, Union[List[Dict[str, str]], Dict[str, Dict[str, str]]]] = None,
+        ng1: Dict[str, Union[List[Dict[str, str]], Dict[str, Dict[str, str]]]] = None,
+        ng2: Dict[str, Union[List[Dict[str, str]], Dict[str, Dict[str, str]]]] = None,
     ) -> None:
         """
         Args:
-            nt1 (dict): NodeGraph data
-            nt2 (dict): NodeGraph data
+            ng1 (dict): NodeGraph data
+            ng2 (dict): NodeGraph data
         """
-        self.nt1 = nt1
-        self.nt2 = nt2
-        nodes1 = self.nt1["nodes"].keys()
-        nodes2 = self.nt2["nodes"].keys()
+        self.ng1 = ng1
+        self.ng2 = ng2
+        nodes1 = self.ng1["nodes"].keys()
+        nodes2 = self.ng2["nodes"].keys()
         self.intersection = set(nodes2).intersection(set(nodes1))
         self.new_nodes = set(nodes2) - set(nodes1)
 
@@ -312,7 +312,7 @@ class DifferenceAnalysis:
         """Find new and modified nodes based on uuid."""
         modified = set()
         for name in self.intersection:
-            if self.nt2["nodes"][name]["uuid"] != self.nt1["nodes"][name]["uuid"]:
+            if self.ng2["nodes"][name]["uuid"] != self.ng1["nodes"][name]["uuid"]:
                 modified.add(name)
         return modified
 
@@ -320,8 +320,8 @@ class DifferenceAnalysis:
         """check property"""
         modified = set()
         for name in self.intersection:
-            inputs1 = self.nt1["nodes"][name]["properties"]
-            inputs2 = self.nt2["nodes"][name]["properties"]
+            inputs1 = self.ng1["nodes"][name]["properties"]
+            inputs2 = self.ng2["nodes"][name]["properties"]
             for key in inputs1:
                 try:
                     if inputs1[key]["value"] != inputs2[key]["value"]:
@@ -333,8 +333,8 @@ class DifferenceAnalysis:
                         modified.add(name)
                 except Exception:
                     pass
-            inputs1 = self.nt1["nodes"][name]["inputs"]
-            inputs2 = self.nt2["nodes"][name]["inputs"]
+            inputs1 = self.ng1["nodes"][name]["inputs"]
+            inputs2 = self.ng2["nodes"][name]["inputs"]
             for key in inputs1:
                 try:
                     if (
@@ -356,8 +356,8 @@ class DifferenceAnalysis:
 
     def check_socket(self) -> Set[str]:
         """Find new and modified nodes based on input."""
-        nc1 = ConnectivityAnalysis(self.nt1)
-        nc2 = ConnectivityAnalysis(self.nt2)
+        nc1 = ConnectivityAnalysis(self.ng1)
+        nc2 = ConnectivityAnalysis(self.ng2)
         modified_input = set()
         for name in self.intersection:
             sockets1 = set(nc1.inputs[name].keys())
@@ -381,7 +381,7 @@ class DifferenceAnalysis:
         modified = set()
         for name in self.intersection:
             for key in ["position", "description"]:
-                if self.nt2["nodes"][name][key] != self.nt1["nodes"][name][key]:
+                if self.ng2["nodes"][name][key] != self.ng1["nodes"][name][key]:
                     modified.add(name)
         return modified
 

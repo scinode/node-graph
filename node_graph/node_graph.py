@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
 from node_graph.nodes import node_pool
 from typing import Dict, Any, List, Optional, Union
 from node_graph.version import __version__
 import yaml
+from node_graph.node import Node
+from node_graph.socket import NodeSocket
+from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict, create_node
 from node_graph_widget import NodeGraphWidget
 
@@ -29,11 +34,11 @@ class NodeGraph:
         >>> ng = NodeGraph(name="my_first_nodegraph")
 
         Add nodes:
-        >>> float1 = ng.nodes.new("node_graph.test_float", name="float1")
-        >>> add1 = ng.nodes.new("node_graph.test_add", name="add1")
+        >>> float1 = ng.add_node("node_graph.test_float", name="float1")
+        >>> add1 = ng.add_node("node_graph.test_add", name="add1")
 
         Add links:
-        >>> ng.links.new(float1.outputs[0], add1.inputs[0])
+        >>> ng.add_link(float1.outputs[0], add1.inputs[0])
 
         Export to dict:
         >>> ng.to_dict()
@@ -70,6 +75,28 @@ class NodeGraph:
         self.group_outputs: List[str] = []
         self._widget = NodeGraphWidget(parent=self)
 
+    def add_node(
+        self, identifier: Union[str, callable], name: str = None, **kwargs
+    ) -> Node:
+        """Adds a node to the node graph."""
+        node = self.nodes._new(identifier, name, **kwargs)
+        return node
+
+    def add_link(self, source: NodeSocket | Node, target: NodeSocket) -> NodeLink:
+        """Add a link between two nodes."""
+        if isinstance(source, Node):
+            source = source.outputs["_outputs"]
+        link = self.links._new(source, target)
+        return link
+
+    def append_node(self, node: Node) -> None:
+        """Appends a node to the node graph."""
+        self.nodes._append(node)
+
+    def get_node_names(self) -> List[str]:
+        """Returns the names of the nodes in the node graph."""
+        return self.nodes._keys()
+
     def launch(self) -> None:
         """Launches the node graph."""
         raise NotImplementedError("The 'launch' method is not implemented.")
@@ -88,7 +115,7 @@ class NodeGraph:
             Dict[str, Any]: The node graph data.
         """
         metadata: Dict[str, Any] = self.get_metadata()
-        nodes: Dict[str, Any] = self.nodes_to_dict(short=short)
+        nodes: Dict[str, Any] = self.export_nodes_to_dict(short=short)
         links: List[Dict[str, Any]] = self.links_to_dict()
         ctrl_links: List[Dict[str, Any]] = self.ctrl_links_to_dict()
         data: Dict[str, Any] = {
@@ -122,7 +149,7 @@ class NodeGraph:
         }
         return metadata
 
-    def nodes_to_dict(self, short: bool = False) -> Dict[str, Any]:
+    def export_nodes_to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Converts the nodes to a dictionary.
 
         Args:
@@ -197,19 +224,19 @@ class NodeGraph:
                 identifier = create_node(ndata)
             else:
                 identifier = ndata["identifier"]
-            node = ng.nodes.new(
+            node = ng.add_node(
                 identifier,
                 name=name,
                 uuid=ndata.pop("uuid", None),
             )
             node.update_from_dict(ndata)
         for link in ngdata.get("links", []):
-            ng.links.new(
+            ng.add_link(
                 ng.nodes[link["from_node"]].outputs[link["from_socket"]],
                 ng.nodes[link["to_node"]].inputs[link["to_socket"]],
             )
         for link in ngdata.get("ctrl_links", []):
-            ng.ctrl_links.new(
+            ng.ctrl_add_link(
                 ng.nodes[link["from_node"]].ctrl_outputs[link["from_socket"]],
                 ng.nodes[link["to_node"]].ctrl_inputs[link["to_socket"]],
             )
@@ -255,9 +282,9 @@ class NodeGraph:
         """
         name = f"{self.name}_copy" if name is None else name
         ng: "NodeGraph" = self.__class__(name=name, uuid=None)
-        ng.nodes = self.nodes.copy(parent=ng)
+        ng.nodes = self.nodes._copy(parent=ng)
         for link in self.links:
-            ng.links.new(
+            ng.add_link(
                 ng.nodes[link.from_node.name].outputs[link.from_socket.name],
                 ng.nodes[link.to_node.name].inputs[link.to_socket.name],
             )
@@ -283,21 +310,21 @@ class NodeGraph:
         """
         ng: "NodeGraph" = self.__class__(name=name, uuid=None)
         for node_name in node_list:
-            ng.nodes.append(self.nodes[node_name].copy(parent=ng))
+            ng.append_node(self.nodes[node_name].copy(parent=ng))
         for link in self.links:
             if (
                 add_ref
-                and link.from_node.name not in ng.nodes.keys()
-                and link.to_node.name in ng.nodes.keys()
+                and link.from_node.name not in ng.get_node_names()
+                and link.to_node.name in ng.get_node_names()
             ):
-                ng.nodes.append(
+                ng.append_node(
                     self.nodes[link.from_node.name].copy(parent=ng, is_ref=True)
                 )
             if (
-                link.from_node.name in ng.nodes.keys()
-                and link.to_node.name in ng.nodes.keys()
+                link.from_node.name in ng.get_node_names()
+                and link.to_node.name in ng.get_node_names()
             ):
-                ng.links.new(
+                ng.add_link(
                     ng.nodes[link.from_node.name].outputs[link.from_socket.name],
                     ng.nodes[link.to_node.name].inputs[link.to_socket.name],
                 )
@@ -330,9 +357,9 @@ class NodeGraph:
         Returns:
             NodeGraph: The combined node graph.
         """
-        self.nodes.extend(other.nodes.copy(parent=self))
+        self.nodes._extend(other.nodes._copy(parent=self))
         for link in other.links:
-            self.links.new(
+            self.add_link(
                 self.nodes[link.from_node.name].outputs[link.from_socket.name],
                 self.nodes[link.to_node.name].inputs[link.to_socket.name],
             )
@@ -351,14 +378,16 @@ class NodeGraph:
         new_graph += other
         return new_graph
 
-    def delete_nodes(self, node_list: List[str]) -> None:
+    def delete_nodes(self, node_list: str | List[str]) -> None:
         """Deletes nodes from the node graph.
 
         Args:
             node_list (List[str]): The names of the nodes to delete.
         """
+        if isinstance(node_list, str):
+            node_list = [node_list]
         for name in node_list:
-            if name not in self.nodes.keys():
+            if name not in self.get_node_names():
                 raise ValueError(f"Node '{name}' not found in the node graph.")
             link_indices: List[int] = []
             for index, link in enumerate(self.links):
@@ -367,7 +396,7 @@ class NodeGraph:
             # Delete links in reverse order to avoid index shift
             for index in sorted(link_indices, reverse=True):
                 del self.links[index]
-            self.nodes.delete(name)
+            self.nodes._delete(name)
 
     def wait(self) -> None:
         """Waits for the node graph to finish.

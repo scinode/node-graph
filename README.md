@@ -23,11 +23,9 @@ Check the [docs](https://node_graph.readthedocs.io/en/latest/) and learn about t
 ```python
 from node_graph import NodeGraph
 ng = NodeGraph(name="example")
-float1 = ng.nodes.new("node_graph.float", value=2.0)
-float2 = ng.nodes.new("node_graph.float", value=3.0)
-add1 = ng.nodes.new("Operator", operator="+")
-ng.links.new(float1.outputs[0], add1.inputs[0])
-ng.links.new(float2.outputs[0], add1.inputs[1])
+add1 = ng.add_node("node_graph.test_add", x=1, y=2)
+add2 = ng.add_node("node_graph.test_add", x=3)
+ng.add_link(add1.outputs[0], add2.inputs["y"])
 ntdata = ng.to_dict()
 ```
 
