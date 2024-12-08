@@ -53,6 +53,17 @@ class Collection:
     def __dir__(self):
         return sorted(set(self._keys()))
 
+    def __contains__(self, name: str) -> bool:
+        """Check if an item with the given name exists in the collection.
+
+        Args:
+            name (str): The name of the item to check.
+
+        Returns:
+            bool: True if the item exists, False otherwise.
+        """
+        return name in self._keys()
+
     def _get_list_index(self) -> int:
         """Get the inner id for the next item.
 
