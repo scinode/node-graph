@@ -317,9 +317,7 @@ class NodeGraph:
                 and link.from_node.name not in ng.get_node_names()
                 and link.to_node.name in ng.get_node_names()
             ):
-                ng.append_node(
-                    self.nodes[link.from_node.name].copy(parent=ng, is_ref=True)
-                )
+                ng.append_node(self.nodes[link.from_node.name].copy(parent=ng))
             if (
                 link.from_node.name in ng.get_node_names()
                 and link.to_node.name in ng.get_node_names()
