@@ -3,12 +3,10 @@ from node_graph.sockets import socket_pool
 from node_graph.properties import property_pool
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
-from node_graph.socket import NodeSocket
+from node_graph.socket import NodeSocket, NodeSocketNamespace
 from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
-    InputSocketCollection,
-    OutputSocketCollection,
 )
 
 
@@ -58,10 +56,10 @@ class Node:
         uuid: Optional[str] = None,
         parent: Optional[Any] = None,
         property_collection_class: Any = PropertyCollection,
-        input_collection_class: Any = InputSocketCollection,
-        output_collection_class: Any = OutputSocketCollection,
-        ctrl_input_collection_class: Any = InputSocketCollection,
-        ctrl_output_collection_class: Any = OutputSocketCollection,
+        input_collection_class: Any = NodeSocketNamespace,
+        output_collection_class: Any = NodeSocketNamespace,
+        ctrl_input_collection_class: Any = NodeSocketNamespace,
+        ctrl_output_collection_class: Any = NodeSocketNamespace,
     ) -> None:
         """Initialize the Node.
 
@@ -72,17 +70,25 @@ class Node:
             parent (Any, optional): Parent node. Defaults to None.
             property_collection_class (Any, optional): Property collection class. Defaults to PropertyCollection.
             input_collection_class (Any, optional): Input socket collection class. Defaults to InputSocketCollection.
-            output_collection_class (Any, optional): Output socket collection class. Defaults to OutputSocketCollection.
+            output_collection_class (Any, optional): Output socket collection class. Defaults to NodeSocketNamespace.
         """
         self.list_index = list_index
         self.name = name or "{}{}".format(self.identifier.split(".")[-1], list_index)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self.properties = property_collection_class(self, pool=self.property_pool)
-        self.inputs = input_collection_class(self, pool=self.socket_pool)
-        self.outputs = output_collection_class(self, pool=self.socket_pool)
-        self.ctrl_inputs = ctrl_input_collection_class(self, pool=self.socket_pool)
-        self.ctrl_outputs = ctrl_output_collection_class(self, pool=self.socket_pool)
+        self.inputs = input_collection_class(
+            "inputs", parent=self, pool=self.socket_pool
+        )
+        self.outputs = output_collection_class(
+            "outputs", parent=self, pool=self.socket_pool
+        )
+        self.ctrl_inputs = ctrl_input_collection_class(
+            "ctrl_Inputs", parent=self, pool=self.socket_pool
+        )
+        self.ctrl_outputs = ctrl_output_collection_class(
+            "ctrl_outputs", parent=self, pool=self.socket_pool
+        )
         self.executor = None
         self.state = "CREATED"
         self.action = "NONE"
@@ -99,6 +105,10 @@ class Node:
         )
 
     def add_input(self, identifier: str, name: str, **kwargs) -> NodeSocket:
+        """Add an input socket to this node."""
+        # if "." in the name, it means the socket is a namespace
+        # check if the namespace exists, if not, raise an error
+
         input = self.inputs._new(identifier, name, **kwargs)
         return input
 
@@ -461,7 +471,6 @@ class Node:
         self,
         name: Optional[str] = None,
         parent: Optional[Any] = None,
-        is_ref: bool = False,
     ) -> Any:
         """Copy a node.
 
@@ -476,7 +485,6 @@ class Node:
         Returns:
             Node: _description_
         """
-        print(f"Copy node {self.name}, as a ref: {is_ref}")
         if parent is not None:
             # copy node to a new parent, keep the name
             name = self.name if name is None else name
@@ -490,8 +498,8 @@ class Node:
         # then overwrite the sockets
         for i in range(len(self.properties)):
             node.properties[i].value = self.properties[i].value
-        node.inputs = self.inputs._copy(parent=node, is_ref=is_ref)
-        node.outputs = self.outputs._copy(parent=node, is_ref=is_ref)
+        node.inputs = self.inputs._copy(parent=node)
+        node.outputs = self.outputs._copy(parent=node)
         return node
 
     def get_executor(self) -> Optional[Dict[str, Union[str, bool]]]:

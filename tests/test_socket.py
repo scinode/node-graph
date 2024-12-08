@@ -41,7 +41,7 @@ def test_base_socket_type(id, data):
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node("node_graph.test_add", "test")
-    socket = n.add_input(id, id)
+    socket = n.add_input(id, "test")
     socket.property.value = data
     assert socket.property.value == data
     # copy
@@ -69,7 +69,7 @@ def test_base_socket_type_validation(id, data):
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node("node_graph.test_add", "test")
-    socket = n.add_input(id, id)
+    socket = n.add_input(id, "test")
     try:
         socket.property.value = data
     except Exception as e:
@@ -106,10 +106,27 @@ def test_socket_match(ng):
 
 def test_repr():
     """Test __repr__ method."""
-    ng = NodeGraph(name="test_repr")
-    node = ng.add_node("node_graph.test_add", "node1")
-    assert repr(node.inputs) == 'InputCollection(node = "node1", sockets = ["x", "y"])'
-    assert (
-        repr(node.outputs)
-        == 'OutputCollection(node = "node1", sockets = ["result", "_outputs"])'
-    )
+    node = Node()
+    node.add_input("node_graph.int", "x")
+    assert repr(node.inputs) == "NodeSocketNamespace(name='inputs', sockets=['x'])"
+    assert repr(node.outputs) == "NodeSocketNamespace(name='outputs', sockets=[])"
+
+
+def test_namespace():
+    """Test namespace socket."""
+    n = Node()
+
+    with pytest.raises(
+        ValueError, match="Namespace nested does not exist in the socket collection."
+    ):
+        n.add_input("node_graph.namespace", "nested.x")
+    inp_nest = n.add_input("node_graph.namespace", "nested")
+    inp_nest_x = n.add_input("node_graph.float", "nested.x")
+    inp_nest_x.value = 1.0
+    assert n.inputs.nested.x.value == 1.0
+    inp_sub_nested = inp_nest._new("node_graph.namespace", "sub_nested")
+    inp_sub_nested_y = inp_sub_nested._new("node_graph.float", "y")
+    inp_sub_nested_y.value = 1.0
+    assert n.inputs.nested.sub_nested.y.value == 1.0
+    assert "nested" in n.inputs
+    assert "x" in n.inputs.nested
