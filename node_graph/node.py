@@ -77,17 +77,15 @@ class Node:
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self.properties = property_collection_class(self, pool=self.property_pool)
-        self.inputs = input_collection_class(
-            "inputs", parent=self, pool=self.socket_pool
-        )
+        self.inputs = input_collection_class("inputs", node=self, pool=self.socket_pool)
         self.outputs = output_collection_class(
-            "outputs", parent=self, pool=self.socket_pool
+            "outputs", node=self, pool=self.socket_pool
         )
         self.ctrl_inputs = ctrl_input_collection_class(
-            "ctrl_Inputs", parent=self, pool=self.socket_pool
+            "ctrl_Inputs", node=self, pool=self.socket_pool
         )
         self.ctrl_outputs = ctrl_output_collection_class(
-            "ctrl_outputs", parent=self, pool=self.socket_pool
+            "ctrl_outputs", node=self, pool=self.socket_pool
         )
         self.executor = None
         self.state = "CREATED"
@@ -106,8 +104,6 @@ class Node:
 
     def add_input(self, identifier: str, name: str, **kwargs) -> NodeSocket:
         """Add an input socket to this node."""
-        # if "." in the name, it means the socket is a namespace
-        # check if the namespace exists, if not, raise an error
 
         input = self.inputs._new(identifier, name, **kwargs)
         return input
@@ -176,12 +172,12 @@ class Node:
         self.ctrl_inputs._clear()
         self.ctrl_outputs._clear()
         socket = self.add_ctrl_input("node_graph.any", "entry")
-        socket.link_limit = 1000
+        socket.socket_link_limit = 1000
         socket = self.add_ctrl_input("node_graph.any", "ctrl")
-        socket.link_limit = 1000
+        socket.socket_link_limit = 1000
         socket = self.add_ctrl_output("node_graph.any", "exit")
         socket = self.add_ctrl_output("node_graph.any", "ctrl")
-        socket.link_limit = 1000
+        socket.socket_link_limit = 1000
 
     def create_group_sockets(self) -> None:
         """Create input and output sockets based on group inputs and outputs.
@@ -264,11 +260,11 @@ class Node:
             }
         else:
             metadata = self.get_metadata()
-            properties = self.properties_to_dict()
-            input_sockets = self.export_input_sockets_to_dict()
-            output_sockets = self.export_output_sockets_to_dict()
-            ctrl_input_sockets = self.export_ctrl_input_sockets_to_dict()
-            ctrl_output_sockets = self.export_ctrl_output_sockets_to_dict()
+            properties = self.export_properties()
+            input_sockets = self.export_input_sockets()
+            output_sockets = self.export_output_sockets()
+            ctrl_input_sockets = self.export_ctrl_input_sockets()
+            ctrl_output_sockets = self.export_ctrl_output_sockets()
             executor = self.executor_to_dict()
             data = {
                 "version": "node_graph@{}".format(__version__),
@@ -328,50 +324,54 @@ class Node:
             "var_kwargs": None,
         }
         for prop in self.properties:
-            get_arg_type(prop, args_data)
+            get_arg_type(prop.name, args_data, prop.arg_type)
         for input in self.inputs:
-            get_arg_type(input, args_data)
+            get_arg_type(
+                input.socket_name,
+                args_data,
+                input.socket_metadata.get("arg_type", "kwargs"),
+            )
         return args_data
 
-    def properties_to_dict(self) -> Dict[str, Any]:
+    def export_properties(self) -> List[Dict[str, Any]]:
         """Export properties to a dictionary.
         This data will be used for calculation.
         """
-        properties = {}
+        properties = []
         for prop in self.properties:
-            properties[prop.name] = prop.to_dict()
+            properties.append(prop.to_dict())
         return properties
 
-    def export_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_input_sockets(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
-        inputs = {}
+        inputs = []
         for input in self.inputs:
-            inputs[input.name] = input.to_dict()
+            inputs.append(input._to_dict())
         return inputs
 
-    def export_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_output_sockets(self) -> List[Dict[str, Any]]:
         """Export output sockets to a dictionary."""
         # save all relations using links
-        outputs = {}
+        outputs = []
         for output in self.outputs:
-            outputs[output.name] = output.to_dict()
+            outputs.append(output._to_dict())
         return outputs
 
-    def export_ctrl_input_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_ctrl_input_sockets(self) -> List[Dict[str, Any]]:
         """Export ctrl_input sockets to a dictionary."""
         # save all relations using links
         ctrl_inputs = {}
         for socket in self.ctrl_inputs:
-            ctrl_inputs[socket.name] = socket.to_dict()
+            ctrl_inputs[socket.socket_name] = socket._to_dict()
         return ctrl_inputs
 
-    def export_ctrl_output_sockets_to_dict(self) -> List[Dict[str, Any]]:
+    def export_ctrl_output_sockets(self) -> List[Dict[str, Any]]:
         """Export ctrl_output sockets to a dictionary."""
         # save all relations using links
         ctrl_outputs = {}
         for socket in self.ctrl_outputs:
-            ctrl_outputs[socket.name] = socket.to_dict()
+            ctrl_outputs[socket.socket_name] = socket._to_dict()
         return ctrl_outputs
 
     def executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
@@ -427,21 +427,25 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         # properties first, because the socket may be dynamic
-        for name, prop in data["properties"].items():
-            self.properties[name].value = prop["value"]
+        for prop in data["properties"]:
+            self.properties[prop["name"]].value = prop["value"]
         # inputs
-        for name, input in data["inputs"].items():
+        for input in data["inputs"]:
             if input.get("property", None):
-                self.inputs[name].property.value = input["property"]["value"]
+                self.inputs[input["name"]].socket_property.value = input["property"][
+                    "value"
+                ]
                 if input["property"].get("default", None):
-                    self.inputs[name].property.default = input["property"]["default"]
+                    self.inputs[input["name"]].socket_property.default = input[
+                        "property"
+                    ]["default"]
         # print("inputs: ", data.get("inputs", None))
-        for name, input in data.get("inputs", {}).items():
-            self.inputs[name].uuid = input.get("uuid", None)
+        for input in data.get("inputs", {}):
+            self.inputs[input["name"]].uuid = input.get("uuid", None)
         # outputs
         # print("outputs: ", data.get("outputs", None))
-        for name, output in data.get("outputs", {}).items():
-            self.outputs[name].uuid = output.get("uuid", None)
+        for output in data.get("outputs", {}):
+            self.outputs[output["name"]].uuid = output.get("uuid", None)
 
     @classmethod
     def load(cls, uuid: str) -> None:
@@ -539,10 +543,7 @@ class Node:
             if key in self.get_property_names():
                 self.properties[key].value = value
             elif key in self.get_input_names():
-                if isinstance(value, NodeSocket):
-                    self.parent.add_link(value, self.inputs[key])
-                else:
-                    self.inputs[key].property.value = value
+                self.inputs[key]._set_socket_value(value)
             else:
                 raise Exception(
                     "No property named {}. Accept name are {}".format(
@@ -571,13 +572,11 @@ class Node:
 
         for key in ("properties", "executor", "node_class", "process"):
             tdata.pop(key, None)
-        for input in tdata["inputs"].values():
-            input.pop("property")
+        for input in tdata["inputs"]:
+            input.pop("property", None)
 
         tdata["label"] = tdata["identifier"]
 
-        tdata["inputs"] = list(tdata["inputs"].values())
-        tdata["outputs"] = list(tdata["outputs"].values())
         wgdata = {"name": self.name, "nodes": {self.name: tdata}, "links": []}
         return wgdata
 

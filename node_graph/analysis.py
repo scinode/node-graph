@@ -1,6 +1,7 @@
 from typing import Dict, List, Union, Tuple, Set
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import breadth_first_order
+from node_graph.utils import get_item_by_name
 
 
 def get_nt_short_data(ngdata):
@@ -322,32 +323,42 @@ class DifferenceAnalysis:
         for name in self.intersection:
             inputs1 = self.ng1["nodes"][name]["properties"]
             inputs2 = self.ng2["nodes"][name]["properties"]
-            for key in inputs1:
-                try:
-                    if inputs1[key]["value"] != inputs2[key]["value"]:
-                        modified.add(name)
-                except Exception:
-                    pass
-                try:
-                    if not (inputs1[key]["value"] == inputs2[key]["value"]).all():
-                        modified.add(name)
-                except Exception:
-                    pass
-            inputs1 = self.ng1["nodes"][name]["inputs"]
-            inputs2 = self.ng2["nodes"][name]["inputs"]
-            for key in inputs1:
+            for input1 in inputs1:
                 try:
                     if (
-                        inputs1[key]["property"]["value"]
-                        != inputs2[key]["property"]["value"]
+                        input1["value"]
+                        != get_item_by_name(input1["name"], inputs2)["value"]
                     ):
                         modified.add(name)
                 except Exception:
                     pass
                 try:
                     if not (
-                        inputs1[key]["property"]["value"]
-                        == inputs2[key]["property"]["value"]
+                        input1["value"]
+                        == get_item_by_name(input1["name"], inputs2)["value"]
+                    ).all():
+                        modified.add(name)
+                except Exception:
+                    pass
+            inputs1 = self.ng1["nodes"][name]["inputs"]
+            inputs2 = self.ng2["nodes"][name]["inputs"]
+            for input1 in inputs1:
+                try:
+                    if (
+                        input1["property"]["value"]
+                        != get_item_by_name(input1["name"], inputs2)["property"][
+                            "value"
+                        ]
+                    ):
+                        modified.add(name)
+                except Exception:
+                    pass
+                try:
+                    if not (
+                        input1["property"]["value"]
+                        == get_item_by_name(input1["name"], inputs2)["property"][
+                            "value"
+                        ]
                     ).all():
                         modified.add(name)
                 except Exception:

@@ -37,11 +37,12 @@ def test_create_node():
     ng.add_node(MyNumpyAdd, "add1")
     assert len(ng.nodes) == 1
     assert ng.nodes[0].properties[0].default == 3
-    assert ng.nodes[0].inputs[0].property.default == 10
+    assert ng.nodes[0].inputs[0].socket_property.default == 10
 
 
 def test_decorator_args() -> None:
     """Test passing parameters to decorators."""
+    from node_graph.socket import NodeSocketNamespace
 
     @node()
     def test(a, /, b, *, c, d=1, **e):
@@ -50,14 +51,15 @@ def test_decorator_args() -> None:
     task1 = test.node()
     assert task1.get_executor()["use_module_path"] is False
     assert task1.get_executor()["callable"] == test
-    assert task1.inputs["e"].link_limit > 1
-    assert task1.inputs["e"].identifier == "node_graph.namespace"
-    assert task1.inputs["c"].metadata["required"] is True
-    assert task1.inputs["d"].metadata["required"] is False
-    assert task1.inputs["d"].property.default == 1
+    assert task1.inputs["e"].socket_link_limit > 1
+    assert task1.inputs["e"]._socket_identifier == "node_graph.namespace"
+    assert task1.inputs["c"].socket_metadata["required"] is True
+    assert task1.inputs["d"].socket_metadata["required"] is False
+    assert task1.inputs["d"].socket_property.default == 1
     assert set(task1.get_args_data()["args"]) == set(["a"])
     assert set(task1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
     assert task1.get_args_data()["var_kwargs"] == "e"
+    assert isinstance(task1.inputs.e, NodeSocketNamespace)
 
 
 def test_decorator_parameters() -> None:
@@ -72,8 +74,8 @@ def test_decorator_parameters() -> None:
         return {"sum": a + b, "product": a * b}
 
     test1 = test.node()
-    assert test1.inputs["kwargs"].link_limit == 1e6
-    assert test1.inputs["kwargs"].identifier == "node_graph.namespace"
+    assert test1.inputs["kwargs"].socket_link_limit == 1e6
+    assert test1.inputs["kwargs"]._socket_identifier == "node_graph.namespace"
     # user defined the c input manually
     assert "c" in test1.get_input_names()
     assert "d" in test1.get_property_names()
@@ -111,9 +113,9 @@ MyTestAddGroup = create_node_group(
 def test_socket(decorated_myadd):
     """Test simple math."""
     n = decorated_myadd.node()
-    assert n.inputs["x"].identifier == "node_graph.float"
-    assert n.inputs["y"].identifier == "node_graph.float"
-    assert n.inputs["t"].property.default == 1
+    assert n.inputs["x"]._socket_identifier == "node_graph.float"
+    assert n.inputs["y"]._socket_identifier == "node_graph.float"
+    assert n.inputs["t"].socket_property.default == 1
 
 
 def test_create_node_group():

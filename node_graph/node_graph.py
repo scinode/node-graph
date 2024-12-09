@@ -285,8 +285,8 @@ class NodeGraph:
         ng.nodes = self.nodes._copy(parent=ng)
         for link in self.links:
             ng.add_link(
-                ng.nodes[link.from_node.name].outputs[link.from_socket.name],
-                ng.nodes[link.to_node.name].inputs[link.to_socket.name],
+                ng.nodes[link.from_node.name].outputs[link.from_socket.socket_name],
+                ng.nodes[link.to_node.name].inputs[link.to_socket.socket_name],
             )
         return ng
 
@@ -323,8 +323,8 @@ class NodeGraph:
                 and link.to_node.name in ng.get_node_names()
             ):
                 ng.add_link(
-                    ng.nodes[link.from_node.name].outputs[link.from_socket.name],
-                    ng.nodes[link.to_node.name].inputs[link.to_socket.name],
+                    ng.nodes[link.from_node.name].outputs[link.from_socket.socket_name],
+                    ng.nodes[link.to_node.name].inputs[link.to_socket.socket_name],
                 )
         return ng
 
@@ -358,8 +358,8 @@ class NodeGraph:
         self.nodes._extend(other.nodes._copy(parent=self))
         for link in other.links:
             self.add_link(
-                self.nodes[link.from_node.name].outputs[link.from_socket.name],
-                self.nodes[link.to_node.name].inputs[link.to_socket.name],
+                self.nodes[link.from_node.name].outputs[link.from_socket.socket_name],
+                self.nodes[link.to_node.name].inputs[link.to_socket.socket_name],
             )
         return self
 

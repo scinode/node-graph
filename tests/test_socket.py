@@ -10,18 +10,15 @@ def test_metadata():
     socket = n.add_input(
         "node_graph.any",
         "test",
-        arg_type="kwargs",
-        metadata={"dynamic": True},
+        metadata={"arg_type": "kwargs", "dynamic": True},
         link_limit=100000,
         property_data={"default": 1},
     )
-    assert socket.metadata == {"dynamic": True}
-    assert socket.arg_type == "kwargs"
-    assert socket.link_limit == 100000
-    assert socket.property.default == 1
-    data = socket.to_dict()
-    assert data["metadata"] == {"dynamic": True}
-    assert data["arg_type"] == "kwargs"
+    assert socket.socket_metadata == {"dynamic": True, "arg_type": "kwargs"}
+    assert socket.socket_link_limit == 100000
+    assert socket.socket_property.default == 1
+    data = socket._to_dict()
+    assert data["metadata"] == {"dynamic": True, "arg_type": "kwargs"}
 
 
 @pytest.mark.parametrize(
@@ -42,11 +39,11 @@ def test_base_socket_type(id, data):
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node("node_graph.test_add", "test")
     socket = n.add_input(id, "test")
-    socket.property.value = data
-    assert socket.property.value == data
+    socket.socket_property.value = data
+    assert socket.socket_property.value == data
     # copy
-    socket1 = socket.copy()
-    assert socket1.property.value == data
+    socket1 = socket._copy()
+    assert socket1.socket_property.value == data
     # set value directly
     socket1.value = data
 
@@ -71,23 +68,23 @@ def test_base_socket_type_validation(id, data):
     n = ng.add_node("node_graph.test_add", "test")
     socket = n.add_input(id, "test")
     try:
-        socket.property.value = data
+        socket.socket_property.value = data
     except Exception as e:
         print(e)
         assert e is not None
-    assert socket.property.value != data
+    assert socket.socket_property.value != data
 
 
-def test_general_socket_property():
+def test_general_property():
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
     socket = n.add_input("node_graph.any", "test")
-    socket.property.value = np.ones((3, 3))
-    assert np.isclose(socket.property.value, np.ones((3, 3))).all()
+    socket.socket_property.value = np.ones((3, 3))
+    assert np.isclose(socket.socket_property.value, np.ones((3, 3))).all()
     # copy
-    socket1 = socket.copy()
-    assert np.isclose(socket1.property.value, np.ones((3, 3))).all()
+    socket1 = socket._copy()
+    assert np.isclose(socket1.socket_property.value, np.ones((3, 3))).all()
 
 
 def test_socket_match(ng):
@@ -112,21 +109,39 @@ def test_repr():
     assert repr(node.outputs) == "NodeSocketNamespace(name='outputs', sockets=[])"
 
 
-def test_namespace():
+def test_namespace(node_with_namespace_socket):
     """Test namespace socket."""
-    n = Node()
+    n = node_with_namespace_socket
 
     with pytest.raises(
-        ValueError, match="Namespace nested does not exist in the socket collection."
+        ValueError,
+        match="Namespace non_exist_nested does not exist in the socket collection.",
     ):
-        n.add_input("node_graph.namespace", "nested.x")
-    inp_nest = n.add_input("node_graph.namespace", "nested")
-    inp_nest_x = n.add_input("node_graph.float", "nested.x")
-    inp_nest_x.value = 1.0
-    assert n.inputs.nested.x.value == 1.0
-    inp_sub_nested = inp_nest._new("node_graph.namespace", "sub_nested")
-    inp_sub_nested_y = inp_sub_nested._new("node_graph.float", "y")
-    inp_sub_nested_y.value = 1.0
-    assert n.inputs.nested.sub_nested.y.value == 1.0
-    assert "nested" in n.inputs
-    assert "x" in n.inputs.nested
+        n.add_input("node_graph.namespace", "non_exist_nested.x")
+
+    assert n.inputs.socket_value == {
+        "x": 1.0,
+        "non_dynamic": {"sub": {"y": 1.0}},
+        "dynamic": {"x": 1.0},
+    }
+
+
+def test_set_namespace(node_with_namespace_socket):
+    """Test set namespace."""
+    n = node_with_namespace_socket
+    data = {
+        "x": 2.0,
+        "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
+        "dynamic": {"x": 2},
+    }
+    n.inputs.socket_value = data
+    assert n.inputs.socket_value == data
+    # set non-exist namespace for dynamic socket
+    data = {
+        "x": 2.0,
+        "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
+        "dynamic": {"x": 2, "sub": {"y": 5.0, "z": 6.0}},
+    }
+
+    n.inputs.socket_value = data
+    assert n.inputs.socket_value == data

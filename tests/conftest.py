@@ -1,6 +1,23 @@
 import pytest
 from node_graph.decorator import node
-from node_graph import NodeGraph
+from node_graph import NodeGraph, Node
+
+
+@pytest.fixture
+def node_with_namespace_socket():
+    n = Node()
+    n.add_input("node_graph.float", "x")
+    n.add_input("node_graph.namespace", "non_dynamic")
+    n.add_input("node_graph.namespace", "non_dynamic.sub")
+    n.add_input("node_graph.float", "non_dynamic.sub.y")
+    n.add_input("node_graph.float", "non_dynamic.sub.z")
+    n.add_input("node_graph.namespace", "dynamic", metadata={"dynamic": True})
+    n.add_input("node_graph.float", "dynamic.x")
+
+    n.inputs.x.socket_value = 1.0
+    n.inputs.non_dynamic.sub.y.socket_value = 1.0
+    n.inputs.dynamic.x.socket_value = 1.0
+    return n
 
 
 @pytest.fixture

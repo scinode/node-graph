@@ -19,10 +19,9 @@ def nodegaph_to_short_json(
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
         inputs = [
-            {"name": name, "identifier": input["identifier"]}
-            for name, input in node["inputs"].items()
+            {"name": input["name"], "identifier": input["identifier"]}
+            for input in node["inputs"]
             if name in node["args"]
-            or (node["identifier"].upper() == "SHELLJOB" and name.startswith("nodes."))
         ]
 
         ngdata_short["nodes"][name] = {
@@ -90,7 +89,6 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
         node.setdefault("inputs", [])
         node.setdefault("outputs", [])
         node.setdefault("properties", [])
-        build_sorted_names(node)
         ntdata["nodes"][node["name"]] = node
     ntdata.setdefault("ctrl_links", {})
     return ntdata
@@ -109,39 +107,6 @@ def deep_copy_only_dicts(
         return original
 
 
-def build_sorted_names(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Build sorted names for the given data.
-
-    Args:
-        data (Dict[str, Any]): The data dictionary containing inputs, outputs, and properties.
-
-    Returns:
-        Dict[str, Any]: The modified data dictionary with sorted names.
-
-    """
-    for key in ["inputs", "outputs", "properties"]:
-        data.setdefault(key, {})
-        if isinstance(data[key], list):
-            # add list_index to each item
-            for i, item in enumerate(data[key]):
-                item["list_index"] = i
-            sorted_names = [item["name"] for item in data[key]]
-            data[key] = {item["name"]: item for item in data[key]}
-        elif isinstance(data[key], dict):
-            sorted_names = [
-                name
-                for name, _ in sorted(
-                    ((name, item["list_index"]) for name, item in data[key].items()),
-                    key=lambda x: x[1],
-                )
-            ]
-        else:
-            raise ValueError("Invalid data type for key: {}".format(key))
-
-        data["sorted_" + key + "_names"] = sorted_names
-
-
 def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     """Create a node class from node data.
 
@@ -151,11 +116,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     Returns:
         Callable[..., Any]: _description_
     """
-    from copy import deepcopy
     from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
     import importlib
-
-    build_sorted_names(ndata)
 
     ndata.setdefault("metadata", {})
 
@@ -182,32 +144,26 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         is_dynamic: bool = True
 
         def create_properties(self):
-            properties = deepcopy(ndata.get("properties", {}))
-            for name in ndata["sorted_properties_names"]:
-                prop = properties[name]
+            for prop in ndata["properties"]:
                 self.add_property(
                     prop.pop("identifier", type_mapping["default"]), **prop
                 )
 
         def create_sockets(self):
-            outputs = deepcopy(ndata.get("outputs", {}))
-            inputs = deepcopy(ndata.get("inputs", {}))
-
-            for name in ndata["sorted_inputs_names"]:
-                input = inputs[name]
+            for input in ndata["inputs"]:
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
-                property_data = input.pop("property_data", None)
+                kwargs = {}
+                if "property_data" in input:
+                    kwargs["property_data"] = input.pop("property_data")
                 self.add_input(
                     input.get("identifier", type_mapping["default"]),
                     name=input["name"],
-                    arg_type=input.get("arg_type", "kwargs"),
                     metadata=input.get("metadata", {}),
                     link_limit=input.get("link_limit", 1),
-                    property_data=property_data,
+                    **kwargs,
                 )
-            for name in ndata["sorted_outputs_names"]:
-                output = outputs[name]
+            for output in ndata["outputs"]:
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
                 identifier = output.get("identifier", type_mapping["default"])
@@ -240,17 +196,24 @@ def get_item_class(identifier: str, pool: Dict[str, Any], base_class) -> Any:
     return ItemClass
 
 
-def get_arg_type(input: Any, args_data: dict) -> None:
+def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
     """Get the argument type from the input data."""
-    if input.arg_type.upper() == "ARGS":
-        args_data["args"].append(input.name)
-    elif input.arg_type.upper() == "KWARGS":
-        args_data["kwargs"].append(input.name)
-    elif input.arg_type.upper() == "VAR_ARGS":
+    if arg_type.upper() == "ARGS":
+        args_data["args"].append(name)
+    elif arg_type.upper() == "KWARGS":
+        args_data["kwargs"].append(name)
+    elif arg_type.upper() == "VAR_ARGS":
         if args_data["var_args"] is not None:
             raise ValueError("Only one VAR_ARGS is allowed")
-        args_data["var_args"] = input.name
-    elif input.arg_type.upper() == "VAR_KWARGS":
+        args_data["var_args"] = name
+    elif arg_type.upper() == "VAR_KWARGS":
         if args_data["var_kwargs"] is not None:
             raise ValueError("Only one VAR_KWARGS is allowed")
-        args_data["var_kwargs"] = input.name
+        args_data["var_kwargs"] = name
+
+
+def get_item_by_name(name: str, data: list) -> dict:
+    """Get item by name from a list."""
+    for item in data:
+        if item["name"] == name:
+            return item
