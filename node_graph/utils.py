@@ -25,11 +25,13 @@ def nodegaph_to_short_json(
     #
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
-        inputs = [
-            {"name": name, "identifier": input["identifier"]}
-            for name, input in node["inputs"].items()
-            if name in node["args"]
-        ]
+        inputs = []
+        for input in node["inputs"].values():
+            metadata = input.get("metadata", {}) or {}
+            if metadata.get("required", False):
+                inputs.append(
+                    {"name": input["name"], "identifier": input["identifier"]}
+                )
 
         ngdata_short["nodes"][name] = {
             "label": node["name"],
