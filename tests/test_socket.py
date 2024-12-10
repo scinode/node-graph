@@ -4,6 +4,16 @@ from node_graph import NodeGraph
 from node_graph.node import Node
 
 
+def test_check_identifier():
+    n = Node()
+    identifier = "node_graph.inta"
+    with pytest.raises(
+        ValueError,
+        match=f"Identifier: {identifier} is not defined. Did you mean",
+    ):
+        n.add_input(identifier, "x")
+
+
 def test_metadata():
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
@@ -119,7 +129,7 @@ def test_check_name():
         match=f"Name '{key}' already exists in the namespace.",
     ):
         node.add_input("node_graph.int", key)
-    key = "socket_value"
+    key = "_value"
     with pytest.raises(
         ValueError,
         match=f"Name '{key}' is reserved by the namespace.",
@@ -155,6 +165,9 @@ def test_namespace(node_with_namespace_socket):
             "non_dynamic.sub.z",
         ]
     )
+    # to_dict
+    data = n.inputs._to_dict()
+    assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
 
 
 def test_set_namespace(node_with_namespace_socket):

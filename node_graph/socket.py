@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from node_graph.property import NodeProperty
-from typing import List, Optional, Dict, Any, TYPE_CHECKING, Callable, Union
+from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
 from node_graph.utils import get_item_class
 from node_graph.utils import get_entries
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
@@ -206,31 +206,16 @@ class NodeSocket(BaseSocket):
         return f"{self.__class__.__name__}(name='{self._name}', value={value})"
 
 
-def decorator_check_identifier_name(func: Callable) -> Callable:
-    """Check identifier and name exist or not.
+def check_identifier_name(identifier: str, pool: dict) -> None:
+    import difflib
 
-    Args:
-        func (_type_): _description_
-    """
-
-    def wrapper_func(*args, **kwargs):
-        import difflib
-
-        identifier = args[1]
-        if (
-            isinstance(identifier, str)
-            and identifier.upper() not in args[0]._socket_pool
-        ):
-            items = difflib.get_close_matches(identifier.upper(), args[0]._socket_pool)
-            if len(items) == 0:
-                msg = f"Identifier: {identifier} is not defined."
-            else:
-                msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
-            raise ValueError(msg)
-        item = func(*args, **kwargs)
-        return item
-
-    return wrapper_func
+    if isinstance(identifier, str) and identifier.upper() not in pool:
+        items = difflib.get_close_matches(identifier.upper(), pool)
+        if len(items) == 0:
+            msg = f"Identifier: {identifier} is not defined."
+        else:
+            msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
+        raise ValueError(msg)
 
 
 class NodeSocketNamespace(BaseSocket):
@@ -240,17 +225,14 @@ class NodeSocketNamespace(BaseSocket):
     _type_mapping: dict = node_graph_type_mapping
 
     _RESERVED_NAMES = {
-        "_SOCKET_PROPERTY_CLASS",
-        "_identifier",
-        "_SOCKET_PROPERTY_IDENTIFIER",
-        "RESERVED_NAMES",
-        "SOCKET_VALUE",
-        "_name",
-        "_node",
-        "_parent",
-        "_links",
-        "SOCKET_PROPERTY",
-        "_link_limit",
+        "_RESERVED_NAMES",
+        "_IDENTIFIER",
+        "_VALUE",
+        "_NAME",
+        "_NODE",
+        "_PARENT",
+        "_LINKS",
+        "_LINK_LIMIT",
         "_METADATA",
     }
 
@@ -283,7 +265,6 @@ class NodeSocketNamespace(BaseSocket):
             self._socket_pool = get_entries(entry_point_name=entry_point)
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
 
-    @decorator_check_identifier_name
     def _new(
         self,
         identifier: Union[str, type] = None,
@@ -294,6 +275,7 @@ class NodeSocketNamespace(BaseSocket):
     ) -> object:
 
         identifier = identifier or self._type_mapping["default"]
+        check_identifier_name(identifier, self._socket_pool)
 
         _names = name.split(".", 1)
         if len(_names) > 1:
