@@ -427,10 +427,10 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         # properties first, because the socket may be dynamic
-        for prop in data["properties"]:
+        for prop in data["properties"].values():
             self.properties[prop["name"]].value = prop["value"]
         # inputs
-        for input in data["inputs"]:
+        for input in data["inputs"].values():
             if input.get("property", None):
                 self.inputs[input["name"]].socket_property.value = input["property"][
                     "value"
@@ -440,11 +440,11 @@ class Node:
                         "property"
                     ]["default"]
         # print("inputs: ", data.get("inputs", None))
-        for input in data.get("inputs", {}):
+        for input in data.get("inputs", {}).values():
             self.inputs[input["name"]].uuid = input.get("uuid", None)
         # outputs
         # print("outputs: ", data.get("outputs", None))
-        for output in data.get("outputs", {}):
+        for output in data.get("outputs", {}).values():
             self.outputs[output["name"]].uuid = output.get("uuid", None)
 
     @classmethod
@@ -572,7 +572,7 @@ class Node:
 
         for key in ("properties", "executor", "node_class", "process"):
             tdata.pop(key, None)
-        for input in tdata["inputs"]:
+        for input in tdata["inputs"].values():
             input.pop("property", None)
 
         tdata["label"] = tdata["identifier"]

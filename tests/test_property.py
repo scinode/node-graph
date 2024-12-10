@@ -2,7 +2,6 @@ import pytest
 from node_graph import NodeGraph
 from node_graph.property import NodeProperty
 from node_graph.node import Node
-from node_graph.utils import get_item_by_name
 
 
 @pytest.mark.parametrize(
@@ -69,7 +68,7 @@ def test_enum_update_type():
     nd.properties["function"].value = "sqrt"
     assert len(nd.inputs) == 1
     pdata = nd.export_properties()
-    assert get_item_by_name("function", pdata)["value"] == "sqrt"
+    assert pdata["function"]["value"] == "sqrt"
     # copy
     p1 = nd.properties["function"].copy()
     assert p1.value == "sqrt"

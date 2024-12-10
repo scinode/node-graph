@@ -84,6 +84,9 @@ def test_decorator_parameters() -> None:
     assert test1.get_args_data()["var_args"] == "x"
     assert "sum" in test1.get_output_names()
     assert "product" in test1.get_output_names()
+    # create another node
+    test2 = test.node()
+    assert test2.inputs.b.socket_value == test1.inputs.b.socket_value
 
 
 def create_test_node_group():

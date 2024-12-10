@@ -4,6 +4,13 @@ import sys
 import difflib
 
 
+def list_to_dict(data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Convert list to dict."""
+    if isinstance(data, dict):
+        return data
+    return {d["name"]: d for d in data}
+
+
 def nodegaph_to_short_json(
     ngdata: Dict[str, Union[str, List, Dict]]
 ) -> Dict[str, Union[str, Dict]]:
@@ -19,8 +26,8 @@ def nodegaph_to_short_json(
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
         inputs = [
-            {"name": input["name"], "identifier": input["identifier"]}
-            for input in node["inputs"]
+            {"name": name, "identifier": input["identifier"]}
+            for name, input in node["inputs"].items()
             if name in node["args"]
         ]
 
@@ -86,9 +93,9 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata["nodes"] = {}
     for node in nodes:
         node.setdefault("metadata", {})
-        node.setdefault("inputs", [])
-        node.setdefault("outputs", [])
-        node.setdefault("properties", [])
+        node["properties"] = list_to_dict(node.get("properties", {}))
+        node["inputs"] = list_to_dict(node.get("inputs", {}))
+        node["outputs"] = list_to_dict(node.get("outputs", {}))
         ntdata["nodes"][node["name"]] = node
     ntdata.setdefault("ctrl_links", {})
     return ntdata
@@ -118,6 +125,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     """
     from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
     import importlib
+    from copy import deepcopy
 
     ndata.setdefault("metadata", {})
 
@@ -131,6 +139,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         raise Exception("Error loading node class: {}".format(e))
 
     type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
+    print("properties: ", ndata.get("properties", {}))
 
     class DecoratedNode(NodeClass):
         identifier: str = ndata["identifier"].upper()
@@ -144,13 +153,17 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         is_dynamic: bool = True
 
         def create_properties(self):
-            for prop in ndata.get("properties", []):
+            # ndata is shared between all instances
+            # deepcopy to avoid changing the original data
+            properties = deepcopy(list_to_dict(ndata.get("properties", {})))
+            for prop in properties.values():
                 self.add_property(
                     prop.pop("identifier", type_mapping["default"]), **prop
                 )
 
         def create_sockets(self):
-            for input in ndata.get("inputs", []):
+            inputs = deepcopy(list_to_dict(ndata.get("inputs", {})))
+            for input in inputs.values():
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
                 kwargs = {}
@@ -163,7 +176,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                     link_limit=input.get("link_limit", 1),
                     **kwargs,
                 )
-            for output in ndata.get("outputs", []):
+            outputs = deepcopy(list_to_dict(ndata.get("outputs", {})))
+            for output in outputs.values():
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
                 identifier = output.get("identifier", type_mapping["default"])
@@ -210,10 +224,3 @@ def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
         if args_data["var_kwargs"] is not None:
             raise ValueError("Only one VAR_KWARGS is allowed")
         args_data["var_kwargs"] = name
-
-
-def get_item_by_name(name: str, data: list) -> dict:
-    """Get item by name from a list."""
-    for item in data:
-        if item["name"] == name:
-            return item
