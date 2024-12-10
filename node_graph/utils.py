@@ -139,7 +139,6 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         raise Exception("Error loading node class: {}".format(e))
 
     type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
-    print("properties: ", ndata.get("properties", {}))
 
     class DecoratedNode(NodeClass):
         identifier: str = ndata["identifier"].upper()

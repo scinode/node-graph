@@ -4,6 +4,7 @@ from node_graph.property import NodeProperty
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Callable, Union
 from node_graph.utils import get_item_class
 from node_graph.utils import get_entries
+from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 
 
 if TYPE_CHECKING:
@@ -236,6 +237,8 @@ class NodeSocketNamespace(BaseSocket):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _socket_identifier: str = "node_graph.namespace"
+    _type_mapping: dict = node_graph_type_mapping
+
     _RESERVED_NAMES = {
         "_socket_property_class",
         "_socket_identifier",
@@ -282,12 +285,14 @@ class NodeSocketNamespace(BaseSocket):
     @decorator_check_identifier_name
     def _new(
         self,
-        identifier: Union[str, type] = "node_graph.any",
+        identifier: Union[str, type] = None,
         name: Optional[str] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
         **kwargs: Any,
     ) -> object:
+
+        identifier = identifier or self._type_mapping["default"]
 
         socket_names = name.split(".", 1)
         if len(socket_names) > 1:
@@ -297,7 +302,7 @@ class NodeSocketNamespace(BaseSocket):
                 if self.socket_is_dynamic:
                     # the sub-socket should also be dynamic
                     self._new(
-                        "node_graph.namespace",
+                        self._type_mapping["namespace"],
                         namespace,
                         metadata={"dynamic": True},
                     )
@@ -342,7 +347,14 @@ class NodeSocketNamespace(BaseSocket):
             for key, val in value.items():
                 if key not in self:
                     if self.socket_is_dynamic:
-                        self._new("node_graph.any", key)
+                        if isinstance(val, dict):
+                            self._new(
+                                self._type_mapping["namespace"],
+                                key,
+                                metadata={"dynamic": True},
+                            )
+                        else:
+                            self._new(self._type_mapping["default"], key)
                     else:
                         raise ValueError(
                             f"Socket {key} does not exist in the socket collection."
@@ -354,7 +366,10 @@ class NodeSocketNamespace(BaseSocket):
             )
 
     def _to_dict(self) -> Dict[str, Any]:
-        data = super(NodeSocketNamespace, self)._to_dict()  # Get base NodeSocket dict
+        data = super(NodeSocketNamespace, self)._to_dict()
+        data["sockets"] = {}
+        for item in self._items.values():
+            data["sockets"][item.socket_name] = item._to_dict()
         # Add nested sockets information
         data["value"] = self.socket_value
         return data
@@ -413,7 +428,11 @@ class NodeSocketNamespace(BaseSocket):
         Returns:
             bool: True if the item exists, False otherwise.
         """
-        return name in self._items
+        keys = name.split(".", 1)
+        if keys[0] in self._items:
+            if len(keys) > 1:
+                return keys[1] in self._items[keys[0]]
+            return True
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""
@@ -434,8 +453,12 @@ class NodeSocketNamespace(BaseSocket):
         Returns:
             object: _description_
         """
-        if name in self._items:
-            return self._items[name]
+        keys = name.split(".", 1)
+        if keys[0] in self._items:
+            item = self._items[keys[0]]
+            if len(keys) > 1:
+                return item[keys[1]]
+            return item
         raise AttributeError(
             f""""{name}" is not in the {self.__class__.__name__}.
 Acceptable names are {self._keys()}. This collection belongs to {self.socket_parent}."""

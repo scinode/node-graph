@@ -540,9 +540,9 @@ class Node:
             if isinstance(value, Node):
                 self.parent.add_link(value.outputs["_outputs"], self.inputs[key])
                 continue
-            if key in self.get_property_names():
+            if key in self.properties:
                 self.properties[key].value = value
-            elif key in self.get_input_names():
+            elif key in self.inputs:
                 self.inputs[key]._set_socket_value(value)
             else:
                 raise Exception(
