@@ -144,13 +144,13 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         is_dynamic: bool = True
 
         def create_properties(self):
-            for prop in ndata["properties"]:
+            for prop in ndata.get("properties", []):
                 self.add_property(
                     prop.pop("identifier", type_mapping["default"]), **prop
                 )
 
         def create_sockets(self):
-            for input in ndata["inputs"]:
+            for input in ndata.get("inputs", []):
                 if isinstance(input, str):
                     input = {"identifier": type_mapping["default"], "name": input}
                 kwargs = {}
@@ -163,7 +163,7 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                     link_limit=input.get("link_limit", 1),
                     **kwargs,
                 )
-            for output in ndata["outputs"]:
+            for output in ndata.get("outputs", []):
                 if isinstance(output, str):
                     output = {"identifier": type_mapping["default"], "name": output}
                 identifier = output.get("identifier", type_mapping["default"])

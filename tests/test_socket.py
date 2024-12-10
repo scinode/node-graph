@@ -145,3 +145,22 @@ def test_set_namespace(node_with_namespace_socket):
 
     n.inputs.socket_value = data
     assert n.inputs.socket_value == data
+
+
+def test_keys_order():
+    node = Node()
+    node.add_input("node_graph.int", "e")
+    node.add_input("node_graph.int", "d")
+    node.add_input("node_graph.int", "a")
+    node.add_input("node_graph.int", "c")
+    node.add_input("node_graph.int", "b")
+    assert node.inputs[1].socket_name == "d"
+    assert node.inputs["d"].socket_name == "d"
+    assert node.inputs[-2].socket_name == "c"
+    assert node.inputs._keys() == ["e", "d", "a", "c", "b"]
+    del node.inputs["a"]
+    assert node.inputs._keys() == ["e", "d", "c", "b"]
+    del node.inputs[1]
+    assert node.inputs._keys() == ["e", "c", "b"]
+    del node.inputs[[0, 2]]
+    assert node.inputs._keys() == ["c"]

@@ -394,7 +394,7 @@ class NodeGraph:
             # Delete links in reverse order to avoid index shift
             for index in sorted(link_indices, reverse=True):
                 del self.links[index]
-            self.nodes._delete(name)
+            del self.nodes[name]
 
     def wait(self) -> None:
         """Waits for the node graph to finish.

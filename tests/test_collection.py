@@ -18,10 +18,10 @@ def test_base_collection():
     coll1 = coll._copy()
     assert len(coll1) == 2
     # delete
-    coll._delete(node1.name)
+    coll.pop(node1.name)
     assert len(coll) == 1
     # get
-    assert coll._get("node2") == node2
+    assert coll["node2"] == node2
     # get by uuid
     assert coll._get_by_uuid(node2.uuid) == node2
     # __repr__

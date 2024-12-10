@@ -337,25 +337,25 @@ class Node:
         """Export properties to a dictionary.
         This data will be used for calculation.
         """
-        properties = []
+        properties = {}
         for prop in self.properties:
-            properties.append(prop.to_dict())
+            properties[prop.name] = prop.to_dict()
         return properties
 
     def export_input_sockets(self) -> List[Dict[str, Any]]:
         """Export input sockets to a dictionary."""
         # save all relations using links
-        inputs = []
+        inputs = {}
         for input in self.inputs:
-            inputs.append(input._to_dict())
+            inputs[input.socket_name] = input._to_dict()
         return inputs
 
     def export_output_sockets(self) -> List[Dict[str, Any]]:
         """Export output sockets to a dictionary."""
         # save all relations using links
-        outputs = []
+        outputs = {}
         for output in self.outputs:
-            outputs.append(output._to_dict())
+            outputs[output.socket_name] = output._to_dict()
         return outputs
 
     def export_ctrl_input_sockets(self) -> List[Dict[str, Any]]:

@@ -269,10 +269,10 @@ class NodeSocketNamespace(BaseSocket):
             link_limit=link_limit,
             metadata=metadata,
         )
-        self._items: List[object] = []
+        #
+        self._items: Dict[str, object] = {}
         self.socket_parent = parent
         # one can specify the pool or entry_point to get the pool
-        # if pool is not None, entry_point will be ignored, e.g., Link has no pool
         if pool is not None:
             self._socket_pool = pool
         elif entry_point is not None:
@@ -326,8 +326,8 @@ class NodeSocketNamespace(BaseSocket):
     @property
     def socket_value(self) -> Dict[str, Any]:
         return {
-            item.socket_name: item.socket_value
-            for item in self._items
+            name: item.socket_value
+            for name, item in self._items.items()
             if item.socket_value is not None
         }
 
@@ -389,17 +389,18 @@ class NodeSocketNamespace(BaseSocket):
             metadata=self.socket_metadata,
         )
         # Copy nested sockets
-        for item in self._items:
+        for item in self._items.values():
             ns_copy._append(item._copy(parent=parent))
         return ns_copy
 
     def __iter__(self) -> object:
-        for item in self._items:
-            yield item
+        # Iterate over items in insertion order
+        return iter(self._items.values())
 
     def __getitem__(self, index: Union[int, str]) -> object:
         if isinstance(index, int):
-            return self._items[index]
+            # If indexing by int, convert dict keys to a list and index it
+            return self._items[list(self._items.keys())[index]]
         elif isinstance(index, str):
             return self._get(index)
 
@@ -412,15 +413,15 @@ class NodeSocketNamespace(BaseSocket):
         Returns:
             bool: True if the item exists, False otherwise.
         """
-        return name in self._keys()
+        return name in self._items
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""
-        if item.socket_name in self._keys():
+        if item.socket_name in self._items:
             raise Exception(
-                f"{item.socket_name} already exist, please choose another name."
+                f"{item.socket_name} already exists, please choose another name."
             )
-        self._items.append(item)
+        self._items[item.socket_name] = item
         # Set the item as an attribute on the instance
         setattr(self, item.socket_name, item)
 
@@ -433,44 +434,42 @@ class NodeSocketNamespace(BaseSocket):
         Returns:
             object: _description_
         """
-        for item in self._items:
-            if item.socket_name == name:
-                return item
+        if name in self._items:
+            return self._items[name]
         raise AttributeError(
             f""""{name}" is not in the {self.__class__.__name__}.
 Acceptable names are {self._keys()}. This collection belongs to {self.socket_parent}."""
         )
 
     def _keys(self) -> List[str]:
-        keys = []
-        for item in self._items:
-            keys.append(item.socket_name)
-        return keys
+        return list(self._items.keys())
 
     def _clear(self) -> None:
         """Remove all items from this collection."""
-        self._items = []
+        self._items = {}
 
-    def __delitem__(self, index: Union[int, List[int]]) -> None:
-        del self._items[index]
-
-    def _delete(self, name: str) -> None:
-        """Delete item by name
-
-        Args:
-            name (str): _description_
-        """
-        for index, item in enumerate(self._items):
-            if item.socket_name == name:
-                del self._items[index]
-                self._execute_post_deletion_hooks(item)
-                return
+    def __delitem__(self, index: Union[int, List[int], str]) -> None:
+        # If index is int, convert _items to a list and remove by index
+        if isinstance(index, str):
+            self._items.pop(index)
+        elif isinstance(index, int):
+            key = list(self._items.keys())[index]
+            self._items.pop(key)
+        elif isinstance(index, list):
+            keys = list(self._items.keys())
+            for i in sorted(index, reverse=True):
+                key = keys[i]
+                self._items.pop(key)
+        else:
+            raise ValueError(
+                f"Invalid index type for __delitem__: {index}, expected int or str, or list of int."
+            )
 
     def __len__(self) -> int:
         return len(self._items)
 
     def __repr__(self) -> str:
-        nested = [item.socket_name for item in self._items]
+        nested = list(self._items.keys())
         return (
             f"{self.__class__.__name__}(name='{self.socket_name}', "
             f"sockets={nested})"
