@@ -99,9 +99,9 @@ class NodeLink:
     def to_dict(self) -> dict:
         """Data to be saved to database"""
         dbdata = {
-            "from_socket": self.from_socket.socket_name,
+            "from_socket": self.from_socket.socket_full_name.split(".", 1)[1],
             "from_node": self.from_node.name,
-            "to_socket": self.to_socket.socket_name,
+            "to_socket": self.to_socket.socket_full_name.split(".", 1)[1],
             "to_node": self.to_node.name,
             "state": self.state,
         }

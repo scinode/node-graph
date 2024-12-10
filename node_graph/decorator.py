@@ -141,14 +141,14 @@ def generate_input_sockets(
                     )
                 input["identifier"] = type_mapping["namespace"]
                 input.setdefault("metadata", {})
-                input["metadata"]["arg_type"] = "var_kwargs"
+                input["metadata"].update({"arg_type": "var_kwargs", "dynamic": True})
                 has_var_kwargs = True
         if not has_var_kwargs:
             inputs.append(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_kwargs,
-                    "metadata": {"arg_type": "var_kwargs"},
+                    "metadata": {"arg_type": "var_kwargs", "dynamic": True},
                     "link_limit": 1e6,
                 }
             )

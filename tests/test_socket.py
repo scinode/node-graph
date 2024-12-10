@@ -124,6 +124,19 @@ def test_namespace(node_with_namespace_socket):
         "non_dynamic": {"sub": {"y": 1.0}},
         "dynamic": {"x": 1.0},
     }
+    assert n.inputs.non_dynamic.sub.y.socket_full_name == "inputs.non_dynamic.sub.y"
+    # nested keys
+    assert set(n.inputs._get_all_keys()) == set(
+        [
+            "x",
+            "dynamic",
+            "dynamic.x",
+            "non_dynamic",
+            "non_dynamic.sub",
+            "non_dynamic.sub.y",
+            "non_dynamic.sub.z",
+        ]
+    )
 
 
 def test_set_namespace(node_with_namespace_socket):
@@ -157,10 +170,10 @@ def test_keys_order():
     assert node.inputs[1].socket_name == "d"
     assert node.inputs["d"].socket_name == "d"
     assert node.inputs[-2].socket_name == "c"
-    assert node.inputs._keys() == ["e", "d", "a", "c", "b"]
+    assert node.inputs._get_keys() == ["e", "d", "a", "c", "b"]
     del node.inputs["a"]
-    assert node.inputs._keys() == ["e", "d", "c", "b"]
+    assert node.inputs._get_keys() == ["e", "d", "c", "b"]
     del node.inputs[1]
-    assert node.inputs._keys() == ["e", "c", "b"]
+    assert node.inputs._get_keys() == ["e", "c", "b"]
     del node.inputs[[0, 2]]
-    assert node.inputs._keys() == ["c"]
+    assert node.inputs._get_keys() == ["c"]

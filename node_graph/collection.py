@@ -46,7 +46,7 @@ class Collection:
             return self._items[index]
 
     def __dir__(self):
-        return sorted(set(self._keys()))
+        return sorted(set(self._get_keys()))
 
     def __contains__(self, name: str) -> bool:
         """Check if an item with the given name exists in the collection.
@@ -82,7 +82,7 @@ class Collection:
 
     def _extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
-        conflict_names = set(self._keys()).intersection(new_names)
+        conflict_names = set(self._get_keys()).intersection(new_names)
         if len(conflict_names) > 0:
             raise Exception(
                 f"{conflict_names} already exist, please choose another names."
@@ -103,7 +103,7 @@ class Collection:
             return self._items[name]
         raise AttributeError(
             f""""{name}" is not in the {self.__class__.__name__}.
-Acceptable names are {self._keys()}. This collection belongs to {self.socket_parent}."""
+Acceptable names are {self._get_keys()}. This collection belongs to {self.socket_parent}."""
         )
 
     def _get_by_uuid(self, uuid: str) -> Optional[object]:
@@ -120,7 +120,7 @@ Acceptable names are {self._keys()}. This collection belongs to {self.socket_par
                 return item
         return None
 
-    def _keys(self) -> List[str]:
+    def _get_keys(self) -> List[str]:
         return list(self._items.keys())
 
     def _clear(self) -> None:
@@ -191,9 +191,9 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
             else:
                 msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
             raise ValueError(msg)
-        if len(args) > 2 and args[2] in args[0]._keys():
+        if len(args) > 2 and args[2] in args[0]._get_keys():
             raise ValueError(f"{args[2]} already exists, please choose another name.")
-        if kwargs.get("name", None) in args[0]._keys():
+        if kwargs.get("name", None) in args[0]._get_keys():
             raise ValueError(
                 f"{kwargs.get('name')} already exists, please choose another name."
             )
@@ -252,7 +252,7 @@ class NodeCollection(Collection):
         s = ""
         parent_name = self.parent.name if self.parent else ""
         s += f'NodeCollection(parent = "{parent_name}", nodes = ['
-        s += ", ".join([f'"{x}"' for x in self._keys()])
+        s += ", ".join([f'"{x}"' for x in self._get_keys()])
         s += "])"
         return s
 
@@ -283,7 +283,7 @@ class PropertyCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'PropertyCollection(node = "{node_name}", properties = ['
-        s += ", ".join([f'"{x}"' for x in self._keys()])
+        s += ", ".join([f'"{x}"' for x in self._get_keys()])
         s += "])"
         return s
 

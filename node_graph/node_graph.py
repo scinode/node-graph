@@ -95,7 +95,7 @@ class NodeGraph:
 
     def get_node_names(self) -> List[str]:
         """Returns the names of the nodes in the node graph."""
-        return self.nodes._keys()
+        return self.nodes._get_keys()
 
     def launch(self) -> None:
         """Launches the node graph."""

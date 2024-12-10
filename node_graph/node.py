@@ -125,13 +125,13 @@ class Node:
         return output
 
     def get_input_names(self) -> List[str]:
-        return self.inputs._keys()
+        return self.inputs._get_keys()
 
     def get_output_names(self) -> List[str]:
-        return self.outputs._keys()
+        return self.outputs._get_keys()
 
     def get_property_names(self) -> List[str]:
-        return self.properties._keys()
+        return self.properties._get_keys()
 
     def create_properties(self) -> None:
         """Create properties for this node.

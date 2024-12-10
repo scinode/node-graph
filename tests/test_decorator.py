@@ -60,6 +60,7 @@ def test_decorator_args() -> None:
     assert set(task1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
     assert task1.get_args_data()["var_kwargs"] == "e"
     assert isinstance(task1.inputs.e, NodeSocketNamespace)
+    assert task1.inputs.e.socket_is_dynamic is True
 
 
 def test_decorator_parameters() -> None:
