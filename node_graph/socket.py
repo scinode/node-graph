@@ -131,7 +131,7 @@ class NodeSocket(BaseSocket):
             metadata=metadata,
         )
         # Conditionally add a property if property_identifier is provided
-        self.socket_property: Optional[NodeProperty] = None
+        self.property: Optional[NodeProperty] = None
         if self._socket_property_identifier:
             property_data = property_data or {}
             property_data.pop("identifier", None)
@@ -145,14 +145,14 @@ class NodeSocket(BaseSocket):
         """Add a property to this socket."""
         if name is None:
             name = self._name
-        self.socket_property = self._socket_property_class.new(
+        self.property = self._socket_property_class.new(
             identifier, name=name, data=kwargs
         )
 
     @property
     def value(self) -> Any:
-        if self.socket_property:
-            return self.socket_property.value
+        if self.property:
+            return self.property.value
         return None
 
     @value.setter
@@ -162,8 +162,8 @@ class NodeSocket(BaseSocket):
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
             self._node.parent.add_link(value, self)
-        elif self.socket_property:
-            self.socket_property.value = value
+        elif self.property:
+            self.property.value = value
         else:
             raise AttributeError(
                 f"Socket '{self._name}' has no property to set a value."
@@ -172,8 +172,8 @@ class NodeSocket(BaseSocket):
     def _to_dict(self):
         data = super()._to_dict()
         # data from property
-        if self.socket_property is not None:
-            data["property"] = self.socket_property.to_dict()
+        if self.property is not None:
+            data["property"] = self.property.to_dict()
         else:
             data["property"] = None
         return data
@@ -197,12 +197,12 @@ class NodeSocket(BaseSocket):
             parent=parent,
             link_limit=self._link_limit,
         )
-        if self.socket_property:
-            socket_copy.socket_property = self.socket_property.copy()
+        if self.property:
+            socket_copy.property = self.property.copy()
         return socket_copy
 
     def __repr__(self) -> str:
-        value = self.socket_property.value if self.socket_property else None
+        value = self.property.value if self.property else None
         return f"{self.__class__.__name__}(name='{self._name}', value={value})"
 
 
@@ -274,7 +274,7 @@ class NodeSocketNamespace(BaseSocket):
             metadata=metadata,
         )
         #
-        self._items: Dict[str, object] = {}
+        self._sockets: Dict[str, object] = {}
         self._parent = parent
         # one can specify the pool or entry_point to get the pool
         if pool is not None:
@@ -333,7 +333,7 @@ class NodeSocketNamespace(BaseSocket):
     def _value(self) -> Dict[str, Any]:
 
         data = {}
-        for name, item in self._items.items():
+        for name, item in self._sockets.items():
             if isinstance(item, NodeSocketNamespace):
                 data[name] = item._value
             else:
@@ -374,7 +374,7 @@ class NodeSocketNamespace(BaseSocket):
         data = super()._to_dict()
         data["sockets"] = {}
         # Add nested sockets information
-        for item in self._items.values():
+        for item in self._sockets.values():
             data["sockets"][item._name] = item._to_dict()
         data["value"] = self._value
         return data
@@ -389,7 +389,7 @@ class NodeSocketNamespace(BaseSocket):
             parent=base_socket.parent,
             link_limit=base_socket.link_limit,
             metadata=base_socket._metadata,
-            property_data=base_socket.socket_property.to_dict()
+            property_data=base_socket.property.to_dict()
             if base_socket.property
             else None,
         )
@@ -409,22 +409,22 @@ class NodeSocketNamespace(BaseSocket):
             metadata=self._metadata,
         )
         # Copy nested sockets
-        for item in self._items.values():
+        for item in self._sockets.values():
             ns_copy._append(item._copy(parent=parent))
         return ns_copy
 
     def __iter__(self) -> object:
         # Iterate over items in insertion order
-        return iter(self._items.values())
+        return iter(self._sockets.values())
 
     def __getitem__(self, key: Union[int, str]) -> object:
         if isinstance(key, int):
             # If indexing by int, convert dict keys to a list and index it
-            return self._items[list(self._items.keys())[key]]
+            return self._sockets[list(self._sockets.keys())[key]]
         elif isinstance(key, str):
             keys = key.split(".", 1)
-            if keys[0] in self._items:
-                item = self._items[keys[0]]
+            if keys[0] in self._sockets:
+                item = self._sockets[keys[0]]
                 if len(keys) > 1:
                     return item[keys[1]]
                 return item
@@ -443,19 +443,18 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
             bool: True if the item exists, False otherwise.
         """
         keys = name.split(".", 1)
-        if keys[0] in self._items:
+        if keys[0] in self._sockets:
             if len(keys) > 1:
-                return keys[1] in self._items[keys[0]]
+                return keys[1] in self._sockets[keys[0]]
             return True
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""
-        if item._name in self._items:
+        if item._name in self._sockets:
             raise ValueError(f"Name '{item._name}' already exists in the namespace.")
-        print("name", item._name)
         if item._name.upper() in self._RESERVED_NAMES:
             raise ValueError(f"Name '{item._name}' is reserved by the namespace.")
-        self._items[item._name] = item
+        self._sockets[item._name] = item
         # Set the item as an attribute on the instance
         setattr(self, item._name, item)
 
@@ -471,8 +470,8 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
 
     def _get_all_keys(self) -> List[str]:
         # keys in the collection, with the option to include nested keys
-        keys = [item._full_name.split(".", 1)[1] for item in self._items.values()]
-        for item in self._items.values():
+        keys = [item._full_name.split(".", 1)[1] for item in self._sockets.values()]
+        for item in self._sockets.values():
             if isinstance(item, NodeSocketNamespace):
                 keys.extend(item._get_all_keys())
             else:
@@ -481,32 +480,32 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
 
     def _get_keys(self) -> List[str]:
         # keys in the collection, with the option to include nested keys
-        return list(self._items.keys())
+        return list(self._sockets.keys())
 
     def _clear(self) -> None:
         """Remove all items from this collection."""
-        self._items = {}
+        self._sockets = {}
 
     def __delitem__(self, index: Union[int, List[int], str]) -> None:
         # If index is int, convert _items to a list and remove by index
         if isinstance(index, str):
-            self._items.pop(index)
+            self._sockets.pop(index)
         elif isinstance(index, int):
-            key = list(self._items.keys())[index]
-            self._items.pop(key)
+            key = list(self._sockets.keys())[index]
+            self._sockets.pop(key)
         elif isinstance(index, list):
-            keys = list(self._items.keys())
+            keys = list(self._sockets.keys())
             for i in sorted(index, reverse=True):
                 key = keys[i]
-                self._items.pop(key)
+                self._sockets.pop(key)
         else:
             raise ValueError(
                 f"Invalid index type for __delitem__: {index}, expected int or str, or list of int."
             )
 
     def __len__(self) -> int:
-        return len(self._items)
+        return len(self._sockets)
 
     def __repr__(self) -> str:
-        nested = list(self._items.keys())
+        nested = list(self._sockets.keys())
         return f"{self.__class__.__name__}(name='{self._name}', " f"sockets={nested})"

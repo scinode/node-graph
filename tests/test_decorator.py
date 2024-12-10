@@ -37,7 +37,7 @@ def test_create_node():
     ng.add_node(MyNumpyAdd, "add1")
     assert len(ng.nodes) == 1
     assert ng.nodes[0].properties[0].default == 3
-    assert ng.nodes[0].inputs[0].socket_property.default == 10
+    assert ng.nodes[0].inputs[0].property.default == 10
 
 
 def test_decorator_args() -> None:
@@ -55,7 +55,7 @@ def test_decorator_args() -> None:
     assert task1.inputs["e"]._identifier == "node_graph.namespace"
     assert task1.inputs["c"]._metadata["required"] is True
     assert task1.inputs["d"]._metadata["required"] is False
-    assert task1.inputs["d"].socket_property.default == 1
+    assert task1.inputs["d"].property.default == 1
     assert set(task1.get_args_data()["args"]) == set(["a"])
     assert set(task1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
     assert task1.get_args_data()["var_kwargs"] == "e"
@@ -119,7 +119,7 @@ def test_socket(decorated_myadd):
     n = decorated_myadd.node()
     assert n.inputs["x"]._identifier == "node_graph.float"
     assert n.inputs["y"]._identifier == "node_graph.float"
-    assert n.inputs["t"].socket_property.default == 1
+    assert n.inputs["t"].property.default == 1
 
 
 def test_create_node_group():

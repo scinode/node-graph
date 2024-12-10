@@ -432,13 +432,11 @@ class Node:
         # inputs
         for input in data["inputs"].values():
             if input.get("property", None):
-                self.inputs[input["name"]].socket_property.value = input["property"][
-                    "value"
-                ]
+                self.inputs[input["name"]].property.value = input["property"]["value"]
                 if input["property"].get("default", None):
-                    self.inputs[input["name"]].socket_property.default = input[
-                        "property"
-                    ]["default"]
+                    self.inputs[input["name"]].property.default = input["property"][
+                        "default"
+                    ]
         # print("inputs: ", data.get("inputs", None))
         for input in data.get("inputs", {}).values():
             self.inputs[input["name"]].uuid = input.get("uuid", None)

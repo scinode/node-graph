@@ -39,7 +39,7 @@ def test_set_node_as_input():
     add2 = ng.add_node("node_graph.test_add", "add2")
     add2.set({"x": add1})
     assert len(ng.links) == 1
-    assert add2.inputs["x"].socket_property.value is None
+    assert add2.inputs["x"].property.value is None
 
 
 def test_set_link_as_input():
@@ -48,22 +48,22 @@ def test_set_link_as_input():
     add2 = ng.add_node("node_graph.test_add", "add2")
     add2.set({"x": add1.outputs["result"]})
     assert len(ng.links) == 1
-    assert add2.inputs["x"].socket_property.value is None
+    assert add2.inputs["x"].property.value is None
 
 
 def test_set_property():
 
     ng = NodeGraph(name="test_set_property")
     math = ng.add_node("node_graph.test_add", "Math")
-    math.inputs["x"].socket_property.value = 2
-    assert math.inputs["x"].socket_property.value == 2
+    math.inputs["x"].property.value = 2
+    assert math.inputs["x"].property.value == 2
 
 
 def test_to_dict():
 
     ng = NodeGraph(name="test_to_dict")
     math = ng.add_node("node_graph.test_add", "Math")
-    math.inputs["x"].socket_property.value = 2
+    math.inputs["x"].property.value = 2
     data = math.to_dict()
     assert data["identifier"] == "node_graph.test_add"
 
@@ -79,7 +79,7 @@ def test_copy():
     math = ng.add_node("node_graph.test_add", "Math", t=5, x=2)
     math1 = math.copy()
     assert math1.properties["t"].value == 5
-    assert math1.inputs["x"].socket_property.value == 2
+    assert math1.inputs["x"].property.value == 2
     assert math1.parent.uuid == ng.uuid
     assert math1.name == f"{math.name}_copy"
     #

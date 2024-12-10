@@ -16,7 +16,7 @@ def test_metadata():
     )
     assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
     assert socket._link_limit == 100000
-    assert socket.socket_property.default == 1
+    assert socket.property.default == 1
     data = socket._to_dict()
     assert data["metadata"] == {"dynamic": True, "arg_type": "kwargs"}
 
@@ -39,11 +39,11 @@ def test_base_socket_type(id, data):
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node("node_graph.test_add", "test")
     socket = n.add_input(id, "test")
-    socket.socket_property.value = data
-    assert socket.socket_property.value == data
+    socket.property.value = data
+    assert socket.property.value == data
     # copy
     socket1 = socket._copy()
-    assert socket1.socket_property.value == data
+    assert socket1.property.value == data
     # set value directly
     socket1.value = data
 
@@ -68,11 +68,11 @@ def test_base_socket_type_validation(id, data):
     n = ng.add_node("node_graph.test_add", "test")
     socket = n.add_input(id, "test")
     try:
-        socket.socket_property.value = data
+        socket.property.value = data
     except Exception as e:
         print(e)
         assert e is not None
-    assert socket.socket_property.value != data
+    assert socket.property.value != data
 
 
 def test_general_property():
@@ -80,11 +80,11 @@ def test_general_property():
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
     socket = n.add_input("node_graph.any", "test")
-    socket.socket_property.value = np.ones((3, 3))
-    assert np.isclose(socket.socket_property.value, np.ones((3, 3))).all()
+    socket.property.value = np.ones((3, 3))
+    assert np.isclose(socket.property.value, np.ones((3, 3))).all()
     # copy
     socket1 = socket._copy()
-    assert np.isclose(socket1.socket_property.value, np.ones((3, 3))).all()
+    assert np.isclose(socket1.property.value, np.ones((3, 3))).all()
 
 
 def test_socket_match(ng):
