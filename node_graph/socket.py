@@ -24,7 +24,7 @@ class BaseSocket:
         link_limit (int): Maximum number of links.
     """
 
-    _socket_identifier: str = "BaseSocket"
+    _identifier: str = "BaseSocket"
 
     def __init__(
         self,
@@ -42,41 +42,41 @@ class BaseSocket:
             type (str, optional): Socket type. Defaults to "INPUT".
             link_limit (int, optional): Maximum number of links. Defaults to 1.
         """
-        self.socket_name: str = name
-        self.socket_node: Optional["Node"] = node
-        self.socket_parent: Optional["NodeSocketNamespace"] = parent
-        self.socket_links: List["NodeLink"] = []
-        self.socket_link_limit: int = link_limit
-        self.socket_metadata: Optional[dict] = metadata or {}
+        self._name: str = name
+        self._node: Optional["Node"] = node
+        self._parent: Optional["NodeSocketNamespace"] = parent
+        self._links: List["NodeLink"] = []
+        self._link_limit: int = link_limit
+        self._metadata: Optional[dict] = metadata or {}
 
     @property
-    def socket_full_name(self) -> str:
-        if self.socket_parent is not None:
-            return f"{self.socket_parent.socket_full_name}.{self.socket_name}"
-        return self.socket_name
+    def _full_name(self) -> str:
+        if self._parent is not None:
+            return f"{self._parent._full_name}.{self._name}"
+        return self._name
 
     def _to_dict(self) -> Dict[str, Any]:
         """Export the socket to a dictionary for database storage."""
         data: Dict[str, Any] = {
-            "name": self.socket_name,
-            "identifier": self._socket_identifier,
-            "link_limit": self.socket_link_limit,
+            "name": self._name,
+            "identifier": self._identifier,
+            "link_limit": self._link_limit,
             "links": [],
-            "metadata": self.socket_metadata,
+            "metadata": self._metadata,
         }
-        for link in self.socket_links:
-            if self.socket_metadata.get("socket_type", "INPUT").upper() == "INPUT":
+        for link in self._links:
+            if self._metadata.get("socket_type", "INPUT").upper() == "INPUT":
                 data["links"].append(
                     {
                         "from_node": link.from_node.name,
-                        "from_socket": link.from_socket.socket_name,
+                        "from_socket": link.from_socket._name,
                     }
                 )
             else:
                 data["links"].append(
                     {
                         "to_node": link.to_node.name,
-                        "to_socket": link.to_socket.socket_name,
+                        "to_socket": link.to_socket._name,
                     }
                 )
 
@@ -99,7 +99,7 @@ class BaseSocket:
 
 class NodeSocket(BaseSocket):
 
-    _socket_identifier: str = "NodeSocket"
+    _identifier: str = "NodeSocket"
 
     _socket_property_class = NodeProperty
 
@@ -144,29 +144,29 @@ class NodeSocket(BaseSocket):
     ) -> None:
         """Add a property to this socket."""
         if name is None:
-            name = self.socket_name
+            name = self._name
         self.socket_property = self._socket_property_class.new(
             identifier, name=name, data=kwargs
         )
 
     @property
-    def socket_value(self) -> Any:
+    def value(self) -> Any:
         if self.socket_property:
             return self.socket_property.value
         return None
 
-    @socket_value.setter
-    def socket_value(self, value: Any) -> None:
+    @value.setter
+    def value(self, value: Any) -> None:
         self._set_socket_value(value)
 
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
-            self.socket_node.parent.add_link(value, self)
+            self._node.parent.add_link(value, self)
         elif self.socket_property:
             self.socket_property.value = value
         else:
             raise AttributeError(
-                f"Socket '{self.socket_name}' has no property to set a value."
+                f"Socket '{self._name}' has no property to set a value."
             )
 
     def _to_dict(self):
@@ -189,13 +189,13 @@ class NodeSocket(BaseSocket):
         Returns:
             NodeSocket: The copied socket.
         """
-        node = self.socket_node if node is None else node
-        parent = self.socket_parent if parent is None else parent
+        node = self._node if node is None else node
+        parent = self._parent if parent is None else parent
         socket_copy = self.__class__(
-            name=self.socket_name,
+            name=self._name,
             node=node,
             parent=parent,
-            link_limit=self.socket_link_limit,
+            link_limit=self._link_limit,
         )
         if self.socket_property:
             socket_copy.socket_property = self.socket_property.copy()
@@ -203,7 +203,7 @@ class NodeSocket(BaseSocket):
 
     def __repr__(self) -> str:
         value = self.socket_property.value if self.socket_property else None
-        return f"{self.__class__.__name__}(name='{self.socket_name}', value={value})"
+        return f"{self.__class__.__name__}(name='{self._name}', value={value})"
 
 
 def decorator_check_identifier_name(func: Callable) -> Callable:
@@ -227,12 +227,6 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
             else:
                 msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
             raise ValueError(msg)
-        if len(args) > 2 and args[2] in args[0]._get_keys():
-            raise ValueError(f"{args[2]} already exists, please choose another name.")
-        if kwargs.get("name", None) in args[0]._get_keys():
-            raise ValueError(
-                f"{kwargs.get('name')} already exists, please choose another name."
-            )
         item = func(*args, **kwargs)
         return item
 
@@ -242,21 +236,22 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
 class NodeSocketNamespace(BaseSocket):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
-    _socket_identifier: str = "node_graph.namespace"
+    _identifier: str = "node_graph.namespace"
     _type_mapping: dict = node_graph_type_mapping
 
     _RESERVED_NAMES = {
-        "_socket_property_class",
-        "_socket_identifier",
-        "_socket_property_identifier",
+        "_SOCKET_PROPERTY_CLASS",
+        "_identifier",
+        "_SOCKET_PROPERTY_IDENTIFIER",
         "RESERVED_NAMES",
-        "socket_name",
-        "socket_node",
-        "socket_parent",
-        "socket_links",
-        "socket_property",
-        "socket_link_limit",
-        "_metadata",
+        "SOCKET_VALUE",
+        "_name",
+        "_node",
+        "_parent",
+        "_links",
+        "SOCKET_PROPERTY",
+        "_link_limit",
+        "_METADATA",
     }
 
     def __init__(
@@ -280,13 +275,13 @@ class NodeSocketNamespace(BaseSocket):
         )
         #
         self._items: Dict[str, object] = {}
-        self.socket_parent = parent
+        self._parent = parent
         # one can specify the pool or entry_point to get the pool
         if pool is not None:
             self._socket_pool = pool
         elif entry_point is not None:
             self._socket_pool = get_entries(entry_point_name=entry_point)
-        self.socket_is_dynamic = self.socket_metadata.get("dynamic", False)
+        self._socket_is_dynamic = self._metadata.get("dynamic", False)
 
     @decorator_check_identifier_name
     def _new(
@@ -300,12 +295,12 @@ class NodeSocketNamespace(BaseSocket):
 
         identifier = identifier or self._type_mapping["default"]
 
-        socket_names = name.split(".", 1)
-        if len(socket_names) > 1:
-            namespace = socket_names[0]
+        _names = name.split(".", 1)
+        if len(_names) > 1:
+            namespace = _names[0]
             if namespace not in self:
                 # if the namespace is dynamic, create sub-sockets if it does not exist
-                if self.socket_is_dynamic:
+                if self._socket_is_dynamic:
                     # the sub-socket should also be dynamic
                     self._new(
                         self._type_mapping["namespace"],
@@ -318,14 +313,14 @@ class NodeSocketNamespace(BaseSocket):
                     )
             return self[namespace]._new(
                 identifier,
-                socket_names[1],
+                _names[1],
                 metadata=metadata,
             )
         else:
             ItemClass = get_item_class(identifier, self._socket_pool, BaseSocket)
             item = ItemClass(
                 name,
-                node=self.socket_node,
+                node=self._node,
                 parent=self,
                 link_limit=link_limit,
                 metadata=metadata,
@@ -335,24 +330,28 @@ class NodeSocketNamespace(BaseSocket):
             return item
 
     @property
-    def socket_value(self) -> Dict[str, Any]:
-        return {
-            name: item.socket_value
-            for name, item in self._items.items()
-            if item.socket_value is not None
-        }
+    def _value(self) -> Dict[str, Any]:
 
-    @socket_value.setter
-    def socket_value(self, value: Dict[str, Any]) -> None:
+        data = {}
+        for name, item in self._items.items():
+            if isinstance(item, NodeSocketNamespace):
+                data[name] = item._value
+            else:
+                if item.value is not None:
+                    data[name] = item.value
+        return data
+
+    @_value.setter
+    def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
 
     def _set_socket_value(self, value: Dict[str, Any] | NodeSocket) -> None:
         if isinstance(value, BaseSocket):
-            self.socket_node.parent.add_link(value, self)
+            self._node.parent.add_link(value, self)
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:
-                    if self.socket_is_dynamic:
+                    if self._socket_is_dynamic:
                         if isinstance(val, dict):
                             self._new(
                                 self._type_mapping["namespace"],
@@ -372,12 +371,12 @@ class NodeSocketNamespace(BaseSocket):
             )
 
     def _to_dict(self) -> Dict[str, Any]:
-        data = super(NodeSocketNamespace, self)._to_dict()
+        data = super()._to_dict()
         data["sockets"] = {}
         # Add nested sockets information
         for item in self._items.values():
-            data["sockets"][item.socket_name] = item._to_dict()
-        data["value"] = self.socket_value
+            data["sockets"][item._name] = item._to_dict()
+        data["value"] = self._value
         return data
 
     @classmethod
@@ -389,7 +388,7 @@ class NodeSocketNamespace(BaseSocket):
             name=base_socket.name,
             parent=base_socket.parent,
             link_limit=base_socket.link_limit,
-            metadata=base_socket.socket_metadata,
+            metadata=base_socket._metadata,
             property_data=base_socket.socket_property.to_dict()
             if base_socket.property
             else None,
@@ -402,12 +401,12 @@ class NodeSocketNamespace(BaseSocket):
 
     def _copy(self, parent: Optional["NodeSocket"] = None) -> "NodeSocketNamespace":
         # Copy as parentSocket
-        parent = self.socket_parent if parent is None else parent
+        parent = self._parent if parent is None else parent
         ns_copy = self.__class__(
-            self.socket_name,
+            self._name,
             parent=parent,
-            link_limit=self.socket_link_limit,
-            metadata=self.socket_metadata,
+            link_limit=self._link_limit,
+            metadata=self._metadata,
         )
         # Copy nested sockets
         for item in self._items.values():
@@ -418,12 +417,21 @@ class NodeSocketNamespace(BaseSocket):
         # Iterate over items in insertion order
         return iter(self._items.values())
 
-    def __getitem__(self, index: Union[int, str]) -> object:
-        if isinstance(index, int):
+    def __getitem__(self, key: Union[int, str]) -> object:
+        if isinstance(key, int):
             # If indexing by int, convert dict keys to a list and index it
-            return self._items[list(self._items.keys())[index]]
-        elif isinstance(index, str):
-            return self._get(index)
+            return self._items[list(self._items.keys())[key]]
+        elif isinstance(key, str):
+            keys = key.split(".", 1)
+            if keys[0] in self._items:
+                item = self._items[keys[0]]
+                if len(keys) > 1:
+                    return item[keys[1]]
+                return item
+            raise AttributeError(
+                f""""{key}" is not in the {self.__class__.__name__}.
+Acceptable names are {self._get_keys()}. This collection belongs to {self._parent}."""
+            )
 
     def __contains__(self, name: str) -> bool:
         """Check if an item with the given name exists in the collection.
@@ -442,13 +450,14 @@ class NodeSocketNamespace(BaseSocket):
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""
-        if item.socket_name in self._items:
-            raise Exception(
-                f"{item.socket_name} already exists, please choose another name."
-            )
-        self._items[item.socket_name] = item
+        if item._name in self._items:
+            raise ValueError(f"Name '{item._name}' already exists in the namespace.")
+        print("name", item._name)
+        if item._name.upper() in self._RESERVED_NAMES:
+            raise ValueError(f"Name '{item._name}' is reserved by the namespace.")
+        self._items[item._name] = item
         # Set the item as an attribute on the instance
-        setattr(self, item.socket_name, item)
+        setattr(self, item._name, item)
 
     def _get(self, name: str) -> object:
         """Find item by name
@@ -459,25 +468,15 @@ class NodeSocketNamespace(BaseSocket):
         Returns:
             object: _description_
         """
-        keys = name.split(".", 1)
-        if keys[0] in self._items:
-            item = self._items[keys[0]]
-            if len(keys) > 1:
-                return item[keys[1]]
-            return item
-        raise AttributeError(
-            f""""{name}" is not in the {self.__class__.__name__}.
-Acceptable names are {self._get_keys()}. This collection belongs to {self.socket_parent}."""
-        )
 
     def _get_all_keys(self) -> List[str]:
         # keys in the collection, with the option to include nested keys
-        keys = [item.socket_full_name.split(".", 1)[1] for item in self._items.values()]
+        keys = [item._full_name.split(".", 1)[1] for item in self._items.values()]
         for item in self._items.values():
             if isinstance(item, NodeSocketNamespace):
                 keys.extend(item._get_all_keys())
             else:
-                keys.append(item.socket_full_name.split(".", 1)[1])
+                keys.append(item._full_name.split(".", 1)[1])
         return keys
 
     def _get_keys(self) -> List[str]:
@@ -510,7 +509,4 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self.socket
 
     def __repr__(self) -> str:
         nested = list(self._items.keys())
-        return (
-            f"{self.__class__.__name__}(name='{self.socket_name}', "
-            f"sockets={nested})"
-        )
+        return f"{self.__class__.__name__}(name='{self._name}', " f"sockets={nested})"

@@ -172,12 +172,12 @@ class Node:
         self.ctrl_inputs._clear()
         self.ctrl_outputs._clear()
         socket = self.add_ctrl_input("node_graph.any", "entry")
-        socket.socket_link_limit = 1000
+        socket._link_limit = 1000
         socket = self.add_ctrl_input("node_graph.any", "ctrl")
-        socket.socket_link_limit = 1000
+        socket._link_limit = 1000
         socket = self.add_ctrl_output("node_graph.any", "exit")
         socket = self.add_ctrl_output("node_graph.any", "ctrl")
-        socket.socket_link_limit = 1000
+        socket._link_limit = 1000
 
     def create_group_sockets(self) -> None:
         """Create input and output sockets based on group inputs and outputs.
@@ -327,9 +327,9 @@ class Node:
             get_arg_type(prop.name, args_data, prop.arg_type)
         for input in self.inputs:
             get_arg_type(
-                input.socket_name,
+                input._name,
                 args_data,
-                input.socket_metadata.get("arg_type", "kwargs"),
+                input._metadata.get("arg_type", "kwargs"),
             )
         return args_data
 
@@ -347,7 +347,7 @@ class Node:
         # save all relations using links
         inputs = {}
         for input in self.inputs:
-            inputs[input.socket_name] = input._to_dict()
+            inputs[input._name] = input._to_dict()
         return inputs
 
     def export_output_sockets(self) -> List[Dict[str, Any]]:
@@ -355,7 +355,7 @@ class Node:
         # save all relations using links
         outputs = {}
         for output in self.outputs:
-            outputs[output.socket_name] = output._to_dict()
+            outputs[output._name] = output._to_dict()
         return outputs
 
     def export_ctrl_input_sockets(self) -> List[Dict[str, Any]]:
@@ -363,7 +363,7 @@ class Node:
         # save all relations using links
         ctrl_inputs = {}
         for socket in self.ctrl_inputs:
-            ctrl_inputs[socket.socket_name] = socket._to_dict()
+            ctrl_inputs[socket._name] = socket._to_dict()
         return ctrl_inputs
 
     def export_ctrl_output_sockets(self) -> List[Dict[str, Any]]:
@@ -371,7 +371,7 @@ class Node:
         # save all relations using links
         ctrl_outputs = {}
         for socket in self.ctrl_outputs:
-            ctrl_outputs[socket.socket_name] = socket._to_dict()
+            ctrl_outputs[socket._name] = socket._to_dict()
         return ctrl_outputs
 
     def executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:

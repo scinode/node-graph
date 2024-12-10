@@ -14,8 +14,8 @@ def test_metadata():
         link_limit=100000,
         property_data={"default": 1},
     )
-    assert socket.socket_metadata == {"dynamic": True, "arg_type": "kwargs"}
-    assert socket.socket_link_limit == 100000
+    assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
+    assert socket._link_limit == 100000
     assert socket.socket_property.default == 1
     data = socket._to_dict()
     assert data["metadata"] == {"dynamic": True, "arg_type": "kwargs"}
@@ -109,6 +109,24 @@ def test_repr():
     assert repr(node.outputs) == "NodeSocketNamespace(name='outputs', sockets=[])"
 
 
+def test_check_name():
+    """Test namespace socket."""
+    node = Node()
+    node.add_input("node_graph.int", "x")
+    key = "x"
+    with pytest.raises(
+        ValueError,
+        match=f"Name '{key}' already exists in the namespace.",
+    ):
+        node.add_input("node_graph.int", key)
+    key = "socket_value"
+    with pytest.raises(
+        ValueError,
+        match=f"Name '{key}' is reserved by the namespace.",
+    ):
+        node.add_input("node_graph.int", key)
+
+
 def test_namespace(node_with_namespace_socket):
     """Test namespace socket."""
     n = node_with_namespace_socket
@@ -119,12 +137,12 @@ def test_namespace(node_with_namespace_socket):
     ):
         n.add_input("node_graph.namespace", "non_exist_nested.x")
 
-    assert n.inputs.socket_value == {
+    assert n.inputs._value == {
         "x": 1.0,
         "non_dynamic": {"sub": {"y": 1.0}},
         "dynamic": {"x": 1.0},
     }
-    assert n.inputs.non_dynamic.sub.y.socket_full_name == "inputs.non_dynamic.sub.y"
+    assert n.inputs.non_dynamic.sub.y._full_name == "inputs.non_dynamic.sub.y"
     # nested keys
     assert set(n.inputs._get_all_keys()) == set(
         [
@@ -147,8 +165,8 @@ def test_set_namespace(node_with_namespace_socket):
         "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
         "dynamic": {"x": 2},
     }
-    n.inputs.socket_value = data
-    assert n.inputs.socket_value == data
+    n.inputs._value = data
+    assert n.inputs._value == data
     # set non-exist namespace for dynamic socket
     data = {
         "x": 2.0,
@@ -156,8 +174,8 @@ def test_set_namespace(node_with_namespace_socket):
         "dynamic": {"x": 2, "sub": {"y": 5.0, "z": 6.0}},
     }
 
-    n.inputs.socket_value = data
-    assert n.inputs.socket_value == data
+    n.inputs._value = data
+    assert n.inputs._value == data
 
 
 def test_keys_order():
@@ -167,9 +185,9 @@ def test_keys_order():
     node.add_input("node_graph.int", "a")
     node.add_input("node_graph.int", "c")
     node.add_input("node_graph.int", "b")
-    assert node.inputs[1].socket_name == "d"
-    assert node.inputs["d"].socket_name == "d"
-    assert node.inputs[-2].socket_name == "c"
+    assert node.inputs[1]._name == "d"
+    assert node.inputs["d"]._name == "d"
+    assert node.inputs[-2]._name == "c"
     assert node.inputs._get_keys() == ["e", "d", "a", "c", "b"]
     del node.inputs["a"]
     assert node.inputs._get_keys() == ["e", "d", "c", "b"]

@@ -51,16 +51,16 @@ def test_decorator_args() -> None:
     task1 = test.node()
     assert task1.get_executor()["use_module_path"] is False
     assert task1.get_executor()["callable"] == test
-    assert task1.inputs["e"].socket_link_limit > 1
-    assert task1.inputs["e"]._socket_identifier == "node_graph.namespace"
-    assert task1.inputs["c"].socket_metadata["required"] is True
-    assert task1.inputs["d"].socket_metadata["required"] is False
+    assert task1.inputs["e"]._link_limit > 1
+    assert task1.inputs["e"]._identifier == "node_graph.namespace"
+    assert task1.inputs["c"]._metadata["required"] is True
+    assert task1.inputs["d"]._metadata["required"] is False
     assert task1.inputs["d"].socket_property.default == 1
     assert set(task1.get_args_data()["args"]) == set(["a"])
     assert set(task1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
     assert task1.get_args_data()["var_kwargs"] == "e"
     assert isinstance(task1.inputs.e, NodeSocketNamespace)
-    assert task1.inputs.e.socket_is_dynamic is True
+    assert task1.inputs.e._socket_is_dynamic is True
 
 
 def test_decorator_parameters() -> None:
@@ -75,8 +75,8 @@ def test_decorator_parameters() -> None:
         return {"sum": a + b, "product": a * b}
 
     test1 = test.node()
-    assert test1.inputs["kwargs"].socket_link_limit == 1e6
-    assert test1.inputs["kwargs"]._socket_identifier == "node_graph.namespace"
+    assert test1.inputs["kwargs"]._link_limit == 1e6
+    assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
     assert "c" in test1.get_input_names()
     assert "d" in test1.get_property_names()
@@ -87,7 +87,7 @@ def test_decorator_parameters() -> None:
     assert "product" in test1.get_output_names()
     # create another node
     test2 = test.node()
-    assert test2.inputs.b.socket_value == test1.inputs.b.socket_value
+    assert test2.inputs.b.value == test1.inputs.b.value
 
 
 def create_test_node_group():
@@ -117,8 +117,8 @@ MyTestAddGroup = create_node_group(
 def test_socket(decorated_myadd):
     """Test simple math."""
     n = decorated_myadd.node()
-    assert n.inputs["x"]._socket_identifier == "node_graph.float"
-    assert n.inputs["y"]._socket_identifier == "node_graph.float"
+    assert n.inputs["x"]._identifier == "node_graph.float"
+    assert n.inputs["y"]._identifier == "node_graph.float"
     assert n.inputs["t"].socket_property.default == 1
 
 

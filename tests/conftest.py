@@ -13,10 +13,9 @@ def node_with_namespace_socket():
     n.add_input("node_graph.float", "non_dynamic.sub.z")
     n.add_input("node_graph.namespace", "dynamic", metadata={"dynamic": True})
     n.add_input("node_graph.float", "dynamic.x")
-
-    n.inputs.x.socket_value = 1.0
-    n.inputs.non_dynamic.sub.y.socket_value = 1.0
-    n.inputs.dynamic.x.socket_value = 1.0
+    n.inputs.x.value = 1.0
+    n.inputs.non_dynamic.sub.y.value = 1.0
+    n.inputs.dynamic.x.value = 1.0
     return n
 
 

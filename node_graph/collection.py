@@ -103,7 +103,7 @@ class Collection:
             return self._items[name]
         raise AttributeError(
             f""""{name}" is not in the {self.__class__.__name__}.
-Acceptable names are {self._get_keys()}. This collection belongs to {self.socket_parent}."""
+Acceptable names are {self._get_keys()}. This collection belongs to {self._parent}."""
         )
 
     def _get_by_uuid(self, uuid: str) -> Optional[object]:
