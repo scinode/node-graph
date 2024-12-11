@@ -225,3 +225,18 @@ def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
         if args_data["var_kwargs"] is not None:
             raise ValueError("Only one VAR_KWARGS is allowed")
         args_data["var_kwargs"] = name
+
+
+def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect values inside the namespace."""
+    values = {}
+    for key, socket in namespace["sockets"].items():
+        if "sockets" in socket:
+            data = collect_values_inside_namespace(socket)
+            if data:
+                values[key] = data
+        if "property" in socket:
+            value = socket["property"]["value"]
+            if value:
+                values[key] = value
+    return values

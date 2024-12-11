@@ -201,6 +201,14 @@ class NodeSocket(BaseSocket):
             socket_copy.property = self.property.copy()
         return socket_copy
 
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "NodeSocket":
+        """Rebuild a NodeSocket object from a dictionary."""
+        socket = cls(
+            data["name"], link_limit=data["link_limit"], metadata=data["metadata"]
+        )
+        return socket
+
     def __repr__(self) -> str:
         value = self.property.value if self.property else None
         return f"{self.__class__.__name__}(name='{self._name}', value={value})"
@@ -317,7 +325,9 @@ class NodeSocketNamespace(BaseSocket):
         data = {}
         for name, item in self._sockets.items():
             if isinstance(item, NodeSocketNamespace):
-                data[name] = item._value
+                value = item._value
+                if value:
+                    data[name] = value
             else:
                 if item.value is not None:
                     data[name] = item.value
@@ -358,7 +368,6 @@ class NodeSocketNamespace(BaseSocket):
         # Add nested sockets information
         for item in self._sockets.values():
             data["sockets"][item._name] = item._to_dict()
-        data["value"] = self._value
         return data
 
     @classmethod

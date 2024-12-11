@@ -416,6 +416,8 @@ class Node:
         """udpate node from dict data. Set metadata and properties.
         This method can be overrided.
         """
+        from node_graph.utils import collect_values_inside_namespace
+
         for key in ["uuid", "state", "action", "description", "hash", "position"]:
             if data.get(key):
                 setattr(self, key, data.get(key))
@@ -431,7 +433,10 @@ class Node:
             self.properties[prop["name"]].value = prop["value"]
         # inputs
         for input in data["inputs"].values():
-            if input.get("property", None):
+            if "sockets" in input:
+                input_values = collect_values_inside_namespace(input)
+                self.inputs[input["name"]]._set_socket_value(input_values)
+            if "property" in input:
                 self.inputs[input["name"]].property.value = input["property"]["value"]
                 if input["property"].get("default", None):
                     self.inputs[input["name"]].property.default = input["property"][
