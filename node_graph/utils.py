@@ -236,7 +236,7 @@ def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]
             if data:
                 values[key] = data
         if "property" in socket:
-            value = socket["property"]["value"]
-            if value:
+            value = socket.get("property", {}).get("value")
+            if value is not None:
                 values[key] = value
     return values

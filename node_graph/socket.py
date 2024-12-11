@@ -340,7 +340,7 @@ class NodeSocketNamespace(BaseSocket):
                             self._new(self._type_mapping["default"], key)
                     else:
                         raise ValueError(
-                            f"Socket {key} does not exist in the socket collection."
+                            f"Socket: {key} does not exist in the namespace socket: {self._name}."
                         )
                 self[key]._set_socket_value(val)
         else:
