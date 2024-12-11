@@ -23,7 +23,7 @@ class Collection:
         Args:
             parent (object, optional): object this collection belongs to.
         """
-        self._items: List[object] = []
+        self._items: List[object] = {}
         self.parent = parent
         # one can specify the pool or entry_point to get the pool
         # if pool is not None, entry_point will be ignored, e.g., Link has no pool
@@ -35,23 +35,18 @@ class Collection:
         self.post_deletion_hooks = post_deletion_hooks or []
 
     def __iter__(self) -> object:
-        for item in self._items:
-            yield item
+        # Iterate over items in insertion order
+        return iter(self._items.values())
 
     def __getitem__(self, index: Union[int, str]) -> object:
         if isinstance(index, int):
-            return self._items[index]
+            # If indexing by int, convert dict keys to a list and index it
+            return self._items[list(self._items.keys())[index]]
         elif isinstance(index, str):
-            return self._get(index)
-
-    def __getattr__(self, name):
-        if self._items:
-            return self._get(name)
-        else:
-            raise AttributeError(f"{name} not available in an empty collection")
+            return self._items[index]
 
     def __dir__(self):
-        return sorted(set(self._keys()))
+        return sorted(set(self._get_keys()))
 
     def __contains__(self, name: str) -> bool:
         """Check if an item with the given name exists in the collection.
@@ -62,14 +57,14 @@ class Collection:
         Returns:
             bool: True if the item exists, False otherwise.
         """
-        return name in self._keys()
+        return name in self._items
 
     def _get_list_index(self) -> int:
         """Get the inner id for the next item.
 
         list_index is the index of the item in the collection.
         """
-        list_index = max([0] + [item.list_index for item in self._items]) + 1
+        list_index = max([0] + [item.list_index for item in self._items.values()]) + 1
         return list_index
 
     def _new(self, identifier: str, name: Optional[str] = None) -> object:
@@ -78,17 +73,16 @@ class Collection:
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""
-        if item.name in self._keys():
-            raise Exception(f"{item.name} already exist, please choose another name.")
-        item.list_index = self._get_list_index()
-        setattr(item, "parent", self.parent)
-        self._items.append(item)
+        if item.name in self._items:
+            raise Exception(f"{item.name} already exists, please choose another name.")
+        self._items[item.name] = item
         # Set the item as an attribute on the instance
         setattr(self, item.name, item)
+        setattr(item, "parent", self.parent)
 
     def _extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
-        conflict_names = set(self._keys()).intersection(new_names)
+        conflict_names = set(self._get_keys()).intersection(new_names)
         if len(conflict_names) > 0:
             raise Exception(
                 f"{conflict_names} already exist, please choose another names."
@@ -105,12 +99,11 @@ class Collection:
         Returns:
             object: _description_
         """
-        for item in self._items:
-            if item.name == name:
-                return item
+        if name in self._items:
+            return self._items[name]
         raise AttributeError(
             f""""{name}" is not in the {self.__class__.__name__}.
-Acceptable names are {self._keys()}. This collection belongs to {self.parent}."""
+Acceptable names are {self._get_keys()}. This collection belongs to {self._parent}."""
         )
 
     def _get_by_uuid(self, uuid: str) -> Optional[object]:
@@ -122,35 +115,40 @@ Acceptable names are {self._keys()}. This collection belongs to {self.parent}.""
         Returns:
             object: _description_
         """
-        for item in self._items:
+        for item in self._items.values():
             if item.uuid == uuid:
                 return item
         return None
 
-    def _keys(self) -> List[str]:
-        keys = []
-        for item in self._items:
-            keys.append(item.name)
-        return keys
+    def _get_keys(self) -> List[str]:
+        return list(self._items.keys())
 
     def _clear(self) -> None:
         """Remove all items from this collection."""
-        self._items = []
+        self._items = {}
 
-    def __delitem__(self, index: Union[int, List[int]]) -> None:
-        del self._items[index]
+    def __delitem__(self, index: Union[int, List[int], str]) -> None:
+        # If index is int, convert _items to a list and remove by index
+        if isinstance(index, str):
+            self._items.pop(index)
+        elif isinstance(index, int):
+            key = list(self._items.keys())[index]
+            self._items.pop(key)
+        elif isinstance(index, list):
+            keys = list(self._items.keys())
+            for i in sorted(index, reverse=True):
+                key = keys[i]
+                self._items.pop(key)
+        else:
+            raise ValueError(
+                f"Invalid index type for __delitem__: {index}, expected int or str, or list of int."
+            )
 
-    def _delete(self, name: str) -> None:
-        """Delete item by name
-
-        Args:
-            name (str): _description_
-        """
-        for index, item in enumerate(self._items):
-            if item.name == name:
-                del self._items[index]
-                self._execute_post_deletion_hooks(item)
-                return
+    def pop(self, index: Union[int, str]) -> object:
+        if isinstance(index, int):
+            key = list(self._items.keys())[index]
+            return self._items.pop(key)
+        return self._items.pop(index)
 
     def __len__(self) -> int:
         return len(self._items)
@@ -162,7 +160,7 @@ Acceptable names are {self._keys()}. This collection belongs to {self.parent}.""
 
     def _copy(self, parent: Optional[object] = None) -> object:
         coll = self.__class__(parent=parent)
-        coll._items = [item.copy() for item in self._items]
+        coll._items = {key: item.copy() for key, item in self._items.items()}
         return coll
 
     def _execute_post_creation_hooks(self, item: object) -> None:
@@ -193,9 +191,9 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
             else:
                 msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
             raise ValueError(msg)
-        if len(args) > 2 and args[2] in args[0]._keys():
+        if len(args) > 2 and args[2] in args[0]._get_keys():
             raise ValueError(f"{args[2]} already exists, please choose another name.")
-        if kwargs.get("name", None) in args[0]._keys():
+        if kwargs.get("name", None) in args[0]._get_keys():
             raise ValueError(
                 f"{kwargs.get('name')} already exists, please choose another name."
             )
@@ -245,14 +243,16 @@ class NodeCollection(Collection):
 
     def _copy(self, parent: Optional[object] = None) -> object:
         coll = self.__class__(parent=parent)
-        coll._items = [item.copy(parent=parent) for item in self._items]
+        coll._items = {
+            key: item.copy(parent=parent) for key, item in self._items.items()
+        }
         return coll
 
     def __repr__(self) -> str:
         s = ""
         parent_name = self.parent.name if self.parent else ""
         s += f'NodeCollection(parent = "{parent_name}", nodes = ['
-        s += ", ".join([f'"{x}"' for x in self._keys()])
+        s += ", ".join([f'"{x}"' for x in self._get_keys()])
         s += "])"
         return s
 
@@ -283,108 +283,7 @@ class PropertyCollection(Collection):
         s = ""
         node_name = self.parent.name if self.parent else ""
         s += f'PropertyCollection(node = "{node_name}", properties = ['
-        s += ", ".join([f'"{x}"' for x in self._keys()])
-        s += "])"
-        return s
-
-
-class InputSocketCollection(Collection):
-    """Input Socket colleciton"""
-
-    def __init__(
-        self,
-        parent: Optional[object] = None,
-        pool: Optional[object] = None,
-        entry_point: Optional[str] = "node_graph.socket",
-    ) -> None:
-        super().__init__(parent, pool=pool, entry_point=entry_point)
-
-    @decorator_check_identifier_name
-    def _new(
-        self,
-        identifier: Union[str, type],
-        name: Optional[str] = None,
-        link_limit: int = 1,
-        arg_type: str = "kwargs",
-        metadata: Optional[dict] = None,
-        property_data: Optional[dict] = None,
-    ) -> object:
-        from node_graph.socket import NodeSocket
-
-        ItemClass = get_item_class(identifier, self.pool, NodeSocket)
-        list_index = self._get_list_index()
-        item = ItemClass(
-            name,
-            socket_type="INPUT",
-            list_index=list_index,
-            link_limit=link_limit,
-            arg_type=arg_type,
-            metadata=metadata,
-            property_data=property_data,
-        )
-        self._append(item)
-        return item
-
-    def _copy(self, parent: Optional[object] = None, is_ref: bool = False) -> object:
-        """Copy the input socket collection.
-
-        Args:
-            parent (Node, optional): Node that the socket bound to. Defaults to None.
-            is_ref (bool, optional): is a reference socket. Defaults to False.
-
-        Returns:
-            Collection: _description_
-        """
-        coll = self.__class__(parent=parent)
-        coll._items = [item.copy(node=parent, is_ref=is_ref) for item in self._items]
-        return coll
-
-    def __repr__(self) -> str:
-        s = ""
-        node_name = self.parent.name if self.parent else ""
-        s += f'InputCollection(node = "{node_name}", sockets = ['
-        s += ", ".join([f'"{x}"' for x in self._keys()])
-        s += "])"
-        return s
-
-
-class OutputSocketCollection(Collection):
-    """Output Socket colleciton"""
-
-    def __init__(
-        self,
-        parent: Optional[object] = None,
-        pool: Optional[object] = None,
-        entry_point: Optional[str] = "node_graph.socket",
-    ) -> None:
-        super().__init__(parent, pool=pool, entry_point=entry_point)
-
-    @decorator_check_identifier_name
-    def _new(
-        self,
-        identifier: Union[str, type],
-        name: Optional[str] = None,
-        metadata: Optional[dict] = None,
-    ) -> object:
-        from node_graph.socket import NodeSocket
-
-        ItemClass = get_item_class(identifier, self.pool, NodeSocket)
-        item = ItemClass(
-            name, socket_type="OUTPUT", list_index=len(self._items), metadata=metadata
-        )
-        self._append(item)
-        return item
-
-    def _copy(self, parent: Optional[object] = None, is_ref: bool = False) -> object:
-        coll = self.__class__(parent=parent)
-        coll._items = [item.copy(node=parent, is_ref=is_ref) for item in self._items]
-        return coll
-
-    def __repr__(self) -> str:
-        s = ""
-        node_name = self.parent.name if self.parent else ""
-        s += f'OutputCollection(node = "{node_name}", sockets = ['
-        s += ", ".join([f'"{x}"' for x in self._keys()])
+        s += ", ".join([f'"{x}"' for x in self._get_keys()])
         s += "])"
         return s
 
@@ -404,29 +303,33 @@ class LinkCollection(Collection):
         self._execute_post_creation_hooks(item)
         return item
 
-    def __delitem__(self, index: Union[int, List[int]]) -> None:
-        """Delete link from this collection.
-
-        First remove the link in the nodes by calling the unmount method.
-
-        Args:
-            index (_type_): _description_
-        """
-        if isinstance(index, (list, tuple)):
-            for i in index:
-                self._items[i].unmount()
-            self._items = [item for i, item in enumerate(self._items) if i not in index]
-            return
-        self._items[index].unmount()
-        del self._items[index]
+    def __delitem__(self, index: Union[int, List[int], str]) -> None:
+        # If index is int, convert _items to a list and remove by index
+        if isinstance(index, str):
+            self._items[index].unmount()
+            self._items.pop(index)
+        elif isinstance(index, int):
+            key = list(self._items.keys())[index]
+            self._items[key].unmount()
+            self._items.pop(key)
+        elif isinstance(index, list):
+            keys = list(self._items.keys())
+            for i in sorted(index, reverse=True):
+                key = keys[i]
+                self._items[key].unmount()
+                self._items.pop(key)
+        else:
+            raise ValueError(
+                f"Invalid index type for __delitem__: {index}, expected int or str, or list of int."
+            )
 
     def clear(self) -> None:
         """Remove all links from this collection.
         And remove the link in the nodes.
         """
-        for item in self._items:
+        for item in self._items.values():
             item.unmount()
-        self._items = []
+        self._items = {}
 
     def __repr__(self) -> str:
         s = ""

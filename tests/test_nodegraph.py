@@ -1,4 +1,4 @@
-from node_graph import NodeGraph
+from node_graph import NodeGraph, node
 
 
 def test_from_dict(ng_decorator):
@@ -66,3 +66,25 @@ def test_get_items(ng):
     assert len(ng1.nodes) == 3
     assert len(ng1.links) == 2
     assert "float1" in ng1.get_node_names()
+
+
+def test_load_graph():
+    @node(
+        outputs=[{"name": "sum"}, {"name": "product"}],
+    )
+    def test(a, b=1, **kwargs):
+        return {"sum": a + b, "product": a * b}
+
+    ng = NodeGraph()
+    test1 = ng.add_node(test, "test1")
+    test1.set(
+        {
+            "a": 1,
+            "b": 2,
+            "kwargs": {"c": 1, "d": 2},
+        }
+    )
+    ngdata = ng.to_dict()
+    # load graph
+    ng1 = NodeGraph.from_dict(ngdata)
+    ng1.nodes.test1.inputs.kwargs._value = {"c": 1, "d": 2}

@@ -85,7 +85,7 @@ def generate_input_sockets(
                 {
                     "identifier": type_mapping.get(arg[1], type_mapping["default"]),
                     "name": arg[0],
-                    "arg_type": "args",
+                    "metadata": {"arg_type": "args"},
                 }
             )
     for name, kwarg in kwargs.items():
@@ -94,8 +94,7 @@ def generate_input_sockets(
             input = {
                 "identifier": identifier,
                 "name": name,
-                "arg_type": "kwargs",
-                "metadata": {"required": True},
+                "metadata": {"arg_type": "kwargs", "required": True},
                 "property_data": {"identifier": identifier},
             }
             if kwarg.get("has_default", False):
@@ -116,14 +115,15 @@ def generate_input_sockets(
                         "Socket with var_args must have namespace identifier"
                     )
                 input["identifier"] = type_mapping["namespace"]
-                input["arg_type"] = "var_args"
+                input.setdefault("metadata", {})
+                input["metadata"]["arg_type"] = "var_args"
                 has_var_args = True
         if not has_var_args:
             inputs.append(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_args,
-                    "arg_type": "var_args",
+                    "metadata": {"arg_type": "var_args"},
                     "link_limit": 1e6,
                 }
             )
@@ -140,14 +140,15 @@ def generate_input_sockets(
                         "Socket with var_args must have namespace identifier"
                     )
                 input["identifier"] = type_mapping["namespace"]
-                input["arg_type"] = "var_kwargs"
+                input.setdefault("metadata", {})
+                input["metadata"].update({"arg_type": "var_kwargs", "dynamic": True})
                 has_var_kwargs = True
         if not has_var_kwargs:
             inputs.append(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_kwargs,
-                    "arg_type": "var_kwargs",
+                    "metadata": {"arg_type": "var_kwargs", "dynamic": True},
                     "link_limit": 1e6,
                 }
             )

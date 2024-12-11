@@ -12,9 +12,9 @@ class NodeLink:
             to_socket (Socket): The socket where the link connects to.
         """
         self.from_socket: "Socket" = from_socket
-        self.from_node = from_socket.node
+        self.from_node = from_socket._node
         self.to_socket: "Socket" = to_socket
-        self.to_node = to_socket.node
+        self.to_node = to_socket._node
         self.state: bool = False
         self.check_socket_match()
         self.mount()
@@ -23,9 +23,9 @@ class NodeLink:
     def name(self) -> str:
         return "{}.{} -> {}.{}".format(
             self.from_node.name,
-            self.from_socket.name,
+            self.from_socket._name,
             self.to_node.name,
-            self.to_socket.name,
+            self.to_socket._name,
         )
 
     def check_socket_match(self) -> None:
@@ -40,36 +40,37 @@ class NodeLink:
             )
 
         if (
-            self.from_socket.identifier.upper().split(".")[-1] == "ANY"
-            or self.to_socket.identifier.upper().split(".")[-1] == "ANY"
+            self.from_socket._identifier.upper().split(".")[-1] == "ANY"
+            or self.to_socket._identifier.upper().split(".")[-1] == "ANY"
         ):
             return
-        if self.from_socket.identifier.upper() != self.to_socket.identifier.upper():
+        if self.from_socket._identifier.upper() != self.to_socket._identifier.upper():
             raise Exception(
                 "Socket type do not match. Socket {} can not connect to socket {}".format(
-                    self.from_socket.identifier, self.to_socket.identifier
+                    self.from_socket._identifier,
+                    self.to_socket._identifier,
                 )
             )
 
     def mount(self) -> None:
         """Create a link trigger the update action for the sockets."""
-        self.from_socket.links.append(self)
-        if len(self.to_socket.links) < self.to_socket.link_limit:
-            self.to_socket.links.append(self)
+        self.from_socket._links.append(self)
+        if len(self.to_socket._links) < self.to_socket._link_limit:
+            self.to_socket._links.append(self)
         else:
             # handle multi-link here
             raise Exception(
                 "Socket {}: number of links {} larger than the link limit {}.".format(
-                    self.to_socket.name,
-                    len(self.to_socket.links) + 1,
-                    self.to_socket.link_limit,
+                    self.to_socket._name,
+                    len(self.to_socket._links) + 1,
+                    self.to_socket._link_limit,
                 )
             )
 
     def unmount(self) -> None:
         """unmount link from node"""
         i = 0
-        for link in self.from_socket.links:
+        for link in self.from_socket._links:
             if (
                 link.from_node == self.from_node
                 and link.from_socket == self.from_socket
@@ -78,10 +79,10 @@ class NodeLink:
             ):
                 break
             i += 1
-        del self.from_socket.links[i]
+        del self.from_socket._links[i]
         #
         i = 0
-        for link in self.to_socket.links:
+        for link in self.to_socket._links:
             if (
                 link.from_node == self.from_node
                 and link.from_socket == self.from_socket
@@ -90,14 +91,14 @@ class NodeLink:
             ):
                 break
             i += 1
-        del self.to_socket.links[i]
+        del self.to_socket._links[i]
 
     def to_dict(self) -> dict:
         """Data to be saved to database"""
         dbdata = {
-            "from_socket": self.from_socket.name,
+            "from_socket": self.from_socket._full_name.split(".", 1)[1],
             "from_node": self.from_node.name,
-            "to_socket": self.to_socket.name,
+            "to_socket": self.to_socket._full_name.split(".", 1)[1],
             "to_node": self.to_node.name,
             "state": self.state,
         }
@@ -111,8 +112,8 @@ class NodeLink:
         s = ""
         s += 'NodeLink(from="{}.{}", to="{}.{}")'.format(
             self.from_node.name,
-            self.from_socket.name,
+            self.from_socket._name,
             self.to_node.name,
-            self.to_socket.name,
+            self.to_socket._name,
         )
         return s

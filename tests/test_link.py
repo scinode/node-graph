@@ -18,8 +18,8 @@ def test_clear(ng):
     """Test clear node graph."""
     ng.links.clear()
     assert len(ng.links) == 0
-    assert len(ng.nodes["add1"].outputs[0].links) == 0
-    assert len(ng.nodes["add1"].inputs[0].links) == 0
+    assert len(ng.nodes["add1"].outputs[0]._links) == 0
+    assert len(ng.nodes["add1"].inputs[0]._links) == 0
 
 
 def test_repr(ng):

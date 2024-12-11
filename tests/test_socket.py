@@ -4,24 +4,31 @@ from node_graph import NodeGraph
 from node_graph.node import Node
 
 
+def test_check_identifier():
+    n = Node()
+    identifier = "node_graph.inta"
+    with pytest.raises(
+        ValueError,
+        match=f"Identifier: {identifier} is not defined. Did you mean",
+    ):
+        n.add_input(identifier, "x")
+
+
 def test_metadata():
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
     socket = n.add_input(
         "node_graph.any",
         "test",
-        arg_type="kwargs",
-        metadata={"dynamic": True},
+        metadata={"arg_type": "kwargs", "dynamic": True},
         link_limit=100000,
         property_data={"default": 1},
     )
-    assert socket.metadata == {"dynamic": True}
-    assert socket.arg_type == "kwargs"
-    assert socket.link_limit == 100000
+    assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
+    assert socket._link_limit == 100000
     assert socket.property.default == 1
-    data = socket.to_dict()
-    assert data["metadata"] == {"dynamic": True}
-    assert data["arg_type"] == "kwargs"
+    data = socket._to_dict()
+    assert data["metadata"] == {"dynamic": True, "arg_type": "kwargs"}
 
 
 @pytest.mark.parametrize(
@@ -41,11 +48,11 @@ def test_base_socket_type(id, data):
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node("node_graph.test_add", "test")
-    socket = n.add_input(id, id)
+    socket = n.add_input(id, "test")
     socket.property.value = data
     assert socket.property.value == data
     # copy
-    socket1 = socket.copy()
+    socket1 = socket._copy()
     assert socket1.property.value == data
     # set value directly
     socket1.value = data
@@ -69,7 +76,7 @@ def test_base_socket_type_validation(id, data):
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node("node_graph.test_add", "test")
-    socket = n.add_input(id, id)
+    socket = n.add_input(id, "test")
     try:
         socket.property.value = data
     except Exception as e:
@@ -78,7 +85,7 @@ def test_base_socket_type_validation(id, data):
     assert socket.property.value != data
 
 
-def test_general_socket_property():
+def test_general_property():
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
@@ -86,7 +93,7 @@ def test_general_socket_property():
     socket.property.value = np.ones((3, 3))
     assert np.isclose(socket.property.value, np.ones((3, 3))).all()
     # copy
-    socket1 = socket.copy()
+    socket1 = socket._copy()
     assert np.isclose(socket1.property.value, np.ones((3, 3))).all()
 
 
@@ -106,10 +113,98 @@ def test_socket_match(ng):
 
 def test_repr():
     """Test __repr__ method."""
-    ng = NodeGraph(name="test_repr")
-    node = ng.add_node("node_graph.test_add", "node1")
-    assert repr(node.inputs) == 'InputCollection(node = "node1", sockets = ["x", "y"])'
-    assert (
-        repr(node.outputs)
-        == 'OutputCollection(node = "node1", sockets = ["result", "_outputs"])'
+    node = Node()
+    node.add_input("node_graph.int", "x")
+    assert repr(node.inputs) == "NodeSocketNamespace(name='inputs', sockets=['x'])"
+    assert repr(node.outputs) == "NodeSocketNamespace(name='outputs', sockets=[])"
+
+
+def test_check_name():
+    """Test namespace socket."""
+    node = Node()
+    node.add_input("node_graph.int", "x")
+    key = "x"
+    with pytest.raises(
+        ValueError,
+        match=f"Name '{key}' already exists in the namespace.",
+    ):
+        node.add_input("node_graph.int", key)
+    key = "_value"
+    with pytest.raises(
+        ValueError,
+        match=f"Name '{key}' is reserved by the namespace.",
+    ):
+        node.add_input("node_graph.int", key)
+
+
+def test_namespace(node_with_namespace_socket):
+    """Test namespace socket."""
+    n = node_with_namespace_socket
+
+    with pytest.raises(
+        ValueError,
+        match="Namespace non_exist_nested does not exist in the socket collection.",
+    ):
+        n.add_input("node_graph.namespace", "non_exist_nested.x")
+
+    assert n.inputs._value == {
+        "x": 1.0,
+        "non_dynamic": {"sub": {"y": 1.0}},
+        "dynamic": {"x": 1.0},
+    }
+    assert n.inputs.non_dynamic.sub.y._full_name == "inputs.non_dynamic.sub.y"
+    # nested keys
+    assert set(n.inputs._get_all_keys()) == set(
+        [
+            "x",
+            "dynamic",
+            "dynamic.x",
+            "non_dynamic",
+            "non_dynamic.sub",
+            "non_dynamic.sub.y",
+            "non_dynamic.sub.z",
+        ]
     )
+    # to_dict
+    data = n.inputs._to_dict()
+    assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
+
+
+def test_set_namespace(node_with_namespace_socket):
+    """Test set namespace."""
+    n = node_with_namespace_socket
+    data = {
+        "x": 2.0,
+        "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
+        "dynamic": {"x": 2},
+    }
+    n.inputs._value = data
+    assert n.inputs._value == data
+    # set non-exist namespace for dynamic socket
+    data = {
+        "x": 2.0,
+        "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
+        "dynamic": {"x": 2, "sub": {"y": 5.0, "z": 6.0}},
+    }
+
+    n.inputs._value = data
+    assert n.inputs._value == data
+
+
+def test_keys_order():
+    node = Node()
+    node.add_input("node_graph.int", "e")
+    node.add_input("node_graph.int", "d")
+    node.add_input("node_graph.int", "a")
+    node.add_input("node_graph.int", "c")
+    node.add_input("node_graph.int", "b")
+    assert node.inputs[1]._name == "d"
+    assert node.inputs["d"]._name == "d"
+    assert node.inputs[-2]._name == "c"
+    assert node.inputs._get_keys() == ["e", "d", "a", "c", "b"]
+    del node.inputs["a"]
+    assert node.inputs._get_keys() == ["e", "d", "c", "b"]
+    del node.inputs[1]
+    assert node.inputs._get_keys() == ["e", "c", "b"]
+    del node.inputs[[0, 2]]
+    assert node.inputs._get_keys() == ["c"]

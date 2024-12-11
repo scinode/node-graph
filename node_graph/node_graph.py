@@ -95,7 +95,7 @@ class NodeGraph:
 
     def get_node_names(self) -> List[str]:
         """Returns the names of the nodes in the node graph."""
-        return self.nodes._keys()
+        return self.nodes._get_keys()
 
     def launch(self) -> None:
         """Launches the node graph."""
@@ -285,8 +285,8 @@ class NodeGraph:
         ng.nodes = self.nodes._copy(parent=ng)
         for link in self.links:
             ng.add_link(
-                ng.nodes[link.from_node.name].outputs[link.from_socket.name],
-                ng.nodes[link.to_node.name].inputs[link.to_socket.name],
+                ng.nodes[link.from_node.name].outputs[link.from_socket._name],
+                ng.nodes[link.to_node.name].inputs[link.to_socket._name],
             )
         return ng
 
@@ -317,16 +317,14 @@ class NodeGraph:
                 and link.from_node.name not in ng.get_node_names()
                 and link.to_node.name in ng.get_node_names()
             ):
-                ng.append_node(
-                    self.nodes[link.from_node.name].copy(parent=ng, is_ref=True)
-                )
+                ng.append_node(self.nodes[link.from_node.name].copy(parent=ng))
             if (
                 link.from_node.name in ng.get_node_names()
                 and link.to_node.name in ng.get_node_names()
             ):
                 ng.add_link(
-                    ng.nodes[link.from_node.name].outputs[link.from_socket.name],
-                    ng.nodes[link.to_node.name].inputs[link.to_socket.name],
+                    ng.nodes[link.from_node.name].outputs[link.from_socket._name],
+                    ng.nodes[link.to_node.name].inputs[link.to_socket._name],
                 )
         return ng
 
@@ -360,8 +358,8 @@ class NodeGraph:
         self.nodes._extend(other.nodes._copy(parent=self))
         for link in other.links:
             self.add_link(
-                self.nodes[link.from_node.name].outputs[link.from_socket.name],
-                self.nodes[link.to_node.name].inputs[link.to_socket.name],
+                self.nodes[link.from_node.name].outputs[link.from_socket._name],
+                self.nodes[link.to_node.name].inputs[link.to_socket._name],
             )
         return self
 
@@ -396,7 +394,7 @@ class NodeGraph:
             # Delete links in reverse order to avoid index shift
             for index in sorted(link_indices, reverse=True):
                 del self.links[index]
-            self.nodes._delete(name)
+            del self.nodes[name]
 
     def wait(self) -> None:
         """Waits for the node graph to finish.
