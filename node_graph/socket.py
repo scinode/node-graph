@@ -88,14 +88,6 @@ class BaseSocket:
             data["deserialize"] = self.get_deserialize()
         return data
 
-    @classmethod
-    def _from_dict(cls, data: Dict[str, Any]) -> "NodeSocket":
-        """Rebuild a NodeSocket object from a dictionary."""
-        socket = cls(
-            data["name"], link_limit=data["link_limit"], metadata=data["metadata"]
-        )
-        return socket
-
 
 class NodeSocket(BaseSocket):
 
@@ -200,14 +192,6 @@ class NodeSocket(BaseSocket):
         if self.property:
             socket_copy.property = self.property.copy()
         return socket_copy
-
-    @classmethod
-    def _from_dict(cls, data: Dict[str, Any]) -> "NodeSocket":
-        """Rebuild a NodeSocket object from a dictionary."""
-        socket = cls(
-            data["name"], link_limit=data["link_limit"], metadata=data["metadata"]
-        )
-        return socket
 
     def __repr__(self) -> str:
         value = self.property.value if self.property else None
@@ -369,26 +353,6 @@ class NodeSocketNamespace(BaseSocket):
         for item in self._sockets.values():
             data["sockets"][item._name] = item._to_dict()
         return data
-
-    @classmethod
-    def _from_dict(cls, data: Dict[str, Any]) -> "NodeSocketNamespace":
-        # Create a base NodeSocket from dict first
-        base_socket = NodeSocket.from_dict(data)
-        # Transform into NodeSocketNamespace
-        ns = cls(
-            name=base_socket.name,
-            parent=base_socket.parent,
-            link_limit=base_socket.link_limit,
-            metadata=base_socket._metadata,
-            property_data=base_socket.property.to_dict()
-            if base_socket.property
-            else None,
-        )
-        # Load nested sockets
-        for s_data in data.get("sockets", []):
-            s = NodeSocket.from_dict(s_data)
-            ns._append(s)
-        return ns
 
     def _copy(self, parent: Optional["NodeSocket"] = None) -> "NodeSocketNamespace":
         # Copy as parentSocket
