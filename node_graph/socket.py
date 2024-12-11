@@ -322,6 +322,8 @@ class NodeSocketNamespace(BaseSocket):
         self._set_socket_value(value)
 
     def _set_socket_value(self, value: Dict[str, Any] | NodeSocket) -> None:
+        if value is None:
+            return
         if isinstance(value, BaseSocket):
             self._node.parent.add_link(value, self)
         elif isinstance(value, dict):
@@ -343,7 +345,7 @@ class NodeSocketNamespace(BaseSocket):
                 self[key]._set_socket_value(val)
         else:
             raise ValueError(
-                f"Invalid value type for socket value: {value}, expected dict or Socket."
+                f"Invalid value type for socket {self._name}: {value}, expected dict or Socket."
             )
 
     def _to_dict(self) -> Dict[str, Any]:
