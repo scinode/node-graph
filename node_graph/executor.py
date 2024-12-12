@@ -11,6 +11,7 @@ class NodeExecutor:
     callable_name: Optional[str] = None
     callable: Optional[str] = None
     type: Optional[str] = None
+    graph_data: Optional[dict] = None
     metadata: Optional[dict] = None
 
     def __post_init__(self):

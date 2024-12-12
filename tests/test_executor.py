@@ -12,6 +12,7 @@ def test_executor():
         "module_path": "math",
         "callable_name": "sqrt",
         "callable": None,
+        "graph_data": None,
         "type": None,
         "metadata": None,
     }
@@ -30,6 +31,7 @@ def test_executor_callable():
         "module_path": "math",
         "callable_name": "sqrt",
         "callable": sqrt,
+        "graph_data": None,
         "type": None,
         "metadata": None,
     }
