@@ -1,5 +1,6 @@
 import dataclasses
 from typing import Optional
+import inspect
 
 
 @dataclasses.dataclass
@@ -43,6 +44,14 @@ class NodeExecutor:
                 self.module_path = self.callable.__module__
                 self.callable_name = self.callable.__name__
                 self.use_module_path = True
+        elif inspect.isbuiltin(self.callable):
+            # Handle built-in functions like math.sqrt
+            if hasattr(self.callable, "__module__"):
+                self.module_path = self.callable.__module__
+            else:
+                self.module_path = self.callable.__objclass__.__module__
+            self.callable_name = self.callable.__name__
+            self.use_module_path = True
 
     def to_dict(self):
         return dataclasses.asdict(self)
