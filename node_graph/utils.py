@@ -150,7 +150,6 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
         group_inputs = ndata["metadata"].get("group_inputs", [])
         group_outputs = ndata["metadata"].get("group_outputs", [])
 
-        _executor = ndata.get("executor", None)
         is_dynamic: bool = True
 
         def create_properties(self):
@@ -190,6 +189,9 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
             metadata = super().get_metadata()
             metadata["node_class"] = node_class
             return metadata
+
+        def get_executor(self):
+            return ndata.get("executor", None)
 
     return DecoratedNode
 

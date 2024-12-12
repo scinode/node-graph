@@ -47,7 +47,6 @@ class Node:
     group_inputs: List[List[str]] = None
     group_outputs: List[List[str]] = None
     is_dynamic: bool = False
-    _executor: Optional[dict] = None
 
     def __init__(
         self,
@@ -55,6 +54,8 @@ class Node:
         name: Optional[str] = None,
         uuid: Optional[str] = None,
         parent: Optional[Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        executor: Optional[Dict[str, Any]] = None,
         property_collection_class: Any = PropertyCollection,
         input_collection_class: Any = NodeSocketNamespace,
         output_collection_class: Any = NodeSocketNamespace,
@@ -76,6 +77,8 @@ class Node:
         self.name = name or "{}{}".format(self.identifier.split(".")[-1], list_index)
         self.uuid = uuid or str(uuid1())
         self.parent = parent
+        self._metadata = metadata or {}
+        self._executor = executor
         self.properties = property_collection_class(self, pool=self.property_pool)
         self.inputs = input_collection_class("inputs", node=self, pool=self.socket_pool)
         self.outputs = output_collection_class(
@@ -87,7 +90,6 @@ class Node:
         self.ctrl_outputs = ctrl_output_collection_class(
             "ctrl_outputs", node=self, pool=self.socket_pool
         )
-        self.executor = None
         self.state = "CREATED"
         self.action = "NONE"
         self.position = [30 * self.list_index, 30 * self.list_index]
@@ -294,18 +296,27 @@ class Node:
         data = deep_copy_only_dicts(data)
         return data
 
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        return self.get_metadata()
+
     def get_metadata(self) -> Dict[str, Any]:
         """Export metadata to a dictionary."""
-        metadata = {
-            "node_type": self.node_type,
-            "catalog": self.catalog,
-            "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
-            "platform": self.platform,
-            "group_properties": self.group_properties if self.group_properties else [],
-            "group_inputs": self.group_inputs if self.group_inputs else [],
-            "group_outputs": self.group_outputs if self.group_outputs else [],
-            "is_dynamic": self.is_dynamic,
-        }
+        metadata = self._metadata
+        metadata.update(
+            {
+                "node_type": self.node_type,
+                "catalog": self.catalog,
+                "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
+                "platform": self.platform,
+                "group_properties": self.group_properties
+                if self.group_properties
+                else [],
+                "group_inputs": self.group_inputs if self.group_inputs else [],
+                "group_outputs": self.group_outputs if self.group_outputs else [],
+                "is_dynamic": self.is_dynamic,
+            }
+        )
         # also save the parent class information
         metadata["node_class"] = {
             "name": super().__class__.__name__,
@@ -381,14 +392,16 @@ class Node:
         - User defined function
         - User defined class.
         """
-        executor = self.get_executor() or self.executor
+        executor = self.get_executor()
         if executor is None:
             return executor
-        executor.setdefault("type", "function")
-        executor.setdefault("use_module_path", True)
-        if executor["use_module_path"] and "name" not in executor:
-            executor["name"] = executor["module"].split(".")[-1]
-            executor["module"] = executor["module"][0 : -(len(executor["name"]) + 1)]
+        if executor.get("use_module_path", False) or executor.get("module", False):
+            executor["use_module_path"] = True
+            if "name" not in executor:
+                executor["name"] = executor["module"].split(".")[-1]
+                executor["module"] = executor["module"][
+                    0 : -(len(executor["name"]) + 1)
+                ]
         return executor
 
     @classmethod
@@ -460,6 +473,8 @@ class Node:
         identifier: str,
         name: Optional[str] = None,
         node_pool: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        executor: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Create a node from a identifier.
         When a plugin create a node, it should provide its own node pool.
@@ -471,7 +486,7 @@ class Node:
             from node_graph.nodes import node_pool
 
         ItemClass = get_item_class(identifier, node_pool, Node)
-        node = ItemClass(name=name)
+        node = ItemClass(name=name, metadata=metadata, executor=executor)
         return node
 
     def copy(
