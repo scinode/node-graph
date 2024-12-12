@@ -315,9 +315,11 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     executor = ndata["executor"]
     name = executor.get("name", None)
     if not name:
-        executor["module"], executor["name"] = executor["module"].split(".", 1)
-    module = importlib.import_module("{}".format(executor["module"]))
-    func = getattr(module, executor["name"])
+        executor["module_path"], executor["callable_name"] = executor[
+            "module_path"
+        ].split(".", 1)
+    module = importlib.import_module("{}".format(executor["module_path"]))
+    func = getattr(module, executor["callable_name"])
     # Get the inputs of the function
     generate_input_sockets(func, ndata["inputs"], ndata["properties"])
     ndata["identifier"] = ndata.get("identifier", func.__name__)

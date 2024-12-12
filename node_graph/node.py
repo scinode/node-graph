@@ -8,6 +8,7 @@ from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
 )
+from node_graph.executor import NodeExecutor
 
 
 class Node:
@@ -55,7 +56,7 @@ class Node:
         uuid: Optional[str] = None,
         parent: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        executor: Optional[Dict[str, Any]] = None,
+        executor: Optional[NodeExecutor] = None,
         property_collection_class: Any = PropertyCollection,
         input_collection_class: Any = NodeSocketNamespace,
         output_collection_class: Any = NodeSocketNamespace,
@@ -267,7 +268,7 @@ class Node:
             output_sockets = self.export_output_sockets()
             ctrl_input_sockets = self.export_ctrl_input_sockets()
             ctrl_output_sockets = self.export_ctrl_output_sockets()
-            executor = self.executor_to_dict()
+            executor = self.export_executor_to_dict()
             data = {
                 "version": "node_graph@{}".format(__version__),
                 "identifier": self.identifier,
@@ -385,8 +386,8 @@ class Node:
             ctrl_outputs[socket._name] = socket._to_dict()
         return ctrl_outputs
 
-    def executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
-        """Export executor dictionary to a dictionary.
+    def export_executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
+        """Export executor to a dictionary.
         Three kinds of executor:
         - Python built-in function. e.g. getattr
         - User defined function
@@ -395,14 +396,9 @@ class Node:
         executor = self.get_executor()
         if executor is None:
             return executor
-        if executor.get("use_module_path", False) or executor.get("module", False):
-            executor["use_module_path"] = True
-            if "name" not in executor:
-                executor["name"] = executor["module"].split(".")[-1]
-                executor["module"] = executor["module"][
-                    0 : -(len(executor["name"]) + 1)
-                ]
-        return executor
+        if isinstance(executor, dict):
+            executor = NodeExecutor(**executor)
+        return executor.to_dict()
 
     @classmethod
     def from_dict(
@@ -524,7 +520,7 @@ class Node:
         node.outputs = self.outputs._copy(parent=node)
         return node
 
-    def get_executor(self) -> Optional[Dict[str, Union[str, bool]]]:
+    def get_executor(self) -> Optional[NodeExecutor]:
         """Get the default executor."""
         return self._executor
 
