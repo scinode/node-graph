@@ -7,7 +7,7 @@ from node_graph import NodeGraph
 def test_build_node():
     """Build node from a callable."""
     ndata = {
-        "executor": {"module": "math.sqrt"},
+        "executor": {"module_path": "math.sqrt"},
     }
     MyNumpyAdd = build_node(ndata)
     ng = NodeGraph(name="test_create_node")
@@ -30,7 +30,7 @@ def test_create_node():
             },
         ],
         "outputs": [{"identifier": "node_graph.any", "name": "result"}],
-        "executor": {"module": "numpy.add"},
+        "executor": {"module_path": "numpy.add"},
     }
     MyNumpyAdd = create_node(ndata)
     ng = NodeGraph(name="test_create_node")

@@ -132,11 +132,11 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     ndata.setdefault("metadata", {})
 
     node_class = ndata["metadata"].get(
-        "node_class", {"module": "node_graph.node", "name": "Node"}
+        "node_class", {"module_path": "node_graph.node", "callable_name": "Node"}
     )
     try:
-        module = importlib.import_module("{}".format(node_class.get("module", "")))
-        NodeClass = getattr(module, node_class["name"])
+        module = importlib.import_module("{}".format(node_class.get("module_path", "")))
+        NodeClass = getattr(module, node_class["callable_name"])
     except Exception as e:
         raise Exception("Error loading node class: {}".format(e))
 

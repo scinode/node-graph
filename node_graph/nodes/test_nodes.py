@@ -16,8 +16,8 @@ class TestFloat(Node):
 
     def get_executor(self):
         executor = {
-            "module": "node_graph.executors.test",
-            "name": "test_float",
+            "module_path": "node_graph.executors.test",
+            "callable_name": "test_float",
         }
         return executor
 
@@ -37,8 +37,8 @@ class TestString(Node):
 
     def get_executor(self):
         executor = {
-            "module": "node_graph.executors.test",
-            "name": "test_string",
+            "module_path": "node_graph.executors.test",
+            "callable_name": "test_string",
         }
         return executor
 
@@ -73,8 +73,8 @@ class TestAdd(Node):
 
     def get_executor(self):
         executor = {
-            "module": "node_graph.executors.test",
-            "name": "test_add",
+            "module_path": "node_graph.executors.test",
+            "callable_name": "test_add",
         }
         return executor
 
@@ -104,8 +104,8 @@ class TestEnum(Node):
 
     def get_executor(self):
         executor = {
-            "module": "node_graph.executors.test",
-            "name": "test_enum",
+            "module_path": "node_graph.executors.test",
+            "callable_name": "test_enum",
         }
         return executor
 
@@ -142,8 +142,8 @@ class TestEnumUpdate(Node):
 
     def get_executor(self):
         return {
-            "module": "node_graph.executors.test",
-            "name": self.properties["function"].content,
+            "module_path": "node_graph.executors.test",
+            "callable_name": self.properties["function"].content,
             "type": "function",
         }
 

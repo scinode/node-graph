@@ -105,12 +105,6 @@ One can define a new node by extend the `Node` class.
       name = "TestAdd"
       catalog = "Test"
 
-      _executor = {
-               "module": "node_graph.executors.test",
-               "name": "test_add",
-         }
-      kwargs = ["t", "x", "y"]
-
       def create_properties(self):
          self.add_property("node_graph.int", "t", default=1)
 
@@ -120,6 +114,12 @@ One can define a new node by extend the `Node` class.
          self.add_input("node_graph.float", "x")
          self.add_input("node_graph.float", "y")
          self.add_output("node_graph.float", "Result")
+
+      def get_executor(self):
+         executor = {
+                  "module_path": "node_graph.executors.test.test_add",
+            }
+         return executor
 
 
 Use Node
