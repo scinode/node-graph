@@ -6,15 +6,15 @@ import cloudpickle as pickle
 class SerializeNone:
     def get_serialize(self) -> Dict[str, str]:
         serialize: Dict[str, str] = {
-            "module": "node_graph.serializer",
-            "name": "serialize_none",
+            "module_path": "node_graph.serializer",
+            "callable_name": "serialize_none",
         }
         return serialize
 
     def get_deserialize(self) -> Dict[str, str]:
         deserialize: Dict[str, str] = {
-            "module": "node_graph.serializer",
-            "name": "deserialize_none",
+            "module_path": "node_graph.serializer",
+            "callable_name": "deserialize_none",
         }
         return deserialize
 
@@ -22,15 +22,15 @@ class SerializeNone:
 class SerializeJson:
     def get_serialize(self) -> Dict[str, str]:
         serialize: Dict[str, str] = {
-            "module": "node_graph.serializer",
-            "name": "serialize_json",
+            "module_path": "node_graph.serializer",
+            "callable_name": "serialize_json",
         }
         return serialize
 
     def get_deserialize(self) -> Dict[str, str]:
         deserialize: Dict[str, str] = {
-            "module": "node_graph.serializer",
-            "name": "deserialize_json",
+            "module_path": "node_graph.serializer",
+            "callable_name": "deserialize_json",
         }
         return deserialize
 
@@ -38,15 +38,15 @@ class SerializeJson:
 class SerializePickle:
     def get_serialize(self) -> Dict[str, str]:
         serialize: Dict[str, str] = {
-            "module": "node_graph.serializer",
-            "name": "serialize_pickle",
+            "module_path": "node_graph.serializer",
+            "callable_name": "serialize_pickle",
         }
         return serialize
 
     def get_deserialize(self) -> Dict[str, str]:
         deserialize: Dict[str, str] = {
-            "module": "node_graph.serializer",
-            "name": "deserialize_pickle",
+            "module_path": "node_graph.serializer",
+            "callable_name": "deserialize_pickle",
         }
         return deserialize
 

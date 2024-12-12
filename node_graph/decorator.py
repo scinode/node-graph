@@ -225,7 +225,10 @@ def decorator_node(
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
-                "node_class": {"module": "node_graph.node", "name": "Node"},
+                "node_class": {
+                    "module_path": "node_graph.node",
+                    "callable_name": "Node",
+                },
             },
             "properties": properties,
             "inputs": node_inputs,
@@ -286,7 +289,10 @@ def decorator_node_group(
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
-                "node_class": {"module": "node_graph.node", "name": "Node"},
+                "node_class": {
+                    "module_path": "node_graph.node",
+                    "callable_name": "Node",
+                },
                 "group_inputs": inputs,
                 "group_outputs": outputs,
             },
@@ -309,7 +315,7 @@ def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
     ndata.setdefault("inputs", [])
     ndata.setdefault("outputs", [{"identifier": "node_graph.any", "name": "result"}])
     ndata["metadata"].setdefault(
-        "node_class", {"module": "node_graph.node", "name": "Node"}
+        "node_class", {"module_path": "node_graph.node", "callable_name": "Node"}
     )
 
     executor = ndata["executor"]

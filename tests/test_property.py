@@ -87,7 +87,7 @@ def test_vector(id, size, default, data):
 
     ng = NodeGraph(name="test_vector")
     nd = ng.add_node(Node)
-    nd.executor = {"module": "numpy.sqrt"}
+    nd.executor = {"module_path": "numpy.sqrt"}
     nd.args = ["x"]
     nd.add_property(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
@@ -104,7 +104,7 @@ def test_vector(id, size, default, data):
 def test_matrix(id, size, default, data):
     ng = NodeGraph(name="test_vector")
     nd = ng.add_node(Node)
-    nd.executor = {"module": "numpy.sqrt"}
+    nd.executor = {"module_path": "numpy.sqrt"}
     nd.args = ["x"]
     nd.add_property(id, "x", **{"size": size, "default": default})
     nd.properties[0].value = data
