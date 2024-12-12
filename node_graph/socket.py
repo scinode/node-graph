@@ -235,6 +235,7 @@ class NodeSocketNamespace(BaseSocket):
         parent: Optional["NodeSocket"] = None,
         link_limit: int = 1e6,
         metadata: Optional[dict] = None,
+        sockets: Optional[Dict[str, object]] = None,
         pool: Optional[object] = None,
         entry_point: Optional[str] = "node_graph.socket",
     ) -> None:
@@ -256,6 +257,19 @@ class NodeSocketNamespace(BaseSocket):
         elif entry_point is not None:
             self._socket_pool = get_entries(entry_point_name=entry_point)
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
+        if sockets is not None:
+            for key, socket in sockets.items():
+                kwargs = {}
+                if "property_data" in socket:
+                    kwargs["property_data"] = socket.pop("property_data")
+                if "sockets" in socket:
+                    kwargs["sockets"] = socket.pop("sockets")
+                self._new(
+                    socket["identifier"],
+                    name=key,
+                    metadata=socket.get("metadata", {}),
+                    **kwargs,
+                )
 
     def _new(
         self,

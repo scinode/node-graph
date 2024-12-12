@@ -169,6 +169,8 @@ def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
                 kwargs = {}
                 if "property_data" in input:
                     kwargs["property_data"] = input.pop("property_data")
+                if "sockets" in input:
+                    kwargs["sockets"] = input.pop("sockets")
                 self.add_input(
                     input.get("identifier", type_mapping["default"]),
                     name=input["name"],

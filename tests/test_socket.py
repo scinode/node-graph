@@ -170,6 +170,18 @@ def test_namespace(node_with_namespace_socket):
     assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
 
 
+def test_add_namespace_with_socket():
+    """Test namespace socket."""
+    n = Node()
+    sockets = {
+        "x": {"identifier": "node_graph.int"},
+        "y": {"identifier": "node_graph.namespace"},
+    }
+    n.add_input("node_graph.namespace", "abc", sockets=sockets)
+    n.inputs.abc.x.value = 1
+    n.inputs.abc.y._identifier = "node_graph.namespace"
+
+
 def test_set_namespace(node_with_namespace_socket):
     """Test set namespace."""
     n = node_with_namespace_socket
