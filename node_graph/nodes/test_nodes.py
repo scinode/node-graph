@@ -6,11 +6,6 @@ class TestFloat(Node):
     name = "TestFloat"
     catalog = "Test"
 
-    _executor = {
-        "module": "node_graph.executors.test",
-        "name": "test_float",
-    }
-
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
         self.add_property("node_graph.float", "value", default=0.0)
@@ -19,16 +14,18 @@ class TestFloat(Node):
         self.add_output("node_graph.float", "float")
         self.add_output("node_graph.any", "_outputs")
 
+    def get_executor(self):
+        executor = {
+            "module": "node_graph.executors.test",
+            "name": "test_float",
+        }
+        return executor
+
 
 class TestString(Node):
     identifier = "node_graph.test_string"
     name = "String"
     catalog = "Test"
-
-    _executor = {
-        "module": "node_graph.executors.test",
-        "name": "test_string",
-    }
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
@@ -37,6 +34,13 @@ class TestString(Node):
     def create_sockets(self):
         self.add_output("node_graph.string", "string")
         self.add_output("node_graph.any", "_outputs")
+
+    def get_executor(self):
+        executor = {
+            "module": "node_graph.executors.test",
+            "name": "test_string",
+        }
+        return executor
 
 
 class TestAdd(Node):
@@ -56,11 +60,6 @@ class TestAdd(Node):
     name = "TestAdd"
     catalog = "Test"
 
-    _executor = {
-        "module": "node_graph.executors.test",
-        "name": "test_add",
-    }
-
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
 
@@ -72,17 +71,19 @@ class TestAdd(Node):
         self.add_output("node_graph.float", "result")
         self.add_output("node_graph.any", "_outputs")
 
+    def get_executor(self):
+        executor = {
+            "module": "node_graph.executors.test",
+            "name": "test_add",
+        }
+        return executor
+
 
 class TestEnum(Node):
 
     identifier: str = "node_graph.test_enum"
     name = "Enum"
     catalog = "Test"
-
-    _executor = {
-        "module": "node_graph.executors.test",
-        "name": "test_enum",
-    }
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
@@ -100,6 +101,13 @@ class TestEnum(Node):
         self.outputs._clear()
         self.add_output("node_graph.any", "result")
         self.add_output("node_graph.any", "_outputs")
+
+    def get_executor(self):
+        executor = {
+            "module": "node_graph.executors.test",
+            "name": "test_enum",
+        }
+        return executor
 
 
 class TestEnumUpdate(Node):

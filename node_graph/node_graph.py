@@ -228,6 +228,8 @@ class NodeGraph:
                 identifier,
                 name=name,
                 uuid=ndata.pop("uuid", None),
+                _metadata=ndata.get("metadata", None),
+                _executor=ndata.get("executor", None),
             )
             node.update_from_dict(ndata)
         for link in ngdata.get("links", []):

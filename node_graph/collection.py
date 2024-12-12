@@ -226,6 +226,8 @@ class NodeCollection(Collection):
         identifier: Union[str, type],
         name: Optional[str] = None,
         uuid: Optional[str] = None,
+        _metadata: Optional[dict] = None,
+        _executor: Optional[dict] = None,
         **kwargs,
     ) -> object:
         from node_graph.node import Node
@@ -233,7 +235,12 @@ class NodeCollection(Collection):
         list_index = self._get_list_index()
         ItemClass = get_item_class(identifier, self.pool, Node)
         item = ItemClass(
-            list_index=list_index, name=name, uuid=uuid, parent=self.parent
+            list_index=list_index,
+            name=name,
+            uuid=uuid,
+            parent=self.parent,
+            metadata=_metadata,
+            executor=_executor,
         )
         self._append(item)
         item.set(kwargs)
