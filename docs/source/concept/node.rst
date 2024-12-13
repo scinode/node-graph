@@ -79,7 +79,7 @@ then you can use the node in a nodegraph:
    add1.set({"x": 8})
    nt.launch()
    time.sleep(5)
-   print("add1.result: ", add1.results[0]["value"])
+   print("add1.result: ", add1.results.result.value)
 
 
 Class

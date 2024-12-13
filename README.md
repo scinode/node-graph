@@ -15,7 +15,7 @@ A platform for designing node-based workflows.
 
 
 ## Documentation
-Check the [docs](https://node_graph.readthedocs.io/en/latest/) and learn about the features.
+Check the [docs](https://node-graph.readthedocs.io/en/latest/) and learn about the features.
 
 ## Examples
 **A simple math calculation**
@@ -25,7 +25,7 @@ from node_graph import NodeGraph
 ng = NodeGraph(name="example")
 add1 = ng.add_node("node_graph.test_add", x=1, y=2)
 add2 = ng.add_node("node_graph.test_add", x=3)
-ng.add_link(add1.outputs[0], add2.inputs["y"])
+ng.add_link(add1.outputs.result, add2.inputs.y)
 ntdata = ng.to_dict()
 ```
 

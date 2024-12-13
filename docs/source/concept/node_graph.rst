@@ -25,7 +25,7 @@ Create a node graph
 
 .. code-block:: python
 
-    ng.add_link(float1.outputs[0], add1.inputs[0])
+    ng.add_link(float1.outputs.result, add1.inputs.x)
 
 - Save to dict:
 
