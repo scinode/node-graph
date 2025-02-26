@@ -4,6 +4,7 @@ import importlib
 from node_graph.node import Node
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 from node_graph.utils import create_node
+from node_graph.executor import NodeExecutor
 
 
 def inspect_function(
@@ -209,14 +210,10 @@ def decorator_node(
 
         nonlocal identifier
 
+        executor = NodeExecutor.from_callable(func).to_dict()
         if identifier is None:
-            identifier = func.__name__
+            identifier = executor["callable_name"]
 
-        executor = {
-            "callable": func,
-            "type": executor_type,
-            "use_module_path": False,
-        }
         #
         # Get the args and kwargs of the function
         node_inputs = generate_input_sockets(func, inputs, properties)
@@ -269,14 +266,10 @@ def decorator_node_group(
 
         nonlocal identifier, inputs, outputs
 
+        executor = NodeExecutor.from_callable(func).to_dict()
         if identifier is None:
-            identifier = func.__name__
+            identifier = executor["callable_name"]
         func.identifier = identifier
-        executor = {
-            "callable": func,
-            "type": executor_type,
-            "use_module_path": False,
-        }
         # Get the inputs of the function
         node_inputs = generate_input_sockets(func, inputs, properties)
         node_outputs = [

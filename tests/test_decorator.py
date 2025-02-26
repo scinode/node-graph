@@ -12,7 +12,7 @@ def test_build_node():
     MyNumpyAdd = build_node(ndata)
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(MyNumpyAdd, "add1")
-    assert task1.to_dict()["executor"]["use_module_path"] is True
+    assert task1.to_dict()["executor"]["mode"] == "module"
     assert len(ng.nodes) == 1
     "x" in ng.nodes[0].get_input_names()
 
@@ -49,8 +49,7 @@ def test_decorator_args() -> None:
         return 1
 
     task1 = test.node()
-    assert task1.get_executor()["use_module_path"] is False
-    assert task1.get_executor()["callable"] == test
+    assert task1.get_executor()["mode"] == "pickled_callable"
     assert task1.inputs["e"]._link_limit > 1
     assert task1.inputs["e"]._identifier == "node_graph.namespace"
     assert task1.inputs["c"]._metadata["required"] is True
