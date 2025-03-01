@@ -1,8 +1,6 @@
-from copy import deepcopy
 from typing import Dict
 from node_graph.utils import list_to_dict
 from node_graph.node import Node
-from node_graph.executor import NodeExecutor
 from node_graph.orm.mapping import type_mapping
 import importlib
 
@@ -26,39 +24,36 @@ class BaseNodeFactory:
         class _NodeFactory(BaseClass):
             """A specialized Node with the embedded ndata."""
 
-            _ndata = deepcopy(ndata)
+            _ndata = ndata
             is_dynamic: bool = True
 
             def __init__(self, *args, **kwargs):
-                self.ndata = deepcopy(ndata)
-                self.identifier = self.ndata["identifier"]
-                self.node_type = self.ndata.get("metadata", {}).get(
+                self.identifier = self._ndata["identifier"]
+                self.node_type = self._ndata.get("metadata", {}).get(
                     "node_type", "NORMAL"
                 )
-                self.catalog = self.ndata.get("metadata", {}).get("catalog", "Others")
-                self._executor = NodeExecutor(**self.ndata["executor"])
-                self._error_handlers = self.ndata.get("error_handlers", [])
+                self.catalog = self._ndata.get("metadata", {}).get("catalog", "Others")
+                self._error_handlers = self._ndata.get("error_handlers", [])
                 super().__init__(*args, **kwargs)
                 self.group_inputs = ndata["metadata"].get("group_inputs", [])
                 self.group_outputs = ndata["metadata"].get("group_outputs", [])
 
             def create_properties(self):
-                properties = list_to_dict(self.ndata.get("properties", {}))
+                properties = list_to_dict(self._ndata.get("properties", {}))
                 for prop in properties.values():
-                    self.add_property(
-                        prop.pop("identifier", type_mapping["default"]), **prop
-                    )
+                    prop.setdefault("identifier", type_mapping["default"])
+                    self.add_property(**prop)
 
             def create_sockets(self):
-                inputs = list_to_dict(self.ndata.get("inputs", {}))
+                inputs = list_to_dict(self._ndata.get("inputs", {}))
                 for inp in inputs.values():
                     if isinstance(inp, str):
                         inp = {"identifier": type_mapping["default"], "name": inp}
                     kwargs = {}
                     if "property_data" in inp:
-                        kwargs["property_data"] = inp.pop("property_data")
+                        kwargs["property_data"] = inp.get("property_data", {})
                     if "sockets" in inp:
-                        kwargs["sockets"] = inp.pop("sockets")
+                        kwargs["sockets"] = inp.get("sockets", None)
                     self.add_input(
                         inp.get("identifier", type_mapping["default"]),
                         name=inp["name"],
@@ -67,7 +62,7 @@ class BaseNodeFactory:
                         **kwargs,
                     )
 
-                outputs = list_to_dict(self.ndata.get("outputs", {}))
+                outputs = list_to_dict(self._ndata.get("outputs", {}))
                 for out in outputs.values():
                     if isinstance(out, str):
                         out = {"identifier": type_mapping["default"], "name": out}
@@ -78,13 +73,17 @@ class BaseNodeFactory:
                     )
 
             def get_executor(self):
-                return self.ndata.get("executor", None)
+                return self._ndata.get("executor", None)
 
             def get_metadata(self):
                 metadata = super().get_metadata()
                 metadata["node_class"] = {
                     "module_path": BaseClass.__module__,
                     "callable_name": BaseClass.__name__,
+                }
+                metadata["factory_class"] = {
+                    "module_path": BaseNodeFactory.__module__,
+                    "callable_name": BaseNodeFactory.__name__,
                 }
                 return metadata
 

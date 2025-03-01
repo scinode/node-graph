@@ -1,7 +1,30 @@
+from __future__ import annotations
 from typing import Dict, Any, Union, List
 from importlib.metadata import entry_points
 import sys
 import difflib
+
+
+def get_executor_from_path(path: dict | str) -> Any:
+    """Get the executor from the path."""
+    import importlib
+
+    if isinstance(path, dict):
+        module_path = path["module_path"]
+        callable_name = path["callable_name"]
+    elif isinstance(path, str):
+        parts = path.split(".")
+        if len(parts) < 2:
+            raise ValueError(
+                "module_path must contain at least one dot to separate "
+                "the module from the callable (e.g. 'mymodule.myfunc')"
+            )
+        callable_name = parts[-1]
+        module_path = ".".join(parts[:-1])
+    module = importlib.import_module(module_path)
+    executor = getattr(module, callable_name)
+
+    return executor
 
 
 def list_to_dict(data: List[Dict[str, Any]]) -> Dict[str, Any]:
