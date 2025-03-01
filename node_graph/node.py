@@ -415,7 +415,7 @@ class Node:
             FactoryClass = get_executor_from_path(data["metadata"]["factory_class"])
             node_class = FactoryClass(data)
         else:
-            node_class = node_pool[data["identifier"].upper()]
+            node_class = node_pool[data["identifier"].upper()].load()
 
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
