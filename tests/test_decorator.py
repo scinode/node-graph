@@ -1,17 +1,17 @@
 from node_graph.decorator import create_node_group, build_node
-from node_graph.utils import create_node
 from node_graph.decorator import node
 from node_graph import NodeGraph
+from node_graph.nodes.factory.base import BaseNodeFactory
 
 
 def test_build_node():
     """Build node from a callable."""
     ndata = {
-        "executor": {"module_path": "math.sqrt"},
+        "executor": "math.sqrt",
     }
-    MyNumpyAdd = build_node(ndata)
+    NodeCls = build_node(**ndata)
     ng = NodeGraph(name="test_create_node")
-    task1 = ng.add_node(MyNumpyAdd, "add1")
+    task1 = ng.add_node(NodeCls, "add1")
     assert task1.to_dict()["executor"]["mode"] == "module"
     assert len(ng.nodes) == 1
     "x" in ng.nodes[0].get_input_names()
@@ -20,7 +20,7 @@ def test_build_node():
 def test_create_node():
     """Build node on-the-fly."""
     ndata = {
-        "identifier": "MyNumpyAdd",
+        "identifier": "add",
         "properties": [{"identifier": "node_graph.float", "name": "x", "default": 3}],
         "inputs": [
             {
@@ -32,9 +32,9 @@ def test_create_node():
         "outputs": [{"identifier": "node_graph.any", "name": "result"}],
         "executor": {"module_path": "numpy.add"},
     }
-    MyNumpyAdd = create_node(ndata)
+    NodeCls = BaseNodeFactory(ndata)
     ng = NodeGraph(name="test_create_node")
-    ng.add_node(MyNumpyAdd, "add1")
+    ng.add_node(NodeCls, "add1")
     assert len(ng.nodes) == 1
     assert ng.nodes[0].properties[0].default == 3
     assert ng.nodes[0].inputs[0].property.default == 10
@@ -48,7 +48,7 @@ def test_decorator_args() -> None:
     def test(a, /, b, *, c, d=1, **e):
         return 1
 
-    task1 = test.node()
+    task1 = test.NodeCls()
     assert task1.get_executor()["mode"] == "pickled_callable"
     assert task1.inputs["e"]._link_limit > 1
     assert task1.inputs["e"]._identifier == "node_graph.namespace"
@@ -73,7 +73,7 @@ def test_decorator_parameters() -> None:
     def test(*x, a, b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
-    test1 = test.node()
+    test1 = test.NodeCls()
     assert test1.inputs["kwargs"]._link_limit == 1e6
     assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
@@ -85,7 +85,7 @@ def test_decorator_parameters() -> None:
     assert "sum" in test1.get_output_names()
     assert "product" in test1.get_output_names()
     # create another node
-    test2 = test.node()
+    test2 = test.NodeCls()
     assert test2.inputs.b.value == test1.inputs.b.value
 
 
@@ -115,7 +115,7 @@ MyTestAddGroup = create_node_group(
 
 def test_socket(decorated_myadd):
     """Test simple math."""
-    n = decorated_myadd.node()
+    n = decorated_myadd.NodeCls()
     assert n.inputs["x"]._identifier == "node_graph.float"
     assert n.inputs["y"]._identifier == "node_graph.float"
     assert n.inputs["t"].property.default == 1

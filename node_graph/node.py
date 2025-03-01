@@ -405,14 +405,14 @@ class Node:
         cls, data: Dict[str, Any], node_pool: Optional[Dict[str, Any]] = None
     ) -> Any:
         """Rebuild Node from dict data."""
-        from node_graph.utils import create_node
+        from node_graph.nodes.factory.base import BaseNodeFactory
 
         if node_pool is None:
             from node_graph.nodes import node_pool
 
         # first create the node instance
         if data.get("metadata", {}).get("is_dynamic", False):
-            node_class = create_node(data)
+            node_class = BaseNodeFactory(data)
         else:
             node_class = node_pool[data["identifier"].upper()]
 

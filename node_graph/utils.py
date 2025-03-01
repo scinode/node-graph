@@ -1,4 +1,4 @@
-from typing import Dict, Any, Union, Callable, List
+from typing import Dict, Any, Union, List
 from importlib.metadata import entry_points
 import sys
 import difflib
@@ -116,98 +116,16 @@ def deep_copy_only_dicts(
         return original
 
 
-def create_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
-    """Create a node class from node data.
-
-    Args:
-        ndata (Dict[str, Any]): node data
-
-    Returns:
-        Callable[..., Any]: _description_
-    """
-    from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
-    import importlib
-    from copy import deepcopy
-
-    ndata.setdefault("metadata", {})
-
-    node_class = ndata["metadata"].get(
-        "node_class", {"module_path": "node_graph.node", "callable_name": "Node"}
-    )
-    try:
-        module = importlib.import_module("{}".format(node_class.get("module_path", "")))
-        NodeClass = getattr(module, node_class["callable_name"])
-    except Exception as e:
-        raise Exception("Error loading node class: {}".format(e))
-
-    type_mapping = ndata.get("type_mapping", node_graph_type_mapping)
-
-    class DecoratedNode(NodeClass):
-        identifier: str = ndata["identifier"].upper()
-        node_type: str = ndata.get("metadata", {}).get("node_type", "NORMAL")
-        catalog: str = ndata.get("metadata", {}).get("catalog", "Others")
-        # group
-        group_inputs = ndata["metadata"].get("group_inputs", [])
-        group_outputs = ndata["metadata"].get("group_outputs", [])
-
-        is_dynamic: bool = True
-
-        def create_properties(self):
-            # ndata is shared between all instances
-            # deepcopy to avoid changing the original data
-            properties = deepcopy(list_to_dict(ndata.get("properties", {})))
-            for prop in properties.values():
-                self.add_property(
-                    prop.pop("identifier", type_mapping["default"]), **prop
-                )
-
-        def create_sockets(self):
-            inputs = deepcopy(list_to_dict(ndata.get("inputs", {})))
-            for input in inputs.values():
-                if isinstance(input, str):
-                    input = {"identifier": type_mapping["default"], "name": input}
-                kwargs = {}
-                if "property_data" in input:
-                    kwargs["property_data"] = input.pop("property_data")
-                if "sockets" in input:
-                    kwargs["sockets"] = input.pop("sockets")
-                self.add_input(
-                    input.get("identifier", type_mapping["default"]),
-                    name=input["name"],
-                    metadata=input.get("metadata", {}),
-                    link_limit=input.get("link_limit", 1),
-                    **kwargs,
-                )
-            outputs = deepcopy(list_to_dict(ndata.get("outputs", {})))
-            for output in outputs.values():
-                if isinstance(output, str):
-                    output = {"identifier": type_mapping["default"], "name": output}
-                identifier = output.get("identifier", type_mapping["default"])
-                self.add_output(
-                    identifier, name=output["name"], metadata=output.get("metadata", {})
-                )
-
-        def get_metadata(self):
-            metadata = super().get_metadata()
-            metadata["node_class"] = node_class
-            return metadata
-
-        def get_executor(self):
-            return ndata.get("executor", None)
-
-    return DecoratedNode
-
-
 def get_item_class(identifier: str, pool: Dict[str, Any], base_class) -> Any:
     """Get the item class from the identifier."""
     if isinstance(identifier, str):
         identifier = pool[identifier.upper()].load()
     if isinstance(identifier, type) and issubclass(identifier, base_class):
         ItemClass = identifier
-    elif isinstance(getattr(identifier, "node", None), type) and issubclass(
-        identifier.node, base_class
+    elif isinstance(getattr(identifier, "NodeCls", None), type) and issubclass(
+        identifier.NodeCls, base_class
     ):
-        ItemClass = identifier.node
+        ItemClass = identifier.NodeCls
     else:
         raise Exception(
             f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
