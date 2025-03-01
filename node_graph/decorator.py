@@ -1,10 +1,10 @@
+from __future__ import annotations
 from typing import Any, List, Dict, Tuple, Union, Optional, Callable
 import inspect
-import importlib
+from node_graph.executor import NodeExecutor
 from node_graph.node import Node
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
-from node_graph.utils import create_node
-from node_graph.executor import NodeExecutor
+from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
 
 
 def inspect_function(
@@ -190,7 +190,6 @@ def decorator_node(
     inputs: Optional[List[Dict[str, Any]]] = None,
     outputs: Optional[List[Dict[str, Any]]] = None,
     catalog: str = "Others",
-    executor_type: str = "function",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
 
@@ -202,39 +201,18 @@ def decorator_node(
         outputs (list): node outputs
     """
 
-    properties = properties or []
-    inputs = inputs or []
-    outputs = outputs or [{"identifier": "node_graph.any", "name": "result"}]
-
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-
-        nonlocal identifier
-
-        executor = NodeExecutor.from_callable(func).to_dict()
-        if identifier is None:
-            identifier = executor["callable_name"]
-
-        #
-        # Get the args and kwargs of the function
-        node_inputs = generate_input_sockets(func, inputs, properties)
-        ndata = {
-            "identifier": identifier,
-            "metadata": {
-                "node_type": node_type,
-                "catalog": catalog,
-                "node_class": {
-                    "module_path": "node_graph.node",
-                    "callable_name": "Node",
-                },
-            },
-            "properties": properties,
-            "inputs": node_inputs,
-            "outputs": outputs,
-            "executor": executor,
-        }
-        node = create_node(ndata)
-        func.identifier = identifier
-        func.node = node
+        node_outputs = outputs or [{"identifier": "node_graph.any", "name": "result"}]
+        NodeCls = DecoratedFunctionNodeFactory.from_function(
+            func=func,
+            identifier=identifier,
+            node_type=node_type,
+            properties=properties,
+            inputs=inputs,
+            outputs=node_outputs,
+            catalog=catalog,
+        )
+        func.NodeCls = NodeCls
         return func
 
     return decorator
@@ -246,7 +224,6 @@ def decorator_node_group(
     inputs: Optional[List[Dict[str, Any]]] = None,
     outputs: Optional[List[Dict[str, Any]]] = None,
     catalog: str = "Others",
-    executor_type: str = "function",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a node group as a node.
 
@@ -258,72 +235,41 @@ def decorator_node_group(
         outputs (list): node outputs
     """
 
-    properties = properties or []
-    inputs = inputs or []
-    outputs = outputs or []
-
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-
-        nonlocal identifier, inputs, outputs
-
-        executor = NodeExecutor.from_callable(func).to_dict()
-        if identifier is None:
-            identifier = executor["callable_name"]
-        func.identifier = identifier
-        # Get the inputs of the function
-        node_inputs = generate_input_sockets(func, inputs, properties)
         node_outputs = [
-            {"identifier": "node_graph.any", "name": output[1]} for output in outputs
+            {"identifier": "node_graph.any", "name": output["name"]}
+            for output in outputs or []
         ]
-        #
-        node_type = "nodegroup"
-        ndata = {
-            "identifier": identifier,
-            "metadata": {
-                "node_type": node_type,
-                "catalog": catalog,
-                "node_class": {
-                    "module_path": "node_graph.node",
-                    "callable_name": "Node",
-                },
-                "group_inputs": inputs,
-                "group_outputs": outputs,
-            },
-            "properties": properties,
-            "inputs": node_inputs,
-            "outputs": node_outputs,
-            "executor": executor,
-        }
-        node = create_node(ndata)
-        func.node = node
+        NodeCls = DecoratedFunctionNodeFactory.from_function(
+            func=func,
+            identifier=identifier,
+            node_type="node_group",
+            properties=properties,
+            inputs=inputs,
+            outputs=node_outputs,
+            catalog=catalog,
+            group_inputs=inputs,
+            group_outputs=outputs,
+        )
+        func.NodeCls = NodeCls
         return func
 
     return decorator
 
 
-def build_node(ndata: Dict[str, Any]) -> Callable[..., Any]:
+def build_node(
+    executor: Union[Callable, str],
+    inputs: Optional[List[str | dict]] = None,
+    outputs: Optional[List[str | dict]] = None,
+) -> Node:
     """Build a node from a callable function."""
-    ndata.setdefault("metadata", {})
-    ndata.setdefault("properties", [])
-    ndata.setdefault("inputs", [])
-    ndata.setdefault("outputs", [{"identifier": "node_graph.any", "name": "result"}])
-    ndata["metadata"].setdefault(
-        "node_class", {"module_path": "node_graph.node", "callable_name": "Node"}
-    )
-
-    executor = ndata["executor"]
-    name = executor.get("name", None)
-    if not name:
-        executor["module_path"], executor["callable_name"] = executor[
-            "module_path"
-        ].split(".", 1)
-    module = importlib.import_module("{}".format(executor["module_path"]))
-    func = getattr(module, executor["callable_name"])
-    # Get the inputs of the function
-    generate_input_sockets(func, ndata["inputs"], ndata["properties"])
-    ndata["identifier"] = ndata.get("identifier", func.__name__)
-    node = create_node(ndata)
-    return node
+    if isinstance(executor, str):
+        executor = NodeExecutor(module_path=executor).executor
+    if callable(executor):
+        return DecoratedFunctionNodeFactory.from_function(
+            func=executor, inputs=inputs, outputs=outputs
+        )
+    raise ValueError("executor must be a callable or a valiate module path.")
 
 
 class NodeDecoratorCollection:

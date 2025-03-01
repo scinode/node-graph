@@ -3,13 +3,13 @@ from __future__ import annotations
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
 from node_graph.nodes import node_pool
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Callable
 from node_graph.version import __version__
 import yaml
 from node_graph.node import Node
 from node_graph.socket import NodeSocket
 from node_graph.link import NodeLink
-from node_graph.utils import yaml_to_dict, create_node
+from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
 
 
@@ -76,7 +76,7 @@ class NodeGraph:
         self._widget = NodeGraphWidget(parent=self)
 
     def add_node(
-        self, identifier: Union[str, callable], name: str = None, **kwargs
+        self, identifier: Union[str, Callable], name: str = None, **kwargs
     ) -> Node:
         """Adds a node to the node graph."""
         node = self.nodes._new(identifier, name, **kwargs)
@@ -199,7 +199,9 @@ class NodeGraph:
         raise NotImplementedError("The 'update' method is not implemented.")
 
     @classmethod
-    def from_dict(cls, ngdata: Dict[str, Any]) -> "NodeGraph":
+    def from_dict(
+        cls, ngdata: Dict[str, Any], class_factory: Callable = None
+    ) -> "NodeGraph":
         """Rebuilds a node graph from a dictionary.
 
         Args:
@@ -208,6 +210,10 @@ class NodeGraph:
         Returns:
             NodeGraph: The rebuilt node graph.
         """
+        if class_factory is None:
+            from node_graph.nodes.factory.base import BaseNodeFactory
+
+            class_factory = BaseNodeFactory
         ng: "NodeGraph" = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
@@ -221,7 +227,7 @@ class NodeGraph:
                 setattr(ng, key, ngdata["metadata"].get(key))
         for name, ndata in ngdata["nodes"].items():
             if ndata.get("metadata", {}).get("is_dynamic", False):
-                identifier = create_node(ndata)
+                identifier = class_factory(ndata)
             else:
                 identifier = ndata["identifier"]
             node = ng.add_node(
@@ -424,6 +430,6 @@ class NodeGraph:
             return self._widget._ipython_display_(*args, **kwargs)
 
     def to_html(self, output: str = None, **kwargs):
-        """Write a standalone html file to visualize the workgraph."""
+        """Write a standalone html file to visualize the graph."""
         self._widget.value = self.to_widget_value()
         return self._widget.to_html(output=output, **kwargs)

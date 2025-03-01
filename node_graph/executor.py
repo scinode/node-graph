@@ -28,6 +28,10 @@ def serialize_callable(
             the name of the callable, a base64-encoded pickled representation,
             and a mode key set to "pickled_callable".
     """
+    import types
+
+    if not isinstance(func, (types.FunctionType, types.BuiltinFunctionType, type)):
+        raise TypeError("Provided object is not a callable function or class.")
 
     # Attempt to retrieve source code if requested
     if include_source:
@@ -37,25 +41,33 @@ def serialize_callable(
             source_code = "Failed to retrieve source code."
     else:
         source_code = ""
-
-    # Optionally register the module for pickling by value
-    if register_pickle_by_value:
-        module = importlib.import_module(func.__module__)
-        cloudpickle.register_pickle_by_value(module)
-        pickled_data = cloudpickle.dumps(func)
-        # Unregister after pickling
-        cloudpickle.unregister_pickle_by_value(module)
+    callable_name = func.__name__
+    if func.__module__ == "__main__" or "." in func.__qualname__.split(".", 1)[-1]:
+        mode = "pickled_callable"
+        # Optionally register the module for pickling by value
+        if register_pickle_by_value:
+            module = importlib.import_module(func.__module__)
+            cloudpickle.register_pickle_by_value(module)
+            pickled_data = cloudpickle.dumps(func)
+            # Unregister after pickling
+            cloudpickle.unregister_pickle_by_value(module)
+        else:
+            pickled_data = cloudpickle.dumps(func)
+        # Base64 encode the pickled callable
+        pickled_callable = base64.b64encode(pickled_data).decode("utf-8")
+        module_path = None
     else:
-        pickled_data = cloudpickle.dumps(func)
-
-    # Base64 encode the pickled callable
-    pickled_data_b64 = base64.b64encode(pickled_data).decode("utf-8")
+        # Global callable (function/class), store its module and name for reference
+        mode = "module"
+        module_path = func.__module__
+        pickled_callable = None
 
     return {
+        "mode": mode,
+        "module_path": module_path,
+        "pickled_callable": pickled_callable,
+        "callable_name": callable_name,
         "source_code": source_code,
-        "mode": "pickled_callable",
-        "pickled_callable": pickled_data_b64,
-        "callable_name": func.__name__,
     }
 
 

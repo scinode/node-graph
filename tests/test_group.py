@@ -7,4 +7,4 @@ def test_group_outputs(decorated_myadd_group):
     # load from dict
     ndata = addgroup1.to_dict()
     addgroup2 = Node.from_dict(ndata)
-    assert addgroup2.group_outputs == [("add3.result", "result")]
+    assert addgroup2.group_outputs == [{"name": "result", "from": "add3.result"}]

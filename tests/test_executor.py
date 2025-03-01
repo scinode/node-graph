@@ -15,7 +15,7 @@ def test_executor_callable():
 
     e = NodeExecutor.from_callable(sqrt)
     assert e.callable_name == "sqrt"
-    assert e.mode == "pickled_callable"
+    assert e.mode == "module"
     e.executor(4) == 2
 
 
