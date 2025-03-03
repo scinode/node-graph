@@ -11,18 +11,21 @@ class BaseNodeFactory:
     """
 
     is_node_factory: bool = True
+    default_base_class = Node
 
     def __new__(cls, ndata: Dict):
 
         ndata.setdefault("metadata", {})
-        BaseClass = ndata["metadata"].get("node_class", Node)
+        BaseClass = ndata["metadata"].get("node_class", cls.default_base_class)
         if isinstance(BaseClass, Dict):
             module_path = BaseClass["module_path"]
             callable_name = BaseClass["callable_name"]
             module = importlib.import_module(module_path)
             BaseClass = getattr(module, callable_name)
 
-        class _NodeFactory(BaseClass):
+        class_name = ndata["metadata"].get("class_name", "DynamicNode")
+
+        class DynamicNode(BaseClass):
             """A specialized Node with the embedded ndata."""
 
             _ndata = ndata
@@ -88,4 +91,11 @@ class BaseNodeFactory:
                 }
                 return metadata
 
-        return _NodeFactory
+            def __repr__(self) -> str:
+                return (
+                    f"{class_name}(name='{self.name}', properties=[{', '.join(repr(k) for k in self.get_property_names())}], "
+                    f"inputs=[{', '.join(repr(k) for k in self.get_input_names())}], "
+                    f"outputs=[{', '.join(repr(k) for k in self.get_output_names())}])"
+                )
+
+        return DynamicNode

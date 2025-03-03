@@ -9,7 +9,7 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
     """A factory to create specialized subclasses of Node from functions."""
 
     @classmethod
-    def create_class(
+    def from_function(
         cls,
         func: Callable,
         identifier: Optional[str] = None,

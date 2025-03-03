@@ -26,7 +26,7 @@ def get_item_class(
     pool: Dict[str, EntryPoint],
     base_class: Type["Node"] = None,
     factory_class: Type["BaseNodeFactory"] = None,
-    **kwargs,
+    inputs: Optional[Dict] = None,
 ) -> "Node":
     """Get the item class from the identifier."""
 
@@ -45,7 +45,11 @@ def get_item_class(
         if issubclass(identifier, base_class):
             ItemClass = identifier
         elif issubclass(identifier, factory_class):
-            ItemClass = identifier.create_class(**kwargs)
+            ItemClass = identifier.create_class(inputs)
+        else:
+            raise Exception(
+                f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
+            )
     elif isinstance(getattr(identifier, "NodeCls", None), type) and issubclass(
         identifier.NodeCls, base_class
     ):
@@ -64,8 +68,8 @@ class Namespace:
         self._data = {}
 
     def __getattr__(self, name: str) -> EntryPoint:
-        if name in self._data:
-            return self._data[name]
+        if name in super().__getattribute__("_data"):
+            return super().__getattribute__("_data")[name]
         raise AttributeError(f"Namespace has no attribute {name!r}")
 
     def __setattr__(self, name: str, value: Namespace | EntryPoint) -> None:
@@ -171,7 +175,7 @@ class EntryPointPool:
 
     def __getattr__(self, name: str) -> EntryPoint:
         """Allow direct access to nodes via instance attributes."""
-        return getattr(self._nodes, name)
+        return getattr(super().__getattribute__("_nodes"), name)
 
     def __dir__(self):
         """Enable tab completion for the node pool instance."""
@@ -341,7 +345,7 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
                 f"Invalid index type for __delitem__: {index}, expected int or str, or list of int."
             )
 
-    def pop(self, index: Union[int, str]) -> object:
+    def _pop(self, index: Union[int, str]) -> object:
         if isinstance(index, int):
             key = list(self._items.keys())[index]
             return self._items.pop(key)
@@ -432,7 +436,7 @@ class NodeCollection(Collection):
 
         list_index = self._get_list_index()
         ItemClass = get_item_class(
-            identifier, self.pool, Node, BaseNodeFactory, **kwargs
+            identifier, self.pool, Node, BaseNodeFactory, inputs=kwargs
         )
         item = ItemClass(
             list_index=list_index,
