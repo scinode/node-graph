@@ -1,6 +1,6 @@
 from node_graph.decorator import create_node_group, build_node
 from node_graph.decorator import node
-from node_graph import NodeGraph
+from node_graph import NodeGraph, NodePool
 from node_graph.nodes.factory.base import BaseNodeFactory
 
 
@@ -91,9 +91,9 @@ def test_decorator_parameters() -> None:
 
 def create_test_node_group():
     ng = NodeGraph()
-    add1 = ng.add_node("node_graph.test_add", "add1")
-    add2 = ng.add_node("node_graph.test_add", "add2")
-    add3 = ng.add_node("node_graph.test_add", "add3")
+    add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
+    add2 = ng.add_node(NodePool.node_graph.test_add, "add2")
+    add3 = ng.add_node(NodePool.node_graph.test_add, "add3")
     ng.add_link(add1.outputs[0], add3.inputs[0])
     ng.add_link(add2.outputs[0], add3.inputs[1])
     ng.group_properties = [

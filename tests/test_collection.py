@@ -18,7 +18,7 @@ def test_base_collection():
     coll1 = coll._copy()
     assert len(coll1) == 2
     # delete
-    coll.pop(node1.name)
+    coll._pop(node1.name)
     assert len(coll) == 1
     # get
     assert coll["node2"] == node2

@@ -1,7 +1,6 @@
 from typing import Dict
 from node_graph.utils import list_to_dict
 from node_graph.node import Node
-from node_graph.orm.mapping import type_mapping
 import importlib
 
 
@@ -11,17 +10,22 @@ class BaseNodeFactory:
     embedding the 'ndata' (i.e., all relevant data).
     """
 
+    is_node_factory: bool = True
+    default_base_class = Node
+
     def __new__(cls, ndata: Dict):
 
         ndata.setdefault("metadata", {})
-        BaseClass = ndata["metadata"].get("node_class", Node)
+        BaseClass = ndata["metadata"].get("node_class", cls.default_base_class)
         if isinstance(BaseClass, Dict):
             module_path = BaseClass["module_path"]
             callable_name = BaseClass["callable_name"]
             module = importlib.import_module(module_path)
             BaseClass = getattr(module, callable_name)
 
-        class _NodeFactory(BaseClass):
+        class_name = ndata["metadata"].get("class_name", "DynamicNode")
+
+        class DynamicNode(BaseClass):
             """A specialized Node with the embedded ndata."""
 
             _ndata = ndata
@@ -41,21 +45,21 @@ class BaseNodeFactory:
             def create_properties(self):
                 properties = list_to_dict(self._ndata.get("properties", {}))
                 for prop in properties.values():
-                    prop.setdefault("identifier", type_mapping["default"])
+                    prop.setdefault("identifier", BaseClass.PropertyPool.any)
                     self.add_property(**prop)
 
             def create_sockets(self):
                 inputs = list_to_dict(self._ndata.get("inputs", {}))
                 for inp in inputs.values():
                     if isinstance(inp, str):
-                        inp = {"identifier": type_mapping["default"], "name": inp}
+                        inp = {"identifier": BaseClass.SocketPool.any, "name": inp}
                     kwargs = {}
                     if "property_data" in inp:
                         kwargs["property_data"] = inp.get("property_data", {})
                     if "sockets" in inp:
                         kwargs["sockets"] = inp.get("sockets", None)
                     self.add_input(
-                        inp.get("identifier", type_mapping["default"]),
+                        inp.get("identifier", BaseClass.SocketPool.any),
                         name=inp["name"],
                         metadata=inp.get("metadata", {}),
                         link_limit=inp.get("link_limit", 1),
@@ -65,9 +69,9 @@ class BaseNodeFactory:
                 outputs = list_to_dict(self._ndata.get("outputs", {}))
                 for out in outputs.values():
                     if isinstance(out, str):
-                        out = {"identifier": type_mapping["default"], "name": out}
+                        out = {"identifier": BaseClass.SocketPool.any, "name": out}
                     self.add_output(
-                        out.get("identifier", type_mapping["default"]),
+                        out.get("identifier", BaseClass.SocketPool.any),
                         name=out["name"],
                         metadata=out.get("metadata", {}),
                     )
@@ -87,4 +91,11 @@ class BaseNodeFactory:
                 }
                 return metadata
 
-        return _NodeFactory
+            def __repr__(self) -> str:
+                return (
+                    f"{class_name}(name='{self.name}', properties=[{', '.join(repr(k) for k in self.get_property_names())}], "
+                    f"inputs=[{', '.join(repr(k) for k in self.get_input_names())}], "
+                    f"outputs=[{', '.join(repr(k) for k in self.get_output_names())}])"
+                )
+
+        return DynamicNode

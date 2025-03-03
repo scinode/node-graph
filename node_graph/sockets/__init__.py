@@ -1,3 +1,6 @@
-from node_graph.utils import get_entries
+from node_graph.collection import EntryPointPool
 
-socket_pool = get_entries("node_graph.socket")
+# global instance
+SocketPool = EntryPointPool(entry_point_group="node_graph.socket")
+SocketPool["any"] = SocketPool.node_graph.any
+SocketPool["namespace"] = SocketPool.node_graph.namespace

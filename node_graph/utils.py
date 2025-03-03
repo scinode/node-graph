@@ -1,8 +1,5 @@
 from __future__ import annotations
 from typing import Dict, Any, Union, List
-from importlib.metadata import entry_points
-import sys
-import difflib
 
 
 def get_executor_from_path(path: dict | str) -> Any:
@@ -80,37 +77,6 @@ def nodegaph_to_short_json(
     return ngdata_short
 
 
-def get_entries(entry_point_name: str) -> Dict[str, Any]:
-    """Get entries from the entry point."""
-    pool: Dict[str, Any] = {}
-    eps = entry_points()
-    if sys.version_info >= (3, 10):
-        group = eps.select(group=entry_point_name)
-    else:
-        group = eps.get(entry_point_name, [])
-    for entry_point in group:
-        if entry_point.name.upper() not in pool:
-            pool[entry_point.name.upper()] = entry_point
-        else:
-            raise Exception("Entry: {} is already registered.".format(entry_point.name))
-    return pool
-
-
-def get_entry_by_identifier(identifier: str, entry_point: str) -> Any:
-    node_pool = get_entries(entry_point)
-    if identifier not in node_pool:
-        items = difflib.get_close_matches(identifier, node_pool)
-        if len(items) == 0:
-            msg = "Identifier: {} is not defined.".format(identifier)
-        else:
-            msg = "Identifier: {} is not defined. Do you mean {}".format(
-                identifier, ", ".join(items)
-            )
-        raise Exception(msg)
-    NodeClass = node_pool[identifier]
-    return NodeClass
-
-
 def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     """Convert yaml data into dict."""
     ntdata = data
@@ -137,23 +103,6 @@ def deep_copy_only_dicts(
     else:
         # Return the original value if it's not a dictionary
         return original
-
-
-def get_item_class(identifier: str, pool: Dict[str, Any], base_class) -> Any:
-    """Get the item class from the identifier."""
-    if isinstance(identifier, str):
-        identifier = pool[identifier.upper()].load()
-    if isinstance(identifier, type) and issubclass(identifier, base_class):
-        ItemClass = identifier
-    elif isinstance(getattr(identifier, "NodeCls", None), type) and issubclass(
-        identifier.NodeCls, base_class
-    ):
-        ItemClass = identifier.NodeCls
-    else:
-        raise Exception(
-            f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
-        )
-    return ItemClass
 
 
 def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
