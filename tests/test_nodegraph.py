@@ -1,4 +1,4 @@
-from node_graph import NodeGraph, node
+from node_graph import NodeGraph, node, NodePool
 
 
 def test_from_dict(ng_decorator):
@@ -14,7 +14,7 @@ def test_from_dict(ng_decorator):
 def test_new_node(ng):
     """Test new node."""
     n = len(ng.nodes)
-    ng.add_node("node_graph.test_add")
+    ng.add_node(NodePool.node_graph.test_add)
     assert len(ng.nodes) == n + 1
 
 
@@ -22,7 +22,7 @@ def test_delete_node(ng):
     """Test delete node."""
     n = len(ng.nodes)
     nlink = len(ng.links)
-    ng.add_node("node_graph.test_add", name="add3")
+    ng.add_node(NodePool.node_graph.test_add, name="add3")
     ng.add_link(ng.nodes["add1"].outputs[0], ng.nodes["add3"].inputs["y"])
     assert len(ng.nodes) == n + 1
     assert len(ng.links) == nlink + 1
@@ -45,8 +45,8 @@ def test_add(ng):
     n = len(ng.nodes)
     nlink = len(ng.links)
     ng1 = NodeGraph(name="test_node_group")
-    ng1.add_node("node_graph.test_float", "float3", value=4.0, t=3)
-    ng1.add_node("node_graph.test_float", "float4", value=3.0)
+    ng1.add_node(NodePool.node_graph.test_float, "float3", value=4.0, t=3)
+    ng1.add_node(NodePool.node_graph.test_float, "float4", value=3.0)
     ng = ng + ng1
     assert len(ng.nodes) == n + 2
     assert len(ng.links) == nlink

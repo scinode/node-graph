@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Union, Optional, Callable, Dict, Type
 import difflib
-from importlib.metadata import entry_points, EntryPoint
+from importlib_metadata import entry_points, EntryPoint
 import sys
 
 

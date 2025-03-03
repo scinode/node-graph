@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
-from node_graph.nodes import node_pool
+from node_graph.nodes import NodePool
 from typing import Dict, Any, List, Optional, Union, Callable
 from node_graph.version import __version__
 import yaml
@@ -44,7 +44,7 @@ class NodeGraph:
         >>> ng.to_dict()
     """
 
-    node_pool: Dict[str, Any] = node_pool
+    NodePool: Dict[str, Any] = NodePool
     platform: str = "node_graph"
 
     def __init__(
@@ -63,7 +63,7 @@ class NodeGraph:
         self.name: str = name
         self.uuid: str = uuid or str(uuid1())
         self.type: str = type
-        self.nodes: NodeCollection = NodeCollection(self, pool=self.node_pool)
+        self.nodes: NodeCollection = NodeCollection(self, pool=self.NodePool)
         self.links: LinkCollection = LinkCollection(self)
         self.ctrl_links: LinkCollection = LinkCollection(self)
         self.state: str = "CREATED"

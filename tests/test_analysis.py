@@ -1,4 +1,5 @@
 from node_graph.analysis import ConnectivityAnalysis, DifferenceAnalysis
+from node_graph import NodePool
 
 
 def test_connectivity(ng):
@@ -13,7 +14,7 @@ def test_connectivity(ng):
 def test_difference(ng):
     # Test that the graph is connected
     ngdata1 = ng.to_dict()
-    ng.add_node("node_graph.test_add", "add3")
+    ng.add_node(NodePool.node_graph.test_add, "add3")
     ng.nodes.add1.set({"x": 5})
     ngdata2 = ng.to_dict()
     da = DifferenceAnalysis(ng1=ngdata1, ng2=ngdata2)

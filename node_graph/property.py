@@ -115,15 +115,15 @@ class NodeProperty:
         identifier: Union[str, type],
         name: str = None,
         data: Dict[str, Any] = {},
-        property_pool: Dict[str, "NodeProperty"] = None,
+        PropertyPool: Dict[str, "NodeProperty"] = None,
     ) -> "NodeProperty":
         """Create a new property from an identifier."""
         from node_graph.collection import get_item_class
 
-        if property_pool is None:
-            from node_graph.properties import property_pool
+        if PropertyPool is None:
+            from node_graph.properties import PropertyPool
 
-        ItemClass = get_item_class(identifier, property_pool, NodeProperty)
+        ItemClass = get_item_class(identifier, PropertyPool, NodeProperty)
         return ItemClass(name=name, **data)
 
     def __str__(self) -> str:

@@ -1,6 +1,6 @@
 import pytest
 from node_graph.decorator import node
-from node_graph import NodeGraph, Node
+from node_graph import NodeGraph, Node, NodePool
 
 
 @pytest.fixture
@@ -24,8 +24,8 @@ def ng():
     """A test node_graph."""
     ng = NodeGraph(name="test_nodetree")
     float1 = ng.add_node("node_graph.test_float", "float1", value=3.0)
-    add1 = ng.add_node("node_graph.test_add", "add1", x=2)
-    add2 = ng.add_node("node_graph.test_add", "add2", x=2)
+    add1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=2)
+    add2 = ng.add_node(NodePool.node_graph.test_add, "add2", x=2)
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
     return ng
@@ -40,7 +40,7 @@ def ng_group():
     sqrt_power_add1 = ng.add_node(
         "TestSqrtPowerAdd", "sqrt_power_add1", t1=3, t2=2, y=3
     )
-    add1 = ng.add_node("node_graph.test_add", "add1")
+    add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
     ng.add_link(float1.outputs[0], sqrt_power_add1.inputs[0])
     ng.add_link(float2.outputs[0], sqrt_power_add1.inputs[1])
     ng.add_link(sqrt_power_add1.outputs[0], add1.inputs[1])
@@ -114,7 +114,7 @@ def ng_decorator(decorated_myadd):
     float1 = ng.add_node("node_graph.test_float", "float1", value=3.0)
     add1 = ng.add_node(decorated_myadd, "add1", x=2)
     add2 = ng.add_node(decorated_myadd, "add2", x=2)
-    add3 = ng.add_node("node_graph.test_add", "add3")
+    add3 = ng.add_node(NodePool.node_graph.test_add, "add3")
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
     ng.add_link(add2.outputs[0], add3.inputs[0])

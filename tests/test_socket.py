@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from node_graph import NodeGraph
 from node_graph.node import Node
+from node_graph.nodes import NodePool
 
 
 def test_check_identifier():
@@ -47,7 +48,7 @@ def test_base_socket_type(id, data):
     Should be able to set the correct value to socket's property."""
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node("node_graph.test_add", "test")
+    n = ng.add_node(NodePool.node_graph.test_add, "test")
     socket = n.add_input(id, "test")
     socket.property.value = data
     assert socket.property.value == data
@@ -75,7 +76,7 @@ def test_base_socket_type_validation(id, data):
     the same type as the socket."""
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node("node_graph.test_add", "test")
+    n = ng.add_node(NodePool.node_graph.test_add, "test")
     socket = n.add_input(id, "test")
     try:
         socket.property.value = data
@@ -102,7 +103,7 @@ def test_socket_match(ng):
 
     ng = NodeGraph(name="test_socket_match")
     str1 = ng.add_node("node_graph.test_string", "str1", value="abc")
-    math1 = ng.add_node("node_graph.test_add", "math")
+    math1 = ng.add_node(NodePool.node_graph.test_add, "math")
     try:
         ng.add_link(str1.outputs[0], math1.inputs[1])
     except Exception as e:

@@ -252,9 +252,9 @@ class NodeSocketNamespace(BaseSocket):
         self._parent = parent
         # one can specify the pool or entry_point to get the pool
         if pool is not None:
-            self._socket_pool = pool
+            self._SocketPool = pool
         elif entry_point is not None:
-            self._socket_pool = EntryPointPool(entry_point_group=entry_point)
+            self._SocketPool = EntryPointPool(entry_point_group=entry_point)
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
         if sockets is not None:
             for key, socket in sockets.items():
@@ -280,7 +280,7 @@ class NodeSocketNamespace(BaseSocket):
     ) -> object:
 
         identifier = identifier or self._type_mapping["default"]
-        check_identifier_name(identifier, self._socket_pool)
+        check_identifier_name(identifier, self._SocketPool)
 
         _names = name.split(".", 1)
         if len(_names) > 1:
@@ -304,7 +304,7 @@ class NodeSocketNamespace(BaseSocket):
                 metadata=metadata,
             )
         else:
-            ItemClass = get_item_class(identifier, self._socket_pool, BaseSocket)
+            ItemClass = get_item_class(identifier, self._SocketPool, BaseSocket)
             item = ItemClass(
                 name,
                 node=self._node,

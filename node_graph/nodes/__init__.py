@@ -1,4 +1,4 @@
-from .node_pool import node_pool
+from .node_pool import NodePool
 
 
-__all__ = ["node_pool"]
+__all__ = ["NodePool"]

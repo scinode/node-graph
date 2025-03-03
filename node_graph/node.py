@@ -1,6 +1,6 @@
 from uuid import uuid1
-from node_graph.sockets import socket_pool
-from node_graph.properties import property_pool
+from node_graph.sockets import SocketPool
+from node_graph.properties import PropertyPool
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
 from node_graph.socket import NodeSocket, NodeSocketNamespace
@@ -35,8 +35,8 @@ class Node:
     """
 
     # This is the entry point for the socket and property pool
-    socket_pool = socket_pool
-    property_pool = property_pool
+    SocketPool = SocketPool
+    PropertyPool = PropertyPool
 
     identifier: str = "Node"
     node_type: str = "Normal"
@@ -80,16 +80,16 @@ class Node:
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.properties = property_collection_class(self, pool=self.property_pool)
-        self.inputs = input_collection_class("inputs", node=self, pool=self.socket_pool)
+        self.properties = property_collection_class(self, pool=self.PropertyPool)
+        self.inputs = input_collection_class("inputs", node=self, pool=self.SocketPool)
         self.outputs = output_collection_class(
-            "outputs", node=self, pool=self.socket_pool
+            "outputs", node=self, pool=self.SocketPool
         )
         self.ctrl_inputs = ctrl_input_collection_class(
-            "ctrl_Inputs", node=self, pool=self.socket_pool
+            "ctrl_Inputs", node=self, pool=self.SocketPool
         )
         self.ctrl_outputs = ctrl_output_collection_class(
-            "ctrl_outputs", node=self, pool=self.socket_pool
+            "ctrl_outputs", node=self, pool=self.SocketPool
         )
         self.state = "CREATED"
         self.action = "NONE"
@@ -402,20 +402,20 @@ class Node:
 
     @classmethod
     def from_dict(
-        cls, data: Dict[str, Any], node_pool: Optional[Dict[str, Any]] = None
+        cls, data: Dict[str, Any], NodePool: Optional[Dict[str, Any]] = None
     ) -> Any:
         """Rebuild Node from dict data."""
         from node_graph.utils import get_executor_from_path
 
-        if node_pool is None:
-            from node_graph.nodes import node_pool
+        if NodePool is None:
+            from node_graph.nodes import NodePool
 
         # first create the node instance
         if data.get("metadata", {}).get("is_dynamic", False):
             FactoryClass = get_executor_from_path(data["metadata"]["factory_class"])
             node_class = FactoryClass(data)
         else:
-            node_class = node_pool[data["identifier"].upper()].load()
+            node_class = NodePool[data["identifier"].upper()].load()
 
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
@@ -469,20 +469,20 @@ class Node:
         cls,
         identifier: str,
         name: Optional[str] = None,
-        node_pool: Optional[Dict[str, Any]] = None,
+        NodePool: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         executor: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Create a node from a identifier.
         When a plugin create a node, it should provide its own node pool.
-        Then call super().new(identifier, name, node_pool) to create a node.
+        Then call super().new(identifier, name, NodePool) to create a node.
         """
         from node_graph.collection import get_item_class
 
-        if node_pool is None:
-            from node_graph.nodes import node_pool
+        if NodePool is None:
+            from node_graph.nodes import NodePool
 
-        ItemClass = get_item_class(identifier, node_pool, Node)
+        ItemClass = get_item_class(identifier, NodePool, Node)
         node = ItemClass(name=name, metadata=metadata, executor=executor)
         return node
 
