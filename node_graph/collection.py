@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Union, Optional, Callable, Dict, Type
 import difflib
-from importlib_metadata import entry_points, EntryPoint
+from importlib.metadata import entry_points, EntryPoint
 import sys
 
 
@@ -38,7 +38,8 @@ def get_item_class(
 
     if isinstance(identifier, str):
         identifier = pool[identifier.lower()].load()
-    if isinstance(identifier, EntryPoint):
+    # to support different versions of entry points
+    elif identifier.__class__.__name__ == "EntryPoint":
         identifier = identifier.load()
     if isinstance(identifier, type):
         if issubclass(identifier, base_class):
