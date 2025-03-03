@@ -1,3 +1,3 @@
-from node_graph.utils import get_entries
+from node_graph.collection import EntryPointPool
 
-property_pool = get_entries("node_graph.property")
+property_pool = EntryPointPool(entry_point_group="node_graph.property")

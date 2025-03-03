@@ -11,6 +11,8 @@ class BaseNodeFactory:
     embedding the 'ndata' (i.e., all relevant data).
     """
 
+    is_node_factory: bool = True
+
     def __new__(cls, ndata: Dict):
 
         ndata.setdefault("metadata", {})

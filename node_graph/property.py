@@ -118,7 +118,7 @@ class NodeProperty:
         property_pool: Dict[str, "NodeProperty"] = None,
     ) -> "NodeProperty":
         """Create a new property from an identifier."""
-        from node_graph.utils import get_item_class
+        from node_graph.collection import get_item_class
 
         if property_pool is None:
             from node_graph.properties import property_pool

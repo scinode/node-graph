@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from node_graph.property import NodeProperty
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
-from node_graph.utils import get_item_class
-from node_graph.utils import get_entries
+from node_graph.collection import get_item_class, EntryPointPool
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 
 
@@ -201,8 +200,8 @@ class NodeSocket(BaseSocket):
 def check_identifier_name(identifier: str, pool: dict) -> None:
     import difflib
 
-    if isinstance(identifier, str) and identifier.upper() not in pool:
-        items = difflib.get_close_matches(identifier.upper(), pool)
+    if isinstance(identifier, str) and identifier.lower() not in pool:
+        items = difflib.get_close_matches(identifier.lower(), pool._keys())
         if len(items) == 0:
             msg = f"Identifier: {identifier} is not defined."
         else:
@@ -255,7 +254,7 @@ class NodeSocketNamespace(BaseSocket):
         if pool is not None:
             self._socket_pool = pool
         elif entry_point is not None:
-            self._socket_pool = get_entries(entry_point_name=entry_point)
+            self._socket_pool = EntryPointPool(entry_point_group=entry_point)
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
         if sockets is not None:
             for key, socket in sockets.items():

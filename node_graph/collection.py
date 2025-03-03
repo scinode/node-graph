@@ -1,7 +1,185 @@
-from node_graph.utils import get_entries
-from typing import List, Union, Optional, Callable
+from __future__ import annotations
+from typing import List, Union, Optional, Callable, Dict, Type
 import difflib
-from node_graph.utils import get_item_class
+from importlib.metadata import entry_points, EntryPoint
+import sys
+
+
+def get_entries(entry_point_name: str) -> Dict[str, EntryPoint]:
+    """Get entries from the entry point."""
+    pool: Dict[str, EntryPoint] = {}
+    eps = entry_points()
+    if sys.version_info >= (3, 10):
+        group = eps.select(group=entry_point_name)
+    else:
+        group = eps.get(entry_point_name, [])
+    for entry_point in group:
+        if entry_point.name.upper() not in pool:
+            pool[entry_point.name.upper()] = entry_point
+        else:
+            raise Exception("Entry: {} is already registered.".format(entry_point.name))
+    return pool
+
+
+def get_item_class(
+    identifier: EntryPoint | "Node" | "BaseNodeFactory",
+    pool: Dict[str, EntryPoint],
+    base_class: Type["Node"] = None,
+    factory_class: Type["BaseNodeFactory"] = None,
+    **kwargs,
+) -> "Node":
+    """Get the item class from the identifier."""
+
+    from node_graph.node import Node
+    from node_graph.nodes.factory.base import BaseNodeFactory
+
+    base_class = base_class or Node
+    factory_class = factory_class or BaseNodeFactory
+
+    if isinstance(identifier, str):
+        identifier = pool[identifier.lower()].load()
+    if isinstance(identifier, EntryPoint):
+        identifier = identifier.load()
+    if isinstance(identifier, type):
+        if issubclass(identifier, base_class):
+            ItemClass = identifier
+        elif issubclass(identifier, factory_class):
+            ItemClass = identifier.create_class(**kwargs)
+    elif isinstance(getattr(identifier, "NodeCls", None), type) and issubclass(
+        identifier.NodeCls, base_class
+    ):
+        ItemClass = identifier.NodeCls
+    else:
+        raise Exception(
+            f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
+        )
+    return ItemClass
+
+
+class Namespace:
+    """A simple recursive namespace that allows attribute-based access to nested dictionaries, with tab completion."""
+
+    def __init__(self):
+        self._data = {}
+
+    def __getattr__(self, name: str) -> EntryPoint:
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"Namespace has no attribute {name!r}")
+
+    def __setattr__(self, name: str, value: Namespace | EntryPoint) -> None:
+        if name == "_data":
+            super().__setattr__(name, value)
+        else:
+            self._data[name] = value
+
+    def __dir__(self):
+        """Enable tab completion by returning all available attributes."""
+        return list(self._data.keys())
+
+    def __repr__(self):
+        return f"Namespace({self._data})"
+
+    def __contains__(self, key: str) -> bool:
+        """Allow checking if a key exists, including nested keys."""
+        parts = key.split(".")  # Handle nested keys
+        current = self
+        for part in parts:
+            if part in current._data:
+                current = current._data[part]
+            else:
+                return False
+        return True  # If all parts exist, return True
+
+    def __iter__(self):
+        """Allow iteration over stored items."""
+        return iter(self._data.items())
+
+    def __getitem__(self, key: str) -> EntryPoint | Namespace:
+        """Allow dictionary-like access and support nested keys."""
+        parts = key.split(".")  # Handle nested keys
+        current = self
+        for part in parts:
+            if part in current._data:
+                current = current._data[part]
+            else:
+                raise KeyError(f"Key {key!r} not found in Namespace")
+        return current
+
+    def _keys(self, prefix="") -> list[str]:
+        """Return all keys, including nested keys, using dot notation."""
+        all_keys = []
+        for key, value in self._data.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            all_keys.append(full_key)
+            if isinstance(value, Namespace):  # Recursively collect nested keys
+                all_keys.extend(value._keys(prefix=full_key))
+        return all_keys
+
+
+class EntryPointPool:
+    """
+    NodePool is a hierarchical namespace that loads nodes from entry points.
+    This version is designed to be used as an instance and supports tab completion.
+    """
+
+    def __init__(self, entry_point_group: str):
+        self._nodes = Namespace()
+        self._is_loaded = False
+        self._load_nodes(entry_point_group)
+
+    def _load_nodes(self, entry_point_group: str) -> None:
+        """Loads nodes into the internal hierarchical dictionary, if not already loaded."""
+        if self._is_loaded:
+            return
+
+        eps = entry_points()
+
+        if sys.version_info >= (3, 10):
+            group = eps.select(group=entry_point_group)
+        else:
+            group = eps.get(entry_point_group, [])
+
+        for ep in group:
+            key_parts = ep.name.lower().split(".")  # Use '.' to define nested levels
+            current_level = self._nodes
+
+            # Create the nested namespace structure
+            for part in key_parts[:-1]:
+                if not hasattr(current_level, part):
+                    setattr(current_level, part, Namespace())
+                current_level = getattr(current_level, part)
+
+            final_key = key_parts[-1]
+            if hasattr(current_level, final_key):
+                raise Exception(f"Duplicate entry point name detected: {ep.name!r}")
+
+            setattr(current_level, final_key, ep)
+
+        self._is_loaded = True
+
+    def __getattr__(self, name: str) -> EntryPoint:
+        """Allow direct access to nodes via instance attributes."""
+        return getattr(self._nodes, name)
+
+    def __dir__(self):
+        """Enable tab completion for the node pool instance."""
+        return dir(self._nodes)
+
+    def __repr__(self):
+        return f"NodePool({self._nodes})"
+
+    def __contains__(self, key: str) -> bool:
+        """Allow checking if a key exists in the node pool."""
+        return key in self._nodes
+
+    def __iter__(self):
+        """Allow iteration over stored items."""
+        return iter(self._nodes)
+
+    def __getitem__(self, key: str) -> EntryPoint:
+        """Allow dictionary-like access to the nodes."""
+        return self._nodes[key]
 
 
 class Collection:
@@ -183,9 +361,11 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
 
     def wrapper_func(*args, **kwargs):
 
+        print("args", args)
+
         identifier = args[1]
-        if isinstance(identifier, str) and identifier.upper() not in args[0].pool:
-            items = difflib.get_close_matches(identifier.upper(), args[0].pool)
+        if isinstance(identifier, str) and identifier.lower() not in args[0].pool:
+            items = difflib.get_close_matches(identifier.lower(), args[0].pool._keys())
             if len(items) == 0:
                 msg = f"Identifier: {identifier} is not defined."
             else:
@@ -231,9 +411,12 @@ class NodeCollection(Collection):
         **kwargs,
     ) -> object:
         from node_graph.node import Node
+        from node_graph.nodes.factory.base import BaseNodeFactory
 
         list_index = self._get_list_index()
-        ItemClass = get_item_class(identifier, self.pool, Node)
+        ItemClass = get_item_class(
+            identifier, self.pool, Node, BaseNodeFactory, **kwargs
+        )
         item = ItemClass(
             list_index=list_index,
             name=name,

@@ -40,11 +40,11 @@ class NodeLink:
             )
 
         if (
-            self.from_socket._identifier.upper().split(".")[-1] == "ANY"
-            or self.to_socket._identifier.upper().split(".")[-1] == "ANY"
+            self.from_socket._identifier.lower().split(".")[-1] == "any"
+            or self.to_socket._identifier.lower().split(".")[-1] == "any"
         ):
             return
-        if self.from_socket._identifier.upper() != self.to_socket._identifier.upper():
+        if self.from_socket._identifier.lower() != self.to_socket._identifier.lower():
             raise Exception(
                 "Socket type do not match. Socket {} can not connect to socket {}".format(
                     self.from_socket._identifier,

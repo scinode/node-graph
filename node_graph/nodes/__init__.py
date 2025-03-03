@@ -1,3 +1,4 @@
-from node_graph.utils import get_entries
+from .node_pool import node_pool
 
-node_pool = get_entries("node_graph.node")
+
+__all__ = ["node_pool"]

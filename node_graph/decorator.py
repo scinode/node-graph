@@ -203,7 +203,7 @@ def decorator_node(
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         node_outputs = outputs or [{"identifier": "node_graph.any", "name": "result"}]
-        NodeCls = DecoratedFunctionNodeFactory.from_function(
+        NodeCls = DecoratedFunctionNodeFactory.create_class(
             func=func,
             identifier=identifier,
             node_type=node_type,
@@ -240,7 +240,7 @@ def decorator_node_group(
             {"identifier": "node_graph.any", "name": output["name"]}
             for output in outputs or []
         ]
-        NodeCls = DecoratedFunctionNodeFactory.from_function(
+        NodeCls = DecoratedFunctionNodeFactory.create_class(
             func=func,
             identifier=identifier,
             node_type="node_group",
@@ -266,7 +266,7 @@ def build_node(
     if isinstance(executor, str):
         executor = NodeExecutor(module_path=executor).executor
     if callable(executor):
-        return DecoratedFunctionNodeFactory.from_function(
+        return DecoratedFunctionNodeFactory.create_class(
             func=executor, inputs=inputs, outputs=outputs
         )
     raise ValueError("executor must be a callable or a valiate module path.")
