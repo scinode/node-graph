@@ -107,6 +107,16 @@ class Namespace:
                 raise KeyError(f"Key {key!r} not found in Namespace")
         return current
 
+    def __setitem__(self, key: str, value: EntryPoint | Namespace) -> None:
+        """Allow dictionary-like setting and support nested keys."""
+        parts = key.split(".")  # Handle nested keys
+        current = self
+        for part in parts[:-1]:  # Traverse or create nested structures
+            if part not in current._data:
+                current._data[part] = Namespace()
+            current = current._data[part]
+        current._data[parts[-1]] = value  # Set the final value
+
     def _keys(self, prefix="") -> list[str]:
         """Return all keys, including nested keys, using dot notation."""
         all_keys = []
@@ -181,6 +191,14 @@ class EntryPointPool:
     def __getitem__(self, key: str) -> EntryPoint:
         """Allow dictionary-like access to the nodes."""
         return self._nodes[key]
+
+    def __setitem__(self, key: str, value: EntryPoint | Namespace) -> None:
+        """Allow dictionary-like setting and support nested keys."""
+        self._nodes[key] = value
+
+    def _keys(self) -> list[str]:
+        """Return all keys, including nested keys."""
+        return self._nodes._keys()
 
 
 class Collection:
@@ -361,8 +379,6 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
     """
 
     def wrapper_func(*args, **kwargs):
-
-        print("args", args)
 
         identifier = args[1]
         if isinstance(identifier, str) and identifier.lower() not in args[0].pool:

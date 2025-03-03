@@ -1,7 +1,6 @@
 from typing import Dict
 from node_graph.utils import list_to_dict
 from node_graph.node import Node
-from node_graph.orm.mapping import type_mapping
 import importlib
 
 
@@ -43,21 +42,21 @@ class BaseNodeFactory:
             def create_properties(self):
                 properties = list_to_dict(self._ndata.get("properties", {}))
                 for prop in properties.values():
-                    prop.setdefault("identifier", type_mapping["default"])
+                    prop.setdefault("identifier", BaseClass.PropertyPool.any)
                     self.add_property(**prop)
 
             def create_sockets(self):
                 inputs = list_to_dict(self._ndata.get("inputs", {}))
                 for inp in inputs.values():
                     if isinstance(inp, str):
-                        inp = {"identifier": type_mapping["default"], "name": inp}
+                        inp = {"identifier": BaseClass.SocketPool.any, "name": inp}
                     kwargs = {}
                     if "property_data" in inp:
                         kwargs["property_data"] = inp.get("property_data", {})
                     if "sockets" in inp:
                         kwargs["sockets"] = inp.get("sockets", None)
                     self.add_input(
-                        inp.get("identifier", type_mapping["default"]),
+                        inp.get("identifier", BaseClass.SocketPool.any),
                         name=inp["name"],
                         metadata=inp.get("metadata", {}),
                         link_limit=inp.get("link_limit", 1),
@@ -67,9 +66,9 @@ class BaseNodeFactory:
                 outputs = list_to_dict(self._ndata.get("outputs", {}))
                 for out in outputs.values():
                     if isinstance(out, str):
-                        out = {"identifier": type_mapping["default"], "name": out}
+                        out = {"identifier": BaseClass.SocketPool.any, "name": out}
                     self.add_output(
-                        out.get("identifier", type_mapping["default"]),
+                        out.get("identifier", BaseClass.SocketPool.any),
                         name=out["name"],
                         metadata=out.get("metadata", {}),
                     )

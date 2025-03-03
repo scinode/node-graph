@@ -174,12 +174,12 @@ class Node:
         """Create control input and output sockets for this node."""
         self.ctrl_inputs._clear()
         self.ctrl_outputs._clear()
-        socket = self.add_ctrl_input("node_graph.any", "entry")
+        socket = self.add_ctrl_input(SocketPool.any, "entry")
         socket._link_limit = 1000
-        socket = self.add_ctrl_input("node_graph.any", "ctrl")
+        socket = self.add_ctrl_input(SocketPool.any, "ctrl")
         socket._link_limit = 1000
-        socket = self.add_ctrl_output("node_graph.any", "exit")
-        socket = self.add_ctrl_output("node_graph.any", "ctrl")
+        socket = self.add_ctrl_output(SocketPool.any, "exit")
+        socket = self.add_ctrl_output(SocketPool.any, "ctrl")
         socket._link_limit = 1000
 
     def create_group_sockets(self) -> None:
@@ -415,7 +415,7 @@ class Node:
             FactoryClass = get_executor_from_path(data["metadata"]["factory_class"])
             node_class = FactoryClass(data)
         else:
-            node_class = NodePool[data["identifier"].upper()].load()
+            node_class = NodePool[data["identifier"].lower()].load()
 
         node = node_class(name=data["name"], uuid=data["uuid"])
         # then load the properties
