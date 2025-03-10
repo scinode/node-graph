@@ -45,7 +45,6 @@ class NodeGraphAnalysis:
         """
         if ngdata is not None:
             self.links: List[Dict[str, str]] = ngdata["links"]
-            self.ctrl_links: List[Dict[str, str]] = ngdata["ctrl_links"]
             self.nodes: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = ngdata[
                 "nodes"
             ]
@@ -65,24 +64,6 @@ class NodeGraphAnalysis:
             else:
                 inputs[link["to_node"]][link["to_socket"]].append(link["from_node"])
         self.inputs = inputs
-        # ctrl_inputs
-        ctrl_inputs: Dict[str, Dict[str, List[str]]] = {
-            name: {} for name in self.nodes.keys()
-        }
-        ctrl_input_links: Dict[str, Dict[str, List[int]]] = {
-            name: {} for name in self.nodes.keys()
-        }
-        for i, link in enumerate(self.ctrl_links):
-            if link["to_socket"] not in ctrl_inputs[link["to_node"]]:
-                ctrl_inputs[link["to_node"]][link["to_socket"]] = [link["from_node"]]
-                ctrl_input_links[link["to_node"]][link["to_socket"]] = [i]
-            else:
-                ctrl_inputs[link["to_node"]][link["to_socket"]].append(
-                    link["from_node"]
-                )
-                ctrl_input_links[link["to_node"]][link["to_socket"]].append(i)
-        self.ctrl_inputs = ctrl_inputs
-        self.ctrl_input_links = ctrl_input_links
         # outputs
         outputs: Dict[str, Dict[str, List[str]]] = {
             name: {} for name in self.nodes.keys()
@@ -93,24 +74,6 @@ class NodeGraphAnalysis:
             else:
                 outputs[link["from_node"]][link["from_socket"]].append(link["to_node"])
         self.outputs = outputs
-        # ctrl_outputs
-        ctrl_outputs: Dict[str, Dict[str, List[str]]] = {
-            name: {} for name in self.nodes.keys()
-        }
-        ctrl_output_links: Dict[str, Dict[str, List[int]]] = {
-            name: {} for name in self.nodes.keys()
-        }
-        for i, link in enumerate(self.ctrl_links):
-            if link["from_socket"] not in ctrl_outputs[link["from_node"]]:
-                ctrl_outputs[link["from_node"]][link["from_socket"]] = [link["to_node"]]
-                ctrl_output_links[link["from_node"]][link["from_socket"]] = [i]
-            else:
-                ctrl_outputs[link["from_node"]][link["from_socket"]].append(
-                    link["to_node"]
-                )
-                ctrl_output_links[link["from_node"]][link["from_socket"]].append(i)
-        self.ctrl_outputs = ctrl_outputs
-        self.ctrl_output_links = ctrl_output_links
 
     def set_node_index(self) -> None:
         """Set index for all nodes"""
@@ -156,7 +119,6 @@ class ConnectivityAnalysis(NodeGraphAnalysis):
         self,
         non_to_nodes: List[str] = [],
         non_from_nodes: List[str] = [],
-        ctrl_link: List[int] = [],
     ) -> csr_matrix:
         """Build Compressed Sparse Row matrix
 
@@ -179,16 +141,7 @@ class ConnectivityAnalysis(NodeGraphAnalysis):
             row.append(self.nodes[link["from_node"]]["index"])
             col.append(self.nodes[link["to_node"]]["index"])
             data.append(1)
-        # control links
-        for i in ctrl_link:
-            link = self.ctrl_links[i]
-            if link["to_node"] in non_to_nodes:
-                continue
-            if link["from_node"] in non_from_nodes:
-                continue
-            row.append(self.nodes[link["from_node"]]["index"])
-            col.append(self.nodes[link["to_node"]]["index"])
-            data.append(1)
+
         graph = csr_matrix((data, (row, col)), shape=(self.nnode, self.nnode))
         self.graph = graph
         return graph
@@ -198,12 +151,10 @@ class ConnectivityAnalysis(NodeGraphAnalysis):
     ) -> Tuple[Dict[str, List[str]], Dict[str, Dict[str, List[str]]]]:
         """Build lists of child nodes for all nodes."""
         child_node = {}
-        control_node = {}
         graph = self.build_graph()
         for name, node in self.nodes.items():
             child_node[name] = self.get_connected_nodes(graph=graph, start_node=name)
-            control_node[name] = self.build_children_control(name, node)
-        return child_node, control_node
+        return child_node
 
     def build_children_scatter(
         self, name: str, node: Dict[str, Union[str, Dict[str, str]]]
@@ -214,24 +165,6 @@ class ConnectivityAnalysis(NodeGraphAnalysis):
             non_from_nodes.extend(self.inputs[name]["Stop"])
         graph = self.build_graph(non_from_nodes=non_from_nodes)
         children = self.get_connected_nodes(graph=graph, start_node=name)
-        return children
-
-    def build_children_control(
-        self, name: str, node: Dict[str, Union[str, Dict[str, str]]]
-    ) -> Dict[str, List[str]]:
-        """Find child nodes for control node."""
-        non_from_nodes = []
-        for socket in self.ctrl_inputs[name]:
-            non_from_nodes.extend(self.ctrl_inputs[name][socket])
-        children = {}
-        for socket in self.ctrl_outputs[name].keys():
-            if socket == "exit":
-                continue
-            ctrl_output_links = self.ctrl_output_links[name].get(socket, [])
-            graph = self.build_graph(
-                non_from_nodes=non_from_nodes, ctrl_link=ctrl_output_links
-            )
-            children[socket] = self.get_connected_nodes(graph=graph, start_node=name)
         return children
 
     def get_connected_nodes(
@@ -268,16 +201,11 @@ class ConnectivityAnalysis(NodeGraphAnalysis):
         Returns:
             _type_: _description_
         """
-        child_node, control_node = self.build_children()
+        child_node = self.build_children()
         connectivity = {
             "child_node": child_node,
-            "control_node": control_node,
             "input_node": self.inputs,
             "output_node": self.outputs,
-            "ctrl_input_node": self.ctrl_inputs,
-            "ctrl_input_link": self.ctrl_input_links,
-            "ctrl_output_node": self.ctrl_outputs,
-            "ctrl_output_link": self.ctrl_output_links,
         }
         return connectivity
 

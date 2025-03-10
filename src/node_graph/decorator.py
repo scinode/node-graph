@@ -156,33 +156,6 @@ def generate_input_sockets(
     return inputs
 
 
-def create_node_group(ngdata: Dict[str, Any]) -> Callable[..., Any]:
-    """Create a node group class from node group data.
-
-    Args:
-        ngdata (Dict[str, Any]): node data
-
-    Returns:
-        Callable[..., Any]: _description_
-    """
-
-    NodeClass = ngdata.get("node_class", Node)
-
-    class MyNodeGroup(NodeClass):
-        identifier: str = ngdata["identifier"]
-        node_type: str = "GROUP"
-        catalog: str = ngdata.get("catalog", "Others")
-
-        def get_default_node_group(self):
-            ng = ngdata["ng"]
-            ng.name = self.name
-            ng.uuid = self.uuid
-            ng.parent_node = self.uuid
-            return ngdata["ng"]
-
-    return MyNodeGroup
-
-
 def decorator_node(
     identifier: Optional[str] = None,
     node_type: str = "Normal",
@@ -218,14 +191,14 @@ def decorator_node(
     return decorator
 
 
-def decorator_node_group(
+def decorator_graph_builder(
     identifier: Optional[str] = None,
     properties: Optional[List[Dict[str, Any]]] = None,
     inputs: Optional[List[Dict[str, Any]]] = None,
     outputs: Optional[List[Dict[str, Any]]] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Generate a decorator that register a node group as a node.
+    """Generate a decorator that register a function as a graph_builder node.
 
     Attributes:
         indentifier (str): node identifier
@@ -236,6 +209,8 @@ def decorator_node_group(
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        from node_graph.nodes.builtins import GraphBuilderNode
+
         node_outputs = [
             {"identifier": "node_graph.any", "name": output["name"]}
             for output in outputs or []
@@ -250,6 +225,7 @@ def decorator_node_group(
             catalog=catalog,
             group_inputs=inputs,
             group_outputs=outputs,
+            node_class=GraphBuilderNode,
         )
         func.NodeCls = NodeCls
         return func
@@ -276,7 +252,7 @@ class NodeDecoratorCollection:
     """Collection of node decorators."""
 
     node: Callable[..., Any] = staticmethod(decorator_node)
-    group: Callable[..., Any] = staticmethod(decorator_node_group)
+    group: Callable[..., Any] = staticmethod(decorator_graph_builder)
 
     # Alias '@node' to '@node.node'.
     def __call__(self, *args, **kwargs):
