@@ -158,6 +158,7 @@ def test_namespace(node_with_namespace_socket):
         "dynamic": {"x": 1.0},
     }
     assert n.inputs.non_dynamic.sub.y._full_name == "inputs.non_dynamic.sub.y"
+    assert n.inputs.non_dynamic.sub.y._scoped_name == "non_dynamic.sub.y"
     # nested keys
     assert set(n.inputs._get_all_keys()) == set(
         [
@@ -185,6 +186,18 @@ def test_add_namespace_with_socket():
     n.add_input("node_graph.namespace", "abc", sockets=sockets)
     n.inputs.abc.x.value = 1
     n.inputs.abc.y._identifier = "node_graph.namespace"
+
+
+def test_dynamic_namespace(node_with_namespace_socket):
+    """Test dynamic namespace socket."""
+    n = node_with_namespace_socket
+    with pytest.raises(
+        ValueError,
+        match="Namespace not_exit does not exist in the socket collection.",
+    ):
+        n.inputs.non_dynamic._new("node_graph.any", "not_exit.sub")
+    # this will create the not exist namespace automatically
+    n.inputs.dynamic._new("node_graph.any", "not_exit.sub")
 
 
 def test_set_namespace(node_with_namespace_socket):

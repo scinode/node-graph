@@ -165,9 +165,9 @@ class TestAddGroup(Node):
             worker_name=self.worker_name,
             type="NODE_GROUP",
         )
-        add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
-        add2 = ng.add_node(NodePool.node_graph.test_add, "add2")
-        add3 = ng.add_node(NodePool.node_graph.test_add, "add1")
+        add1 = ng.add_node("node_graph.test_add", "add1")
+        add2 = ng.add_node("node_graph.test_add", "add2")
+        add3 = ng.add_node("node_graph.test_add", "add1")
         ng.add_link(add1.outputs[0], add3.inputs[0])
         ng.add_link(add2.outputs[0], add3.inputs[1])
         ng.group_properties = [
