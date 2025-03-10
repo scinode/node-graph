@@ -44,7 +44,7 @@ def test_add(ng):
     """Test add another nodegraph."""
     n = len(ng.nodes)
     nlink = len(ng.links)
-    ng1 = NodeGraph(name="test_node_group")
+    ng1 = NodeGraph(name="test_add")
     ng1.add_node(NodePool.node_graph.test_float, "float3", value=4.0, t=3)
     ng1.add_node(NodePool.node_graph.test_float, "float4", value=3.0)
     ng = ng + ng1

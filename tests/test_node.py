@@ -115,3 +115,17 @@ def test_repr():
     ng = NodeGraph(name="test_repr")
     ng.add_node(NodePool.node_graph.test_add, "add1")
     assert repr(ng.nodes) == 'NodeCollection(parent = "test_repr", nodes = ["add1"])'
+
+
+def test_nodegraph_node():
+    ng = NodeGraph(name="test_nodegraph_node")
+    sub_ng = NodeGraph(name="sub_nodegraph")
+    sub_ng.add_node(NodePool.node_graph.test_add, "add1")
+    sub_ng.add_node(
+        NodePool.node_graph.test_add, "add2", x=sub_ng.nodes.add1.outputs.result
+    )
+    ng.add_node(sub_ng, "sub_ng")
+    assert len(ng.nodes) == 1
+    assert len(ng.nodes.sub_ng.nodes) == 2
+    assert len(ng.nodes.sub_ng.links) == 1
+    assert "add1" in ng.nodes.sub_ng.nodes

@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "node_graph"
-dynamic = ["version"]  # read from aiida_workgraph/__init__.py
+dynamic = ["version"]  # read from node_graph/__init__.py
 description = "Create node-based workflow"
 authors = [{ name = "Xing Wang", email = "xingwang1991@gmail.com" }]
 readme = "README.md"
@@ -63,7 +63,6 @@ tests = [
 "node_graph.test_add" = "node_graph.nodes.test_nodes:TestAdd"
 "node_graph.test_enum" = "node_graph.nodes.test_nodes:TestEnum"
 "node_graph.test_enum_update" = "node_graph.nodes.test_nodes:TestEnumUpdate"
-"node_graph.test_add_group" = "node_graph.nodes.test_nodes:TestAddGroup"
 
 [project.entry-points."node_graph.socket"]
 "node_graph.any" = "node_graph.sockets.builtins:SocketAny"
