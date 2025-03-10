@@ -68,12 +68,16 @@ class BaseNodeFactory:
 
                 outputs = list_to_dict(self._ndata.get("outputs", {}))
                 for out in outputs.values():
+                    kwargs = {}
+                    if "sockets" in out:
+                        kwargs["sockets"] = out.get("sockets", None)
                     if isinstance(out, str):
                         out = {"identifier": BaseClass.SocketPool.any, "name": out}
                     self.add_output(
                         out.get("identifier", BaseClass.SocketPool.any),
                         name=out["name"],
                         metadata=out.get("metadata", {}),
+                        **kwargs,
                     )
 
             def get_executor(self):

@@ -50,9 +50,15 @@ class BaseSocket:
 
     @property
     def _full_name(self) -> str:
+        """Full hierarchical name, including all parent namespaces."""
         if self._parent is not None:
             return f"{self._parent._full_name}.{self._name}"
         return self._name
+
+    @property
+    def _scoped_name(self) -> str:
+        """The name relative to its immediate parent, excluding the root namespace."""
+        return self._full_name.split(".", 1)[1]
 
     def _to_dict(self) -> Dict[str, Any]:
         """Export the socket to a dictionary for database storage."""
@@ -361,6 +367,15 @@ class NodeSocketNamespace(BaseSocket):
                 f"Invalid value type for socket {self._name}: {value}, expected dict or Socket."
             )
 
+    @property
+    def _all_links(self) -> List["NodeLink"]:
+        links = []
+        for item in self._sockets.values():
+            links.extend(item._links)
+            if isinstance(item, NodeSocketNamespace):
+                links.extend(item._all_links)
+        return links
+
     def _to_dict(self) -> Dict[str, Any]:
         data = super()._to_dict()
         data["sockets"] = {}
@@ -440,12 +455,12 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
 
     def _get_all_keys(self) -> List[str]:
         # keys in the collection, with the option to include nested keys
-        keys = [item._full_name.split(".", 1)[1] for item in self._sockets.values()]
+        keys = [item._scoped_name for item in self._sockets.values()]
         for item in self._sockets.values():
             if isinstance(item, NodeSocketNamespace):
                 keys.extend(item._get_all_keys())
             else:
-                keys.append(item._full_name.split(".", 1)[1])
+                keys.append(item._scoped_name)
         return keys
 
     def _get_keys(self) -> List[str]:

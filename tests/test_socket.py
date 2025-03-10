@@ -112,6 +112,10 @@ def test_socket_match(ng):
     assert len(ng.links) == 0
 
 
+def test_links(ng):
+    assert len(ng.nodes.add1.inputs._all_links) == 1
+
+
 def test_repr():
     """Test __repr__ method."""
     node = Node()

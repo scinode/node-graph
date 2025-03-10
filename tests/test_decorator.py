@@ -55,9 +55,9 @@ def test_decorator_args() -> None:
     assert task1.inputs["c"]._metadata["required"] is True
     assert task1.inputs["d"]._metadata["required"] is False
     assert task1.inputs["d"].property.default == 1
-    assert set(task1.get_args_data()["args"]) == set(["a"])
-    assert set(task1.get_args_data()["kwargs"]) == set(["b", "c", "d"])
-    assert task1.get_args_data()["var_kwargs"] == "e"
+    assert set(task1.args_data["args"]) == set(["a"])
+    assert set(task1.args_data["kwargs"]) == set(["b", "c", "d"])
+    assert task1.args_data["var_kwargs"] == "e"
     assert isinstance(task1.inputs.e, NodeSocketNamespace)
     assert task1.inputs.e._socket_is_dynamic is True
 
@@ -79,9 +79,9 @@ def test_decorator_parameters() -> None:
     # user defined the c input manually
     assert "c" in test1.get_input_names()
     assert "d" in test1.get_property_names()
-    assert set(test1.get_args_data()["args"]) == set([])
-    assert set(test1.get_args_data()["kwargs"]) == set(["a", "b", "c", "d"])
-    assert test1.get_args_data()["var_args"] == "x"
+    assert set(test1.args_data["args"]) == set([])
+    assert set(test1.args_data["kwargs"]) == set(["a", "b", "c", "d"])
+    assert test1.args_data["var_args"] == "x"
     assert "sum" in test1.get_output_names()
     assert "product" in test1.get_output_names()
     # create another node
