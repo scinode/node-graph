@@ -156,6 +156,35 @@ def generate_input_sockets(
     return inputs
 
 
+def build_node_from_callable(
+    executor: Callable,
+    inputs: Optional[List[str | dict]] = None,
+    outputs: Optional[List[str | dict]] = None,
+) -> Node:
+    """Build task from a callable object.
+    First, check if the executor is already a task.
+    If not, check if it is a function or a class.
+    If it is a function, build task from function.
+    """
+    from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
+
+    # if it already has Node class, return it
+    if (
+        hasattr(executor, "NodeCls")
+        and inspect.isclass(executor.NodeCls)
+        and issubclass(executor.NodeCls, Node)
+        or inspect.isclass(executor)
+        and issubclass(executor, Node)
+    ):
+        return executor
+    if inspect.isfunction(executor):
+        return DecoratedFunctionNodeFactory.from_function(
+            executor, inputs=inputs, outputs=outputs
+        )
+
+    raise ValueError(f"The executor {executor} is not supported.")
+
+
 def decorator_node(
     identifier: Optional[str] = None,
     node_type: str = "Normal",

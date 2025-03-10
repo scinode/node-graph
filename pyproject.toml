@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "node_graph"
-dynamic = ["version"]  # read from aiida_workgraph/__init__.py
+dynamic = ["version"]  # read from node_graph/__init__.py
 description = "Create node-based workflow"
 authors = [{ name = "Xing Wang", email = "xingwang1991@gmail.com" }]
 readme = "README.md"

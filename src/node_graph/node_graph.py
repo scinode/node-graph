@@ -78,6 +78,15 @@ class NodeGraph:
         self, identifier: Union[str, Callable], name: str = None, **kwargs
     ) -> Node:
         """Adds a node to the node graph."""
+
+        from node_graph.decorator import build_node_from_callable
+        from node_graph.nodes.factory.nodegraph_node import NodeGraphNodeFactory
+
+        if isinstance(identifier, NodeGraph):
+            identifier = NodeGraphNodeFactory.create_node(identifier)
+        # build the task on the fly if the identifier is a callable
+        elif callable(identifier):
+            identifier = build_node_from_callable(identifier)
         node = self.nodes._new(identifier, name, **kwargs)
         return node
 
