@@ -70,6 +70,13 @@ def test_get_items(ng):
 
 def test_load_graph():
     @node(
+        inputs=[
+            {"name": "nested", "identifier": "node_graph.namespace"},
+            {"name": "nested.d"},
+            {"name": "nested.f", "identifier": "node_graph.namespace"},
+            {"name": "nested.f.g"},
+            {"name": "nested.f.h"},
+        ],
         outputs=[
             {"name": "sum"},
             {"name": "product"},
@@ -78,7 +85,7 @@ def test_load_graph():
             {"name": "nested.product"},
         ],
     )
-    def test(a, b=1, **kwargs):
+    def test(a, b=1, nested={}):
         return {
             "sum": a + b,
             "product": a * b,
@@ -91,11 +98,11 @@ def test_load_graph():
         {
             "a": 1,
             "b": 2,
-            "kwargs": {"c": 1, "d": 2},
+            "nested": {"d": 2, "f": {"g": 1, "h": 2}},
         }
     )
     ngdata = ng.to_dict()
     # load graph
     ng1 = NodeGraph.from_dict(ngdata)
-    assert ng1.nodes.test1.inputs.kwargs._value == {"c": 1, "d": 2}
     assert "sum" in ng1.nodes.test1.outputs.nested
+    assert ng1.nodes.test1.inputs._value == ng.nodes.test1.inputs._value

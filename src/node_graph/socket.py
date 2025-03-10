@@ -266,9 +266,9 @@ class NodeSocketNamespace(BaseSocket):
             for key, socket in sockets.items():
                 kwargs = {}
                 if "property_data" in socket:
-                    kwargs["property_data"] = socket.pop("property_data")
+                    kwargs["property_data"] = socket["property_data"]
                 if "sockets" in socket:
-                    kwargs["sockets"] = socket.pop("sockets")
+                    kwargs["sockets"] = socket["sockets"]
                 self._new(
                     socket["identifier"],
                     name=key,
