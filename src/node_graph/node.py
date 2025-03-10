@@ -100,6 +100,7 @@ class Node:
         self.create_properties()
         self.create_sockets()
         self.create_ctrl_sockets()
+        self._args_data = None
         self._widget = NodeGraphWidget(
             settings={"minmap": False},
             style={"width": "80%", "height": "600px"},
@@ -324,6 +325,12 @@ class Node:
             "module_path": super().__class__.__module__,
         }
         return metadata
+
+    @property
+    def args_data(self) -> Dict[str, List]:
+        if self._args_data is None:
+            self._args_data = self.get_args_data()
+        return self._args_data
 
     def get_args_data(self) -> Dict[str, List]:
         """Get all the args data from properties and inputs."""
