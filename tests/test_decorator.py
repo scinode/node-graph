@@ -1,4 +1,4 @@
-from node_graph.decorator import create_node_group, build_node
+from node_graph.decorator import build_node
 from node_graph.decorator import node
 from node_graph import NodeGraph, NodePool
 from node_graph.nodes.factory.base import BaseNodeFactory
@@ -105,28 +105,12 @@ def create_test_node_group():
     return ng
 
 
-MyTestAddGroup = create_node_group(
-    {
-        "identifier": "MyTestAddGroup",
-        "ng": create_test_node_group(),
-    }
-)
-
-
 def test_socket(decorated_myadd):
     """Test simple math."""
     n = decorated_myadd.NodeCls()
     assert n.inputs["x"]._identifier == "node_graph.float"
     assert n.inputs["y"]._identifier == "node_graph.float"
     assert n.inputs["t"].property.default == 1
-
-
-def test_create_node_group():
-    """Build node on-the-fly."""
-
-    ng = NodeGraph(name="test_create_node_group")
-    ng.add_node(MyTestAddGroup, "add1")
-    assert len(ng.nodes) == 1
 
 
 def test_decorator_node(ng_decorator):

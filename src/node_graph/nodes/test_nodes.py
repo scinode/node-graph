@@ -146,37 +146,3 @@ class TestEnumUpdate(Node):
             "callable_name": self.properties["function"].content,
             "type": "function",
         }
-
-
-class TestAddGroup(Node):
-
-    identifier: str = "TestAddGroup"
-    name = "TestAddGroup"
-    catalog = "Test"
-    node_type: str = "GROUP"
-
-    def get_default_node_group(self):
-        from node_graph import NodeGraph
-
-        ng = NodeGraph(
-            name=self.name,
-            uuid=self.uuid,
-            parent_node=self.uuid,
-            worker_name=self.worker_name,
-            type="NODE_GROUP",
-        )
-        add1 = ng.add_node("node_graph.test_add", "add1")
-        add2 = ng.add_node("node_graph.test_add", "add2")
-        add3 = ng.add_node("node_graph.test_add", "add1")
-        ng.add_link(add1.outputs[0], add3.inputs[0])
-        ng.add_link(add2.outputs[0], add3.inputs[1])
-        ng.group_properties = [
-            ("add1.t", "t1"),
-            ("add1.t", "t2"),
-        ]
-        ng.group_inputs = [
-            ("add1.x", "x"),
-            ("add2.x", "y"),
-        ]
-        ng.group_outputs = [("add3.result", "result")]
-        return ng

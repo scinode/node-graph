@@ -60,8 +60,6 @@ class Node:
         property_collection_class: Any = PropertyCollection,
         input_collection_class: Any = NodeSocketNamespace,
         output_collection_class: Any = NodeSocketNamespace,
-        ctrl_input_collection_class: Any = NodeSocketNamespace,
-        ctrl_output_collection_class: Any = NodeSocketNamespace,
     ) -> None:
         """Initialize the Node.
 
@@ -85,21 +83,13 @@ class Node:
         self.outputs = output_collection_class(
             "outputs", node=self, pool=self.SocketPool
         )
-        self.ctrl_inputs = ctrl_input_collection_class(
-            "ctrl_Inputs", node=self, pool=self.SocketPool
-        )
-        self.ctrl_outputs = ctrl_output_collection_class(
-            "ctrl_outputs", node=self, pool=self.SocketPool
-        )
         self.state = "CREATED"
         self.action = "NONE"
         self.position = [30 * self.list_index, 30 * self.list_index]
         self.description = ""
         self.log = ""
-        self.ng = self.get_node_group() if self.node_type.upper() == "GROUP" else None
         self.create_properties()
         self.create_sockets()
-        self.create_ctrl_sockets()
         self._args_data = None
         self._widget = NodeGraphWidget(
             settings={"minmap": False},
@@ -120,14 +110,6 @@ class Node:
         prop = self.properties._new(identifier, name, **kwargs)
         return prop
 
-    def add_ctrl_input(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        input = self.ctrl_inputs._new(identifier, name, **kwargs)
-        return input
-
-    def add_ctrl_output(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        output = self.ctrl_outputs._new(identifier, name, **kwargs)
-        return output
-
     def get_input_names(self) -> List[str]:
         return self.inputs._get_keys()
 
@@ -138,118 +120,16 @@ class Node:
         return self.properties._get_keys()
 
     def create_properties(self) -> None:
-        """Create properties for this node.
-        If this node is a group node, create properties based on the exposed properties.
-        """
+        """Create properties for this node."""
         self.properties._clear()
-        if self.node_type.upper() == "GROUP":
-            self.create_group_properties()
-
-    def create_group_properties(self) -> None:
-        """Create properties based on the exposed properties."""
-        group_properties = self.group_properties if self.group_properties else []
-        for prop in group_properties:
-            node_prop, new_prop_name = prop
-            node, prop_name = node_prop.split(".")
-            if prop_name not in self.ng.nodes[node].get_property_names():
-                raise ValueError(
-                    "Property {} does not exist in the properties of node {}".format(
-                        prop_name, node
-                    )
-                )
-            p = self.ng.nodes[node].properties[prop_name].copy()
-            p.name = new_prop_name
-            # TODO add the default value to group property
-            self.properties.append(p)
 
     def create_sockets(self) -> None:
-        """Create input and output sockets for this node.
-        If this node is a group node, create sockets based on group inputs and outputs.
-        """
+        """Create input and output sockets for this node."""
         self.inputs._clear()
         self.outputs._clear()
-        if self.node_type.upper() == "GROUP":
-            self.create_group_sockets()
-
-    def create_ctrl_sockets(self) -> None:
-        """Create control input and output sockets for this node."""
-        self.ctrl_inputs._clear()
-        self.ctrl_outputs._clear()
-        socket = self.add_ctrl_input(SocketPool.any, "entry")
-        socket._link_limit = 1000
-        socket = self.add_ctrl_input(SocketPool.any, "ctrl")
-        socket._link_limit = 1000
-        socket = self.add_ctrl_output(SocketPool.any, "exit")
-        socket = self.add_ctrl_output(SocketPool.any, "ctrl")
-        socket._link_limit = 1000
-
-    def create_group_sockets(self) -> None:
-        """Create input and output sockets based on group inputs and outputs.
-
-        group_inputs = [
-            ["add1.x", "x"],
-            ["add1.y", "y"]]
-        """
-        group_inputs = self.group_inputs if self.group_inputs else []
-        for input in group_inputs:
-            node_socket, name = input
-            node, socket = node_socket.split(".")
-            if socket not in self.ng.nodes[node].get_input_names():
-                raise ValueError(
-                    "Socket {} does not exist in the inputs of node {}".format(
-                        socket, node
-                    )
-                )
-            identifier = self.ng.nodes[node].inputs[socket].identifier
-            self.add_input(identifier, name)
-        group_outputs = self.group_outputs if self.group_outputs else []
-        for output in group_outputs:
-            node_socket, name = output
-            node, socket = node_socket.split(".")
-            if socket not in self.ng.nodes[node].get_output_names():
-                raise ValueError(
-                    "Socket {} does not exist in the outputs of node {}".format(
-                        socket, node
-                    )
-                )
-            identifier = self.ng.nodes[node].outputs[socket].identifier
-            self.add_output(identifier, name)
 
     def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
-
-    # @property
-    # def group_properties(self) -> List[List[str]]:
-    #     return self.ng.group_properties if self.ng else []
-
-    # @property
-    # def group_inputs(self) -> List[List[str]]:
-    #     return self.ng.group_inputs if self.ng else []
-
-    # @property
-    # def group_outputs(self) -> List[List[str]]:
-    #     return self.ng.group_outputs if self.ng else []
-
-    @property
-    def node_group(self) -> Any:
-        return self.get_node_group()
-
-    def get_node_group(self) -> Any:
-        """Get the node group of this node.
-
-        Returns:
-            NodeGraph: The node group of this node.
-        """
-        return self.get_default_node_group()
-
-    def get_default_node_group(self) -> Any:
-        from node_graph import NodeGraph
-
-        ng = NodeGraph(
-            name=self.name,
-            uuid=self.uuid,
-        )
-        return ng
 
     def to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
@@ -267,8 +147,6 @@ class Node:
             properties = self.export_properties()
             input_sockets = self.export_input_sockets()
             output_sockets = self.export_output_sockets()
-            ctrl_input_sockets = self.export_ctrl_input_sockets()
-            ctrl_output_sockets = self.export_ctrl_output_sockets()
             executor = self.export_executor_to_dict()
             data = {
                 "version": "node_graph@{}".format(__version__),
@@ -283,8 +161,6 @@ class Node:
                 "properties": properties,
                 "inputs": input_sockets,
                 "outputs": output_sockets,
-                "ctrl_inputs": ctrl_input_sockets,
-                "ctrl_outputs": ctrl_output_sockets,
                 "executor": executor,
                 "position": self.position,
                 "description": self.description,
@@ -376,22 +252,6 @@ class Node:
         for output in self.outputs:
             outputs[output._name] = output._to_dict()
         return outputs
-
-    def export_ctrl_input_sockets(self) -> List[Dict[str, Any]]:
-        """Export ctrl_input sockets to a dictionary."""
-        # save all relations using links
-        ctrl_inputs = {}
-        for socket in self.ctrl_inputs:
-            ctrl_inputs[socket._name] = socket._to_dict()
-        return ctrl_inputs
-
-    def export_ctrl_output_sockets(self) -> List[Dict[str, Any]]:
-        """Export ctrl_output sockets to a dictionary."""
-        # save all relations using links
-        ctrl_outputs = {}
-        for socket in self.ctrl_outputs:
-            ctrl_outputs[socket._name] = socket._to_dict()
-        return ctrl_outputs
 
     def export_executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Export executor to a dictionary.

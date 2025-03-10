@@ -88,7 +88,6 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
         node["inputs"] = list_to_dict(node.get("inputs", {}))
         node["outputs"] = list_to_dict(node.get("outputs", {}))
         ntdata["nodes"][node["name"]] = node
-    ntdata.setdefault("ctrl_links", {})
     return ntdata
 
 

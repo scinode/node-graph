@@ -65,7 +65,6 @@ class NodeGraph:
         self.type: str = type
         self.nodes: NodeCollection = NodeCollection(self, pool=self.NodePool)
         self.links: LinkCollection = LinkCollection(self)
-        self.ctrl_links: LinkCollection = LinkCollection(self)
         self.state: str = "CREATED"
         self.action: str = "NONE"
         self.description: str = ""
@@ -117,7 +116,6 @@ class NodeGraph:
         metadata: Dict[str, Any] = self.get_metadata()
         nodes: Dict[str, Any] = self.export_nodes_to_dict(short=short)
         links: List[Dict[str, Any]] = self.links_to_dict()
-        ctrl_links: List[Dict[str, Any]] = self.ctrl_links_to_dict()
         data: Dict[str, Any] = {
             "version": f"node_graph@{__version__}",
             "uuid": self.uuid,
@@ -128,7 +126,6 @@ class NodeGraph:
             "metadata": metadata,
             "nodes": nodes,
             "links": links,
-            "ctrl_links": ctrl_links,
             "description": self.description,
             "log": self.log,
         }
@@ -171,15 +168,6 @@ class NodeGraph:
         """
         links: List[Dict[str, Any]] = [link.to_dict() for link in self.links]
         return links
-
-    def ctrl_links_to_dict(self) -> List[Dict[str, Any]]:
-        """Converts the control links to a list of dictionaries.
-
-        Returns:
-            List[Dict[str, Any]]: The control links data.
-        """
-        ctrl_links: List[Dict[str, Any]] = [link.to_dict() for link in self.ctrl_links]
-        return ctrl_links
 
     def to_yaml(self) -> str:
         """Exports the node graph to a YAML format data.
@@ -242,11 +230,6 @@ class NodeGraph:
             ng.add_link(
                 ng.nodes[link["from_node"]].outputs[link["from_socket"]],
                 ng.nodes[link["to_node"]].inputs[link["to_socket"]],
-            )
-        for link in ngdata.get("ctrl_links", []):
-            ng.ctrl_add_link(
-                ng.nodes[link["from_node"]].ctrl_outputs[link["from_socket"]],
-                ng.nodes[link["to_node"]].ctrl_inputs[link["to_socket"]],
             )
         return ng
 

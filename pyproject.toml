@@ -63,7 +63,6 @@ tests = [
 "node_graph.test_add" = "node_graph.nodes.test_nodes:TestAdd"
 "node_graph.test_enum" = "node_graph.nodes.test_nodes:TestEnum"
 "node_graph.test_enum_update" = "node_graph.nodes.test_nodes:TestEnumUpdate"
-"node_graph.test_add_group" = "node_graph.nodes.test_nodes:TestAddGroup"
 
 [project.entry-points."node_graph.socket"]
 "node_graph.any" = "node_graph.sockets.builtins:SocketAny"
