@@ -15,7 +15,6 @@ class NodeLink:
         self.from_node = from_socket._node
         self.to_socket: "Socket" = to_socket
         self.to_node = to_socket._node
-        self.state: bool = False
         self.check_socket_match()
         self.mount()
 
@@ -100,7 +99,6 @@ class NodeLink:
             "from_node": self.from_node.name,
             "to_socket": self.to_socket._scoped_name,
             "to_node": self.to_node.name,
-            "state": self.state,
         }
         return dbdata
 

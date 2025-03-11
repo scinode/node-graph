@@ -4,7 +4,6 @@ from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
 from node_graph.nodes import NodePool
 from typing import Dict, Any, List, Optional, Union, Callable
-from node_graph.version import __version__
 import yaml
 from node_graph.node import Node
 from node_graph.socket import NodeSocket
@@ -19,12 +18,11 @@ class NodeGraph:
     Attributes:
         name (str): The name of the node graph.
         uuid (str): The UUID of this node graph.
-        type (str): The type of the node graph.
+        graph_type (str): The type of the node graph.
         state (str): The state of this node graph.
         action (str): The action of this node graph.
         platform (str): The platform used to create this node graph.
         description (str): A description of the node graph.
-        log (str): Log information for the node graph.
         group_properties (List[str]): Group properties of the node graph.
         group_inputs (List[str]): Group inputs of the node graph.
         group_outputs (List[str]): Group outputs of the node graph.
@@ -51,28 +49,44 @@ class NodeGraph:
         self,
         name: str = "NodeGraph",
         uuid: Optional[str] = None,
-        type: str = "NORMAL",
+        graph_type: str = "NORMAL",
+        state: str = "CREATED",
+        action: str = "NONE",
+        description: str = "",
+        group_properties: List[dict] = None,
+        group_inputs: List[dict] = None,
+        group_outputs: List[dict] = None,
     ) -> None:
         """Initializes a new instance of the NodeGraph class.
 
         Args:
             name (str, optional): The name of the node graph. Defaults to "NodeGraph".
             uuid (str, optional): The UUID of the node graph. Defaults to None.
-            type (str, optional): The type of the node graph. Defaults to "NORMAL".
+            graph_type (str, optional): The type of the node graph. Defaults to "NORMAL".
         """
-        self.name: str = name
-        self.uuid: str = uuid or str(uuid1())
-        self.type: str = type
-        self.nodes: NodeCollection = NodeCollection(self, pool=self.NodePool)
-        self.links: LinkCollection = LinkCollection(self)
-        self.state: str = "CREATED"
-        self.action: str = "NONE"
-        self.description: str = ""
-        self.log: str = ""
-        self.group_properties: List[str] = []
-        self.group_inputs: List[str] = []
-        self.group_outputs: List[str] = []
+        self.name = name
+        self.uuid = uuid or str(uuid1())
+        self.graph_type = graph_type
+        self.nodes = NodeCollection(self, pool=self.NodePool)
+        self.links = LinkCollection(self)
+        self.state = state
+        self.action = action
+        self.description = description
+        self.group_properties = group_properties or []
+        self.group_inputs = group_inputs or []
+        self.group_outputs = group_outputs or []
         self._widget = NodeGraphWidget(parent=self)
+
+    @property
+    def version(self) -> str:
+        """Retrieve the version dynamically from the package where Graph is implemented."""
+        import importlib.metadata
+
+        try:
+            package_name = self.platform.replace("-", "_")
+            return importlib.metadata.version(package_name)
+        except importlib.metadata.PackageNotFoundError:
+            return "unknown"
 
     def add_node(
         self, identifier: Union[str, Callable], name: str = None, **kwargs
@@ -109,6 +123,14 @@ class NodeGraph:
         """Launches the node graph."""
         raise NotImplementedError("The 'launch' method is not implemented.")
 
+    def wait(self) -> None:
+        """Waits for the node graph to finish.
+
+        Args:
+            timeout (int, optional): The maximum time to wait in seconds. Defaults to 50.
+        """
+        return NotImplementedError("The 'wait' method is not implemented.")
+
     def save(self) -> None:
         """Saves the node graph to the database."""
         raise NotImplementedError("The 'save' method is not implemented.")
@@ -126,7 +148,7 @@ class NodeGraph:
         nodes: Dict[str, Any] = self.export_nodes_to_dict(short=short)
         links: List[Dict[str, Any]] = self.links_to_dict()
         data: Dict[str, Any] = {
-            "version": f"node_graph@{__version__}",
+            "version": f"{self.platform}@{self.version}",
             "uuid": self.uuid,
             "name": self.name,
             "state": self.state,
@@ -136,7 +158,6 @@ class NodeGraph:
             "nodes": nodes,
             "links": links,
             "description": self.description,
-            "log": self.log,
         }
         return data
 
@@ -147,8 +168,7 @@ class NodeGraph:
             Dict[str, Any]: The metadata.
         """
         metadata: Dict[str, Any] = {
-            "type": self.type,
-            "platform": self.platform,
+            "graph_type": self.graph_type,
             "group_properties": self.group_properties,
             "group_inputs": self.group_inputs,
             "group_outputs": self.group_outputs,
@@ -214,14 +234,14 @@ class NodeGraph:
         ng: "NodeGraph" = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
-            type=ngdata["metadata"].get("type", "NORMAL"),
+            graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
+            state=ngdata.get("state", "CREATED"),
+            action=ngdata.get("action", "NONE"),
+            description=ngdata.get("description", ""),
+            group_properties=ngdata["metadata"].get("group_properties", []),
+            group_inputs=ngdata["metadata"].get("group_inputs", []),
+            group_outputs=ngdata["metadata"].get("group_outputs", []),
         )
-        for key in ["state", "action", "description", "log"]:
-            if ngdata.get(key):
-                setattr(ng, key, ngdata.get(key))
-        for key in ["group_properties", "group_inputs", "group_outputs"]:
-            if ngdata["metadata"].get(key):
-                setattr(ng, key, ngdata["metadata"].get(key))
         for name, ndata in ngdata["nodes"].items():
             if ndata.get("metadata", {}).get("is_dynamic", False):
                 identifier = class_factory(ndata)
@@ -291,7 +311,7 @@ class NodeGraph:
         return ng
 
     @classmethod
-    def load(cls, uuid: str) -> None:
+    def load(cls) -> None:
         """Loads data from the database."""
         raise NotImplementedError("The 'load' method is not implemented.")
 
@@ -395,14 +415,6 @@ class NodeGraph:
             for index in sorted(link_indices, reverse=True):
                 del self.links[index]
             del self.nodes[name]
-
-    def wait(self) -> None:
-        """Waits for the node graph to finish.
-
-        Args:
-            timeout (int, optional): The maximum time to wait in seconds. Defaults to 50.
-        """
-        return NotImplementedError("The 'wait' method is not implemented.")
 
     def to_widget_value(self) -> dict:
         from node_graph.utils import nodegaph_to_short_json

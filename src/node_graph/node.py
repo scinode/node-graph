@@ -17,9 +17,7 @@ class Node:
     Attributes:
         identifier (str): The identifier is used for loading the Node.
         node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
-        list_index (int): Node id inside the node graph.
         parent_uuid (str): UUID of the node graph this node belongs to.
-        platform (str): Platform that used to create this node.
 
     Examples:
         Add nodes:
@@ -40,9 +38,7 @@ class Node:
 
     identifier: str = "Node"
     node_type: str = "Normal"
-    list_index: int = 0
     parent_uuid: str = ""
-    platform: str = "node_graph"
     catalog: str = "Node"
     group_properties: List[List[str]] = None
     group_inputs: List[List[str]] = None
@@ -51,7 +47,6 @@ class Node:
 
     def __init__(
         self,
-        list_index: int = 0,
         name: Optional[str] = None,
         uuid: Optional[str] = None,
         parent: Optional[Any] = None,
@@ -64,7 +59,6 @@ class Node:
         """Initialize the Node.
 
         Args:
-            list_index (int, optional): Node id inside the node graph. Defaults to 0.
             name (str, optional): Name of the node. Defaults to None.
             uuid (str, optional): UUID of the node. Defaults to None.
             parent (Any, optional): Parent node. Defaults to None.
@@ -72,8 +66,7 @@ class Node:
             input_collection_class (Any, optional): Input socket collection class. Defaults to InputSocketCollection.
             output_collection_class (Any, optional): Output socket collection class. Defaults to NodeSocketNamespace.
         """
-        self.list_index = list_index
-        self.name = name or "{}{}".format(self.identifier.split(".")[-1], list_index)
+        self.name = name or self.identifier
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self._metadata = metadata or {}
@@ -85,7 +78,7 @@ class Node:
         )
         self.state = "CREATED"
         self.action = "NONE"
-        self.position = [30 * self.list_index, 30 * self.list_index]
+        self.position = [30, 30]
         self.description = ""
         self.log = ""
         self.create_properties()
@@ -133,7 +126,6 @@ class Node:
 
     def to_dict(self, short: bool = False) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
-        from node_graph.version import __version__
 
         if short:
             data = {
@@ -149,11 +141,9 @@ class Node:
             output_sockets = self.export_output_sockets()
             executor = self.export_executor_to_dict()
             data = {
-                "version": "node_graph@{}".format(__version__),
                 "identifier": self.identifier,
                 "uuid": self.uuid,
                 "name": self.name,
-                "list_index": self.list_index,
                 "state": self.state,
                 "action": self.action,
                 "error": "",
@@ -167,7 +157,6 @@ class Node:
                 "log": self.log,
                 "hash": "",  # we can only calculate the hash during runtime when all the data is ready
             }
-        data.update(self.get_args_data())
         # to avoid some dict has the same address with others nodes
         # which happens when {} is used as default value
         # we copy the value only
@@ -186,7 +175,6 @@ class Node:
                 "node_type": self.node_type,
                 "catalog": self.catalog,
                 "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
-                "platform": self.platform,
                 "group_properties": self.group_properties
                 if self.group_properties
                 else [],

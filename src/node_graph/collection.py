@@ -1,8 +1,15 @@
 from __future__ import annotations
-from typing import List, Union, Optional, Callable, Dict, Type
+from typing import TYPE_CHECKING, List, Union, Optional, Callable, Dict, Type
 import difflib
 from importlib.metadata import entry_points, EntryPoint
 import sys
+import logging
+
+if TYPE_CHECKING:
+    from node_graph.node import Node
+    from node_graph.nodes.factory.base import BaseNodeFactory
+
+logger = logging.getLogger(__name__)
 
 
 def get_entries(entry_point_name: str) -> Dict[str, EntryPoint]:
@@ -22,12 +29,12 @@ def get_entries(entry_point_name: str) -> Dict[str, EntryPoint]:
 
 
 def get_item_class(
-    identifier: EntryPoint | "Node" | "BaseNodeFactory",
+    identifier: EntryPoint | Node | BaseNodeFactory,
     pool: Dict[str, EntryPoint],
-    base_class: Type["Node"] = None,
-    factory_class: Type["BaseNodeFactory"] = None,
+    base_class: Type[Node] = None,
+    factory_class: Type[BaseNodeFactory] = None,
     inputs: Optional[Dict] = None,
-) -> "Node":
+) -> Node:
     """Get the item class from the identifier."""
 
     from node_graph.node import Node
@@ -260,13 +267,17 @@ class Collection:
         """
         return name in self._items
 
-    def _get_list_index(self) -> int:
+    def _generate_item_name(self, name) -> int:
         """Get the inner id for the next item.
 
         list_index is the index of the item in the collection.
         """
-        list_index = max([0] + [item.list_index for item in self._items.values()]) + 1
-        return list_index
+        index = len(self._items) + 1
+        new_name = f"{name}{index}"
+        while new_name in self._items:
+            index += 1
+            new_name = f"{name}{index}"
+        return new_name
 
     def _new(self, identifier: str, name: Optional[str] = None) -> object:
         """Add new item into this collection."""
@@ -430,27 +441,27 @@ class NodeCollection(Collection):
         _metadata: Optional[dict] = None,
         _executor: Optional[dict] = None,
         **kwargs,
-    ) -> object:
+    ) -> Node:
         from node_graph.node import Node
         from node_graph.nodes.factory.base import BaseNodeFactory
 
-        list_index = self._get_list_index()
         ItemClass = get_item_class(
             identifier, self.pool, Node, BaseNodeFactory, inputs=kwargs
         )
-        item = ItemClass(
-            list_index=list_index,
+        name = name or self._generate_item_name(ItemClass.identifier.split(".")[-1])
+        node = ItemClass(
             name=name,
             uuid=uuid,
             parent=self.parent,
             metadata=_metadata,
             executor=_executor,
         )
-        self._append(item)
-        item.set(kwargs)
+        self._append(node)
+        node.set(kwargs)
+        logger.debug(f"Created new node '{node.name}' with identifier={identifier}.")
         # Execute post creation hooks
-        self._execute_post_creation_hooks(item)
-        return item
+        self._execute_post_creation_hooks(node)
+        return node
 
     def _copy(self, parent: Optional[object] = None) -> object:
         coll = self.__class__(parent=parent)

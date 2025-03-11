@@ -22,15 +22,12 @@ def test_id_name():
     ng = NodeGraph(name="test_id_name")
     # auto generate name for the node
     math1 = ng.add_node(NodePool.node_graph.test_add)
-    assert math1.list_index == 1
     assert math1.name == "test_add1"
     # set node name manually
     math2 = ng.add_node(NodePool.node_graph.test_add, "Math2")
-    assert math2.list_index == 2
     assert math2.name == "Math2"
     math3 = ng.add_node(NodePool.node_graph.test_add, name="Math3")
     assert math3.name == "Math3"
-    assert math3.list_index == 3
 
 
 def test_set_node_as_input():
