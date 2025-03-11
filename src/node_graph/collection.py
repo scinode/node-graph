@@ -268,9 +268,8 @@ class Collection:
         return name in self._items
 
     def _generate_item_name(self, name) -> int:
-        """Get the inner id for the next item.
-
-        list_index is the index of the item in the collection.
+        """Generate a new name for the item based on the given name and
+        the number of items in the collection.
         """
         index = len(self._items) + 1
         new_name = f"{name}{index}"
@@ -279,7 +278,7 @@ class Collection:
             new_name = f"{name}{index}"
         return new_name
 
-    def _new(self, identifier: str, name: Optional[str] = None) -> object:
+    def _new(self) -> object:
         """Add new item into this collection."""
         raise NotImplementedError("new method is not implemented.")
 

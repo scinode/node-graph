@@ -17,7 +17,6 @@ class NodeProperty:
         description: str = "",
         default: Any = None,
         update: Optional[Callable[[], None]] = None,
-        list_index: int = 0,
         arg_type: Optional[str] = "kwargs",
     ) -> None:
         """
@@ -28,11 +27,9 @@ class NodeProperty:
             description (str, optional): A description of the property. Defaults to "".
             default (Any, optional): The default value of the property. Defaults to None.
             update (Callable[[], None], optional): Callback to invoke when the value changes. Defaults to None.
-            list_index (int, optional): Index of the property in a collection. Defaults to 0.
         """
         self.name: str = name
         self.description: str = description
-        self.list_index: int = list_index
         self.default: Any = default
         self.update: Optional[Callable[[], None]] = update
         self.arg_type: Optional[str] = arg_type
@@ -46,7 +43,6 @@ class NodeProperty:
             "identifier": self.identifier,
             "default": self.default,
             "metadata": self.get_metadata(),
-            "list_index": self.list_index,
             "arg_type": self.arg_type,
         }
         # Conditionally add serializer/deserializer if they are defined
