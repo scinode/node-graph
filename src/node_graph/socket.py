@@ -459,8 +459,6 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
         for item in self._sockets.values():
             if isinstance(item, NodeSocketNamespace):
                 keys.extend(item._get_all_keys())
-            else:
-                keys.append(item._scoped_name)
         return keys
 
     def _get_keys(self) -> List[str]:

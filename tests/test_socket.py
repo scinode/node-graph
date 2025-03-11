@@ -160,17 +160,15 @@ def test_namespace(node_with_namespace_socket):
     assert n.inputs.non_dynamic.sub.y._full_name == "inputs.non_dynamic.sub.y"
     assert n.inputs.non_dynamic.sub.y._scoped_name == "non_dynamic.sub.y"
     # nested keys
-    assert set(n.inputs._get_all_keys()) == set(
-        [
-            "x",
-            "dynamic",
-            "dynamic.x",
-            "non_dynamic",
-            "non_dynamic.sub",
-            "non_dynamic.sub.y",
-            "non_dynamic.sub.z",
-        ]
-    )
+    assert n.inputs._get_all_keys() == [
+        "x",
+        "non_dynamic",
+        "dynamic",
+        "non_dynamic.sub",
+        "non_dynamic.sub.y",
+        "non_dynamic.sub.z",
+        "dynamic.x",
+    ]
     # to_dict
     data = n.inputs._to_dict()
     assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
