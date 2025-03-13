@@ -47,46 +47,24 @@ class NodeGraphNodeFactory(BaseNodeFactory):
         nodegraph: "NodeGraph",
     ):
         tdata = {"metadata": {"node_type": "nodegraph"}}
-        inputs = []
-        outputs = []
+        inputs = {"name": "inputs", "identifier": "node_graph.namespace", "sockets": {}}
+        outputs = {
+            "name": "outputs",
+            "identifier": "node_graph.namespace",
+            "sockets": {},
+        }
         group_outputs = []
-        # add all the inputs/outputs from the nodes in the nodegraph
-        builtin_input_names = [input["name"] for input in builtin_inputs]
-        builtin_output_names = [output["name"] for output in builtin_outputs]
 
         for node in nodegraph.nodes:
             # inputs
-            inputs.append(
-                {
-                    "identifier": "node_graph.namespace",
-                    "name": f"{node.name}",
-                }
-            )
-            for socket in node.inputs:
-                if socket._name in builtin_input_names:
-                    continue
-                inputs.append(
-                    {
-                        "identifier": socket._identifier,
-                        "name": f"{node.name}.{socket._name}",
-                    }
-                )
+            data = node.inputs._to_dict()
+            data["name"] = node.name
+            inputs["sockets"][node.name] = data
             # outputs
-            outputs.append(
-                {
-                    "identifier": "node_graph.namespace",
-                    "name": f"{node.name}",
-                }
-            )
+            data = node.outputs._to_dict()
+            data["name"] = node.name
+            outputs["sockets"][node.name] = data
             for socket in node.outputs:
-                if socket._name in builtin_output_names:
-                    continue
-                outputs.append(
-                    {
-                        "identifier": socket._identifier,
-                        "name": f"{node.name}.{socket._name}",
-                    }
-                )
                 group_outputs.append(
                     {
                         "name": f"{node.name}.{socket._name}",
@@ -94,10 +72,10 @@ class NodeGraphNodeFactory(BaseNodeFactory):
                     }
                 )
         # add built-in sockets
-        for output in builtin_outputs:
-            outputs.append(output.copy())
         for input in builtin_inputs:
-            inputs.append(input.copy())
+            inputs["sockets"][input["name"]] = input.copy()
+        for output in builtin_outputs:
+            outputs["sockets"][output["name"]] = output.copy()
         tdata["inputs"] = inputs
         tdata["outputs"] = outputs
         tdata["identifier"] = nodegraph.name

@@ -20,14 +20,73 @@ def node_with_namespace_socket():
 
 
 @pytest.fixture
+def func_with_namespace_socket():
+    @node(
+        inputs=[
+            {"name": "nested", "identifier": "node_graph.namespace"},
+            {"name": "nested.d"},
+            {"name": "nested.f", "identifier": "node_graph.namespace"},
+            {"name": "nested.f.g"},
+            {"name": "nested.f.h"},
+        ],
+        outputs=[
+            {"name": "sum"},
+            {"name": "product"},
+            {"name": "nested", "identifier": "node_graph.namespace"},
+            {"name": "nested.sum"},
+            {"name": "nested.product"},
+        ],
+    )
+    def func(a, b=1, nested={}):
+        return {
+            "sum": a + b,
+            "product": a * b,
+            "nested": {
+                "sum": nested["d"] + nested["f"]["g"],
+                "product": nested["d"] * nested["f"]["g"],
+            },
+        }
+
+    return func
+
+
+@pytest.fixture
 def ng():
     """A test node_graph."""
-    ng = NodeGraph(name="test_nodetree")
+    ng = NodeGraph(name="test_nodegraph")
     float1 = ng.add_node("node_graph.test_float", "float1", value=3.0)
     add1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=2)
     add2 = ng.add_node(NodePool.node_graph.test_add, "add2", x=2)
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
+    return ng
+
+
+@pytest.fixture
+def ng_complex(func_with_namespace_socket) -> NodeGraph:
+    """
+    Create a small NodeGraph:
+        n1 -> n2
+        n1 -> n3
+        n1 -> n4
+        n3 -> n5
+        n4 -> n5
+    """
+
+    ng = NodeGraph(name="test_graph")
+    n1 = ng.add_node(func_with_namespace_socket, name="n1")
+    n2 = ng.add_node(func_with_namespace_socket, name="n2")
+    n3 = ng.add_node(func_with_namespace_socket, name="n3")
+    n4 = ng.add_node(func_with_namespace_socket, name="n4")
+    n5 = ng.add_node(func_with_namespace_socket, name="n5")
+
+    ng.add_link(n1.outputs.sum, n2.inputs.nested.d)
+    ng.add_link(n1.outputs.nested.sum, n3.inputs.nested.f.g)
+    ng.add_link(n1.outputs.nested.sum, n4.inputs.a)
+    ng.add_link(n3.outputs.nested.sum, n4.inputs.nested.f.g)
+    ng.add_link(n3.outputs.nested.sum, n5.inputs.a)
+    ng.add_link(n4.outputs.nested.sum, n5.inputs.b)
+
     return ng
 
 
@@ -68,7 +127,7 @@ def decorated_myadd_group(decorated_myadd):
     """Generate a decorated node group for test."""
     myadd = decorated_myadd
 
-    @node.group(outputs=[{"name": "result", "from": "add3.result"}])
+    @node.graph_builder(outputs=[{"name": "result", "from": "add3.result"}])
     def myaddgroup(x, y):
         ng = NodeGraph()
         add1 = ng.add_node(myadd, "add1")

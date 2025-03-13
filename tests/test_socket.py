@@ -172,6 +172,9 @@ def test_namespace(node_with_namespace_socket):
     # to_dict
     data = n.inputs._to_dict()
     assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
+    # copy
+    inputs = n.inputs._copy()
+    assert inputs._value == n.inputs._value
 
 
 def test_add_namespace_with_socket():

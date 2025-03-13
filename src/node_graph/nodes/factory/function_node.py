@@ -2,6 +2,7 @@ from node_graph.orm.mapping import type_mapping
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from node_graph.config import builtin_inputs, builtin_outputs
 from node_graph.executor import NodeExecutor
+from node_graph.utils import list_to_dict
 from .base import BaseNodeFactory
 
 
@@ -29,27 +30,33 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         and the various decorator arguments.
         """
         from node_graph.decorator import generate_input_sockets
+        from node_graph.node import Node
+
+        node_class = node_class or Node
 
         identifier = identifier or func.__name__
         inputs = inputs or []
         properties = properties or []
         outputs = outputs or []
         error_handlers = error_handlers or []
-        task_inputs = generate_input_sockets(
+        node_inputs = generate_input_sockets(
             func, inputs, properties, type_mapping=type_mapping
         )
         # Mark function inputs and outputs
-        for input in task_inputs:
-            input.setdefault("metadata", {})
-            input["metadata"]["is_function_input"] = True
-        for out in outputs:
+        node_outputs = {
+            "name": "outputs",
+            "identifier": node_class.SocketPool.any,
+            "sockets": list_to_dict(outputs),
+        }
+        for out in node_outputs["sockets"].values():
             out.setdefault("metadata", {})
             out["metadata"]["is_function_output"] = True
         # add built-in sockets
         for input in builtin_inputs:
-            task_inputs.append(input.copy())
+            node_inputs["sockets"][input["name"]] = input.copy()
         for output in builtin_outputs:
-            outputs.append(output.copy())
+            node_outputs["sockets"][output["name"]] = output.copy()
+
         tdata = {
             "identifier": identifier,
             "metadata": {
@@ -59,8 +66,8 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
                 "group_outputs": group_outputs or [],
             },
             "properties": properties,
-            "inputs": task_inputs,
-            "outputs": outputs,
+            "inputs": node_inputs,
+            "outputs": node_outputs,
         }
         tdata["executor"] = NodeExecutor.from_callable(func).to_dict()
         if node_class:

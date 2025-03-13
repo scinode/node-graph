@@ -18,6 +18,7 @@ class NodeProperty:
         default: Any = None,
         update: Optional[Callable[[], None]] = None,
         arg_type: Optional[str] = "kwargs",
+        **kwargs,
     ) -> None:
         """
         Initialize a NodeProperty.

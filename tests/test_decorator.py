@@ -22,14 +22,24 @@ def test_create_node():
     ndata = {
         "identifier": "add",
         "properties": [{"identifier": "node_graph.float", "name": "x", "default": 3}],
-        "inputs": [
-            {
-                "identifier": "node_graph.float",
-                "name": "y",
-                "property_data": {"identifier": "node_graph.float", "default": 10},
+        "inputs": {
+            "name": "inputs",
+            "identifier": "node_graph.namespace",
+            "sockets": {
+                "y": {
+                    "identifier": "node_graph.float",
+                    "name": "y",
+                    "property_data": {"identifier": "node_graph.float", "default": 10},
+                }
             },
-        ],
-        "outputs": [{"identifier": "node_graph.any", "name": "result"}],
+        },
+        "outputs": {
+            "name": "outputs",
+            "identifier": "node_graph.namespace",
+            "sockets": {
+                "result": {"identifier": "node_graph.any", "name": "result"},
+            },
+        },
         "executor": {"module_path": "numpy.add"},
     }
     NodeCls = BaseNodeFactory(ndata)

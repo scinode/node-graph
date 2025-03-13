@@ -1,6 +1,7 @@
 from typing import Dict
 from node_graph.utils import list_to_dict
 from node_graph.node import Node
+from node_graph.socket import NodeSocketNamespace
 import importlib
 
 
@@ -30,6 +31,7 @@ class BaseNodeFactory:
 
             _ndata = ndata
             is_dynamic: bool = True
+            default_name = ndata.get("default_name", None)
 
             def __init__(self, *args, **kwargs):
                 self.identifier = self._ndata["identifier"]
@@ -49,36 +51,12 @@ class BaseNodeFactory:
                     self.add_property(**prop)
 
             def create_sockets(self):
-                inputs = list_to_dict(self._ndata.get("inputs", {}))
-                for inp in inputs.values():
-                    if isinstance(inp, str):
-                        inp = {"identifier": BaseClass.SocketPool.any, "name": inp}
-                    kwargs = {}
-                    if "property_data" in inp:
-                        kwargs["property_data"] = inp.get("property_data", {})
-                    if "sockets" in inp:
-                        kwargs["sockets"] = inp.get("sockets", None)
-                    self.add_input(
-                        inp.get("identifier", BaseClass.SocketPool.any),
-                        name=inp["name"],
-                        metadata=inp.get("metadata", {}),
-                        link_limit=inp.get("link_limit", 1),
-                        **kwargs,
-                    )
-
-                outputs = list_to_dict(self._ndata.get("outputs", {}))
-                for out in outputs.values():
-                    kwargs = {}
-                    if "sockets" in out:
-                        kwargs["sockets"] = out.get("sockets", None)
-                    if isinstance(out, str):
-                        out = {"identifier": BaseClass.SocketPool.any, "name": out}
-                    self.add_output(
-                        out.get("identifier", BaseClass.SocketPool.any),
-                        name=out["name"],
-                        metadata=out.get("metadata", {}),
-                        **kwargs,
-                    )
+                self.inputs = NodeSocketNamespace._from_dict(
+                    self._ndata.get("inputs", {}), node=self, pool=BaseClass.SocketPool
+                )
+                self.outputs = NodeSocketNamespace._from_dict(
+                    self._ndata.get("outputs", {}), node=self, pool=BaseClass.SocketPool
+                )
 
             def get_executor(self):
                 return self._ndata.get("executor", None)

@@ -46,7 +46,7 @@ def nodegaph_to_short_json(
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
         inputs = []
-        for input in node["inputs"].values():
+        for input in node["inputs"]["sockets"].values():
             metadata = input.get("metadata", {}) or {}
             if metadata.get("required", False):
                 inputs.append(
@@ -85,8 +85,14 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     for node in nodes:
         node.setdefault("metadata", {})
         node["properties"] = list_to_dict(node.get("properties", {}))
-        node["inputs"] = list_to_dict(node.get("inputs", {}))
-        node["outputs"] = list_to_dict(node.get("outputs", {}))
+        node["inputs"] = {
+            "name": "inputs",
+            "sockets": list_to_dict(node.get("inputs", {})),
+        }
+        node["outputs"] = {
+            "name": "outputs",
+            "sockets": list_to_dict(node.get("outputs", {})),
+        }
         ntdata["nodes"][node["name"]] = node
     return ntdata
 
@@ -133,3 +139,25 @@ def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]
             if value is not None:
                 values[key] = value
     return values
+
+
+# change the flatten dict to a nested dict
+def organized_socket_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a flat dictionary to a nested dictionary.
+    data = {"name": "inputs",
+            "identifier": "node_graph.namespace",
+            "sockets": {
+                "a": {"name": "a",},
+                "b": {"name": "b", "identifier": "node_graph.namespace"},
+                "b.c": {"name": "b.c", "identifier": "node_graph.namespace"},
+                }
+            }
+    """
+    nested_data = data
+    for key, value in data["sockets"].items():
+        parts = key.split(".")
+        current = nested_data
+        for part in parts[:-1]:
+            current = current["sockets"][part].setdefault("sockets", {})
+        current[parts[-1]] = value
+    data["sockets"] = nested_data

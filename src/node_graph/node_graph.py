@@ -301,12 +301,12 @@ class NodeGraph:
             NodeGraph: The copied node graph.
         """
         name = f"{self.name}_copy" if name is None else name
-        ng: "NodeGraph" = self.__class__(name=name, uuid=None)
+        ng = self.__class__(name=name, uuid=None)
         ng.nodes = self.nodes._copy(parent=ng)
         for link in self.links:
             ng.add_link(
-                ng.nodes[link.from_node.name].outputs[link.from_socket._name],
-                ng.nodes[link.to_node.name].inputs[link.to_socket._name],
+                ng.nodes[link.from_node.name].outputs[link.from_socket._scoped_name],
+                ng.nodes[link.to_node.name].inputs[link.to_socket._scoped_name],
             )
         return ng
 
