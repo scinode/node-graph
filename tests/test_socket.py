@@ -23,7 +23,7 @@ def test_metadata():
         "test",
         metadata={"arg_type": "kwargs", "dynamic": True},
         link_limit=100000,
-        property_data={"default": 1},
+        property={"default": 1},
     )
     assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
     assert socket._link_limit == 100000

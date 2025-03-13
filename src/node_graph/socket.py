@@ -110,7 +110,7 @@ class NodeSocket(BaseSocket):
         parent: Optional["NodeSocketNamespace"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
-        property_data: Optional[Dict[str, Any]] = None,
+        property: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize an instance of NodeSocket.
@@ -133,10 +133,11 @@ class NodeSocket(BaseSocket):
         # Conditionally add a property if property_identifier is provided
         self.property: Optional[NodeProperty] = None
         if self._socket_property_identifier:
-            property_data = property_data or {}
-            property_data.pop("identifier", None)
+            property = property or {}
+            property.pop("identifier", None)
+            property.pop("name", None)
             self.add_property(
-                self._socket_property_identifier, name, **(property_data or {})
+                self._socket_property_identifier, name, **(property or {})
             )
 
     def add_property(
@@ -284,8 +285,8 @@ class NodeSocketNamespace(BaseSocket):
         if sockets is not None:
             for key, socket in sockets.items():
                 kwargs = {}
-                if "property_data" in socket:
-                    kwargs["property_data"] = socket["property_data"]
+                if "property" in socket:
+                    kwargs["property"] = socket["property"]
                 if "sockets" in socket:
                     kwargs["sockets"] = socket["sockets"]
                 self._new(

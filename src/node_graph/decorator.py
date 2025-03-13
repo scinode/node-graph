@@ -105,10 +105,10 @@ def generate_input_sockets(
                     "required": True,
                     "is_function_input": True,
                 },
-                "property_data": {"identifier": identifier},
+                "property": {"identifier": identifier},
             }
             if kwarg.get("has_default", False):
-                input["property_data"]["default"] = kwarg["default"]
+                input["property"]["default"] = kwarg["default"]
                 input["metadata"]["required"] = False
             inputs.append(input)
     # if var_args in input_names, set the link_limit to 1e6 and the identifier to namespace

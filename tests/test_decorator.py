@@ -29,7 +29,7 @@ def test_create_node():
                 "y": {
                     "identifier": "node_graph.float",
                     "name": "y",
-                    "property_data": {"identifier": "node_graph.float", "default": 10},
+                    "property": {"identifier": "node_graph.float", "default": 10},
                 }
             },
         },
