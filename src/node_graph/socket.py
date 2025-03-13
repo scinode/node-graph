@@ -133,11 +133,9 @@ class NodeSocket(BaseSocket):
         self.property: Optional[NodeProperty] = None
         if self._socket_property_identifier:
             property = property or {}
-            property.pop("identifier", None)
-            property.pop("name", None)
-            self.add_property(
-                self._socket_property_identifier, name, **(property or {})
-            )
+            property["identifier"] = self._socket_property_identifier
+            property["name"] = name
+            self.add_property(**(property or {}))
 
     def add_property(
         self, identifier: str, name: Optional[str] = None, **kwargs: Any
@@ -188,7 +186,7 @@ class NodeSocket(BaseSocket):
         )
         # Add property
         if data.get("property"):
-            socket.add_property(data["property"].pop("identifier"), **data["property"])
+            socket.add_property(**data["property"])
         return socket
 
     def _copy(

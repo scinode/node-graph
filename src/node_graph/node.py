@@ -35,6 +35,9 @@ class Node:
     # This is the entry point for the socket and property pool
     SocketPool = SocketPool
     PropertyPool = PropertyPool
+    InputCollectionClass = NodeSocketNamespace
+    OutputCollectionClass = NodeSocketNamespace
+    PropertyCollectionClass = PropertyCollection
 
     identifier: str = "Node"
     default_name: str = None
@@ -53,9 +56,6 @@ class Node:
         parent: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         executor: Optional[NodeExecutor] = None,
-        property_collection_class: Any = PropertyCollection,
-        input_collection_class: Any = NodeSocketNamespace,
-        output_collection_class: Any = NodeSocketNamespace,
     ) -> None:
         """Initialize the Node.
 
@@ -63,18 +63,17 @@ class Node:
             name (str, optional): Name of the node. Defaults to None.
             uuid (str, optional): UUID of the node. Defaults to None.
             parent (Any, optional): Parent node. Defaults to None.
-            property_collection_class (Any, optional): Property collection class. Defaults to PropertyCollection.
-            input_collection_class (Any, optional): Input socket collection class. Defaults to InputSocketCollection.
-            output_collection_class (Any, optional): Output socket collection class. Defaults to NodeSocketNamespace.
         """
         self.name = name or self.identifier
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.properties = property_collection_class(self, pool=self.PropertyPool)
-        self.inputs = input_collection_class("inputs", node=self, pool=self.SocketPool)
-        self.outputs = output_collection_class(
+        self.properties = self.PropertyCollectionClass(self, pool=self.PropertyPool)
+        self.inputs = self.InputCollectionClass(
+            "inputs", node=self, pool=self.SocketPool
+        )
+        self.outputs = self.OutputCollectionClass(
             "outputs", node=self, pool=self.SocketPool
         )
         self.state = "CREATED"

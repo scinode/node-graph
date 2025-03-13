@@ -115,20 +115,10 @@ class NodeGraphAnalysis:
         # Each link's 'to_node' is the child
         return [lk.to_node for lk in links]
 
-    def get_all_descendants(self, node_name: str | Node) -> list[str]:
-
-        if isinstance(node_name, Node):
-            node_name = node_name.name
+    def get_all_descendants(self, node) -> list[str]:
 
         self._ensure_cache_valid()
-        if node_name not in self._name_to_idx:
-            return []
-
-        idx = self._name_to_idx[node_name]
-        order, _ = depth_first_order(self._adjacency, idx)
-        # Filter out the starting node
-        order = [x for x in order if x != idx]
-        return [self._nodes_list[x] for x in order]
+        return self._cache_descendants.get(node.name, [])
 
     @staticmethod
     def compare_graphs(g1: NodeGraph, g2: NodeGraph) -> Dict[str, Any]:
@@ -172,6 +162,14 @@ class NodeGraphAnalysis:
         # Sort changed nodes for consistent output
         summary["changed_nodes"].sort()
         return summary
+
+    def build_connectivity(self):
+        connectivity = {
+            "child_node": [node.name for node in self._cache_descendants],
+            "input_node": [node.name for node in self._cache_input_links],
+            "output_node": [node.name for node in self._cache_output_links],
+        }
+        return connectivity
 
     # -------------------------------------------------------------------------
     # Internals
@@ -294,3 +292,12 @@ class NodeGraphAnalysis:
         self._adjacency, self._name_to_idx, self._nodes_list = build_adjacency_matrix(
             self.graph
         )
+        for node in self.graph.nodes:
+            if node.name not in self._name_to_idx:
+                self._cache_descendants[node.name] = []
+
+            idx = self._name_to_idx[node.name]
+            order, _ = depth_first_order(self._adjacency, idx)
+            # Filter out the starting node
+            order = [x for x in order if x != idx]
+            self._cache_descendants[node.name] = [self._nodes_list[x] for x in order]

@@ -1,7 +1,6 @@
 from typing import Dict
 from node_graph.utils import list_to_dict
 from node_graph.node import Node
-from node_graph.socket import NodeSocketNamespace
 import importlib
 
 
@@ -51,10 +50,10 @@ class BaseNodeFactory:
                     self.add_property(**prop)
 
             def create_sockets(self):
-                self.inputs = NodeSocketNamespace._from_dict(
+                self.inputs = BaseClass.InputCollectionClass._from_dict(
                     self._ndata.get("inputs", {}), node=self, pool=BaseClass.SocketPool
                 )
-                self.outputs = NodeSocketNamespace._from_dict(
+                self.outputs = BaseClass.OutputCollectionClass._from_dict(
                     self._ndata.get("outputs", {}), node=self, pool=BaseClass.SocketPool
                 )
 
