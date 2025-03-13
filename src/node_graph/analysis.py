@@ -84,8 +84,8 @@ class NodeGraphAnalysis:
         self._name_to_idx = {}
         self._nodes_list = []
         # Caches
-        self._cache_input_links: Dict[str, List[NodeLink]] = {}
-        self._cache_output_links: Dict[str, List[NodeLink]] = {}
+        self._cache_input_links: Dict[str, List[str]] = {}
+        self._cache_output_links: Dict[str, List[str]] = {}
         self._cache_descendants: Dict[str, Set[str]] = {}
 
     # -------------------------------------------------------------------------
@@ -113,9 +113,9 @@ class NodeGraphAnalysis:
         self._ensure_cache_valid()
         links = self._cache_output_links.get(node.name, [])
         # Each link's 'to_node' is the child
-        return [lk.to_node for lk in links]
+        return [lk for lk in links]
 
-    def get_all_descendants(self, node) -> list[str]:
+    def get_all_descendants(self, node: Node) -> list[str]:
 
         self._ensure_cache_valid()
         return self._cache_descendants.get(node.name, [])
@@ -164,10 +164,11 @@ class NodeGraphAnalysis:
         return summary
 
     def build_connectivity(self):
+        self._ensure_cache_valid()
         connectivity = {
-            "child_node": [node.name for node in self._cache_descendants],
-            "input_node": [node.name for node in self._cache_input_links],
-            "output_node": [node.name for node in self._cache_output_links],
+            "child_node": self._cache_descendants,
+            "input_node": self._cache_input_links,
+            "output_node": self._cache_output_links,
         }
         return connectivity
 
@@ -285,8 +286,8 @@ class NodeGraphAnalysis:
         for link in self.graph.links:
             from_name = link.from_node.name
             to_name = link.to_node.name
-            self._cache_output_links[from_name].append(link)
-            self._cache_input_links[to_name].append(link)
+            self._cache_output_links[from_name].append(to_name)
+            self._cache_input_links[to_name].append(from_name)
 
         # For descendants, do a DFS/BFS from each node
         self._adjacency, self._name_to_idx, self._nodes_list = build_adjacency_matrix(
@@ -300,4 +301,6 @@ class NodeGraphAnalysis:
             order, _ = depth_first_order(self._adjacency, idx)
             # Filter out the starting node
             order = [x for x in order if x != idx]
-            self._cache_descendants[node.name] = [self._nodes_list[x] for x in order]
+            self._cache_descendants[node.name] = [
+                self._nodes_list[x].name for x in order
+            ]

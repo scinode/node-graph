@@ -10,19 +10,19 @@ def test_get_input_output_links(ng_complex):
     out_links_n1 = analysis.get_output_links(ng.nodes.n1)
     assert len(in_links_n1) == 0
     assert len(out_links_n1) == 3
-    assert out_links_n1[0].to_node == ng.nodes.n2
+    assert out_links_n1[0] == ng.nodes.n2.name
 
     in_links_n3 = analysis.get_input_links(ng.nodes.n3)
     out_links_n3 = analysis.get_output_links(ng.nodes.n3)
     assert len(in_links_n3) == 1
-    assert in_links_n3[0].from_node == ng.nodes.n1
+    assert in_links_n3[0] == ng.nodes.n1.name
     assert len(out_links_n3) == 2
-    assert out_links_n3[0].to_node == ng.nodes.n4
+    assert out_links_n3[0] == ng.nodes.n4.name
 
     in_links_n5 = analysis.get_input_links(ng.nodes.n5)
     out_links_n5 = analysis.get_output_links(ng.nodes.n5)
     assert len(in_links_n5) == 2
-    assert in_links_n5[0].from_node == ng.nodes.n3
+    assert in_links_n5[0] == ng.nodes.n3.name
     assert len(out_links_n5) == 0
 
 
@@ -30,22 +30,30 @@ def test_get_direct_children(ng_complex):
     ng = ng_complex
     analysis = NodeGraphAnalysis(ng)
     assert analysis.get_direct_children(ng.nodes.n1) == [
-        ng.nodes.n2,
-        ng.nodes.n3,
-        ng.nodes.n4,
+        ng.nodes.n2.name,
+        ng.nodes.n3.name,
+        ng.nodes.n4.name,
     ]
     assert analysis.get_direct_children(ng.nodes.n2) == []
-    assert analysis.get_direct_children(ng.nodes.n3) == [ng.nodes.n4, ng.nodes.n5]
+    assert analysis.get_direct_children(ng.nodes.n3) == [
+        ng.nodes.n4.name,
+        ng.nodes.n5.name,
+    ]
 
 
 def test_get_all_descendants(ng_complex):
     ng = ng_complex
     analysis = NodeGraphAnalysis(ng)
     desc_n1 = analysis.get_all_descendants(ng.nodes.n1)
-    assert set(desc_n1) == {ng.nodes.n2, ng.nodes.n3, ng.nodes.n4, ng.nodes.n5}
+    assert set(desc_n1) == {
+        ng.nodes.n2.name,
+        ng.nodes.n3.name,
+        ng.nodes.n4.name,
+        ng.nodes.n5.name,
+    }
 
     desc_n3 = analysis.get_all_descendants(ng.nodes.n3)
-    assert set(desc_n3) == {ng.nodes.n4, ng.nodes.n5}
+    assert set(desc_n3) == {ng.nodes.n4.name, ng.nodes.n5.name}
 
     desc_n5 = analysis.get_all_descendants(ng.nodes.n5)
     assert desc_n5 == []

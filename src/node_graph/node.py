@@ -387,6 +387,10 @@ class Node:
                 self.properties[key].value = value
             elif key in self.inputs:
                 self.inputs[key]._set_socket_value(value)
+            elif self.inputs._socket_is_dynamic:
+                # if the socket is dynamic, we can add the input dynamically
+                inp = self.add_input("workgraph.any", key)
+                inp._set_socket_value(value)
             else:
                 raise Exception(
                     "No property named {}. Accept name are {}".format(
