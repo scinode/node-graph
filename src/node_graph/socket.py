@@ -3,7 +3,6 @@ from __future__ import annotations
 from node_graph.property import NodeProperty
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
-from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 
 
 if TYPE_CHECKING:
@@ -189,7 +188,6 @@ class NodeSocket(BaseSocket):
         )
         # Add property
         if data.get("property"):
-            print("property: ", data["property"])
             socket.add_property(data["property"].pop("identifier"), **data["property"])
         return socket
 
@@ -237,7 +235,6 @@ class NodeSocketNamespace(BaseSocket):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
-    _type_mapping: dict = node_graph_type_mapping
 
     _RESERVED_NAMES = {
         "_RESERVED_NAMES",
@@ -260,7 +257,7 @@ class NodeSocketNamespace(BaseSocket):
         metadata: Optional[dict] = None,
         sockets: Optional[Dict[str, object]] = None,
         pool: Optional[object] = None,
-        entry_point: Optional[str] = "node_graph.socket",
+        entry_point: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         # Initialize NodeSocket first
@@ -279,7 +276,7 @@ class NodeSocketNamespace(BaseSocket):
         # one can specify the pool or entry_point to get the pool
         if pool is not None:
             self._SocketPool = pool
-        elif entry_point is not None:
+        elif entry_point is not None and self._SocketPool is None:
             self._SocketPool = EntryPointPool(entry_point_group=entry_point)
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
         if sockets is not None:
@@ -305,7 +302,7 @@ class NodeSocketNamespace(BaseSocket):
         **kwargs: Any,
     ) -> object:
 
-        identifier = identifier or self._type_mapping["default"]
+        identifier = identifier or self._SocketPool["any"]
         check_identifier_name(identifier, self._SocketPool)
 
         _names = name.split(".", 1)
@@ -316,7 +313,7 @@ class NodeSocketNamespace(BaseSocket):
                 if self._socket_is_dynamic:
                     # the sub-socket should also be dynamic
                     self._new(
-                        self._type_mapping["namespace"],
+                        self._SocketPool["namespace"],
                         namespace,
                         metadata={"dynamic": True},
                     )
@@ -337,6 +334,7 @@ class NodeSocketNamespace(BaseSocket):
                 parent=self,
                 link_limit=link_limit,
                 metadata=metadata,
+                pool=self._SocketPool,
                 **kwargs,
             )
             self._append(item)
@@ -371,12 +369,12 @@ class NodeSocketNamespace(BaseSocket):
                     if self._socket_is_dynamic:
                         if isinstance(val, dict):
                             self._new(
-                                self._type_mapping["namespace"],
+                                self._SocketPool["namespace"],
                                 key,
                                 metadata={"dynamic": True},
                             )
                         else:
-                            self._new(self._type_mapping["default"], key)
+                            self._new(self._SocketPool["any"], key)
                     else:
                         raise ValueError(
                             f"Socket: {key} does not exist in the namespace socket: {self._name}."

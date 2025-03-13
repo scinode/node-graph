@@ -30,9 +30,8 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         and the various decorator arguments.
         """
         from node_graph.decorator import generate_input_sockets
-        from node_graph.node import Node
 
-        node_class = node_class or Node
+        node_class = node_class or cls.default_base_class
 
         identifier = identifier or func.__name__
         inputs = inputs or []
