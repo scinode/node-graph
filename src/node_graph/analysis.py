@@ -38,34 +38,6 @@ def build_adjacency_matrix(graph: NodeGraph):
     return adjacency, name_to_index, nodes
 
 
-def get_descendants_csgraph(graph: NodeGraph, root_node_name: str) -> list[str]:
-    """
-    Return all descendants (downstream) of 'root_node_name'
-    using SciPy csgraph depth-first search.
-    """
-    adjacency, name_to_index, nodes_list = build_adjacency_matrix(graph)
-    if root_node_name not in name_to_index:
-        return []  # Or raise an error
-
-    start_index = name_to_index[root_node_name]
-
-    # depth_first_order returns (node_order, predecessors)
-    # node_order is the list of visited nodes in DFS order,
-    # starting from 'start_index'.
-    node_order, _ = depth_first_order(adjacency, start_index)
-
-    # 'node_order' includes the starting node as well,
-    # so if you want *only* descendants (excluding the root):
-    # skip node_order[0], or filter it out if it’s anywhere else in the array
-    # depending on your BFS/DFS flavor
-    # For safety, we can do:
-    node_order = [idx for idx in node_order if idx != start_index]
-
-    # Convert back to node names
-    descendants = [nodes_list[idx].name for idx in node_order]
-    return descendants
-
-
 class NodeGraphAnalysis:
     """
     Utility to analyze a NodeGraph, with caching to handle large graphs:

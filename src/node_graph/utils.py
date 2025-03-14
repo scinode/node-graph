@@ -139,25 +139,3 @@ def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]
             if value is not None:
                 values[key] = value
     return values
-
-
-# change the flatten dict to a nested dict
-def organized_socket_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a flat dictionary to a nested dictionary.
-    data = {"name": "inputs",
-            "identifier": "node_graph.namespace",
-            "sockets": {
-                "a": {"name": "a",},
-                "b": {"name": "b", "identifier": "node_graph.namespace"},
-                "b.c": {"name": "b.c", "identifier": "node_graph.namespace"},
-                }
-            }
-    """
-    nested_data = data
-    for key, value in data["sockets"].items():
-        parts = key.split(".")
-        current = nested_data
-        for part in parts[:-1]:
-            current = current["sockets"][part].setdefault("sockets", {})
-        current[parts[-1]] = value
-    data["sockets"] = nested_data
