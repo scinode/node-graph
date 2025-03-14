@@ -35,8 +35,12 @@ class Node:
     # This is the entry point for the socket and property pool
     SocketPool = SocketPool
     PropertyPool = PropertyPool
+    InputCollectionClass = NodeSocketNamespace
+    OutputCollectionClass = NodeSocketNamespace
+    PropertyCollectionClass = PropertyCollection
 
     identifier: str = "Node"
+    default_name: str = None
     node_type: str = "Normal"
     parent_uuid: str = ""
     catalog: str = "Node"
@@ -52,9 +56,6 @@ class Node:
         parent: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         executor: Optional[NodeExecutor] = None,
-        property_collection_class: Any = PropertyCollection,
-        input_collection_class: Any = NodeSocketNamespace,
-        output_collection_class: Any = NodeSocketNamespace,
     ) -> None:
         """Initialize the Node.
 
@@ -62,18 +63,17 @@ class Node:
             name (str, optional): Name of the node. Defaults to None.
             uuid (str, optional): UUID of the node. Defaults to None.
             parent (Any, optional): Parent node. Defaults to None.
-            property_collection_class (Any, optional): Property collection class. Defaults to PropertyCollection.
-            input_collection_class (Any, optional): Input socket collection class. Defaults to InputSocketCollection.
-            output_collection_class (Any, optional): Output socket collection class. Defaults to NodeSocketNamespace.
         """
         self.name = name or self.identifier
         self.uuid = uuid or str(uuid1())
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.properties = property_collection_class(self, pool=self.PropertyPool)
-        self.inputs = input_collection_class("inputs", node=self, pool=self.SocketPool)
-        self.outputs = output_collection_class(
+        self.properties = self.PropertyCollectionClass(self, pool=self.PropertyPool)
+        self.inputs = self.InputCollectionClass(
+            "inputs", node=self, pool=self.SocketPool
+        )
+        self.outputs = self.OutputCollectionClass(
             "outputs", node=self, pool=self.SocketPool
         )
         self.state = "CREATED"
@@ -88,6 +88,10 @@ class Node:
             settings={"minmap": False},
             style={"width": "80%", "height": "600px"},
         )
+
+    @classmethod
+    def generate_name(cls) -> str:
+        cls.get_executor()["callable_name"]
 
     def add_input(self, identifier: str, name: str, **kwargs) -> NodeSocket:
         """Add an input socket to this node."""
@@ -137,8 +141,8 @@ class Node:
         else:
             metadata = self.get_metadata()
             properties = self.export_properties()
-            input_sockets = self.export_input_sockets()
-            output_sockets = self.export_output_sockets()
+            input_sockets = self.inputs._to_dict()
+            output_sockets = self.outputs._to_dict()
             executor = self.export_executor_to_dict()
             data = {
                 "identifier": self.identifier,
@@ -225,22 +229,6 @@ class Node:
             properties[prop.name] = prop.to_dict()
         return properties
 
-    def export_input_sockets(self) -> List[Dict[str, Any]]:
-        """Export input sockets to a dictionary."""
-        # save all relations using links
-        inputs = {}
-        for input in self.inputs:
-            inputs[input._name] = input._to_dict()
-        return inputs
-
-    def export_output_sockets(self) -> List[Dict[str, Any]]:
-        """Export output sockets to a dictionary."""
-        # save all relations using links
-        outputs = {}
-        for output in self.outputs:
-            outputs[output._name] = output._to_dict()
-        return outputs
-
     def export_executor_to_dict(self) -> Optional[Dict[str, Union[str, bool]]]:
         """Export executor to a dictionary.
         Three kinds of executor:
@@ -297,23 +285,8 @@ class Node:
         for prop in data["properties"].values():
             self.properties[prop["name"]].value = prop["value"]
         # inputs
-        for input in data["inputs"].values():
-            if "sockets" in input:
-                input_values = collect_values_inside_namespace(input)
-                self.inputs[input["name"]]._set_socket_value(input_values)
-            if "property" in input:
-                self.inputs[input["name"]].property.value = input["property"]["value"]
-                if input["property"].get("default", None):
-                    self.inputs[input["name"]].property.default = input["property"][
-                        "default"
-                    ]
-        # print("inputs: ", data.get("inputs", None))
-        for input in data.get("inputs", {}).values():
-            self.inputs[input["name"]].uuid = input.get("uuid", None)
-        # outputs
-        # print("outputs: ", data.get("outputs", None))
-        for output in data.get("outputs", {}).values():
-            self.outputs[output["name"]].uuid = output.get("uuid", None)
+        input_values = collect_values_inside_namespace(data["inputs"])
+        self.inputs._set_socket_value(input_values)
 
     @classmethod
     def load(cls, uuid: str) -> None:
@@ -372,8 +345,8 @@ class Node:
         # then overwrite the sockets
         for i in range(len(self.properties)):
             node.properties[i].value = self.properties[i].value
-        node.inputs = self.inputs._copy(parent=node)
-        node.outputs = self.outputs._copy(parent=node)
+        node.inputs = self.inputs._copy(node=node)
+        node.outputs = self.outputs._copy(node=node)
         return node
 
     def get_executor(self) -> Optional[NodeExecutor]:
@@ -414,6 +387,10 @@ class Node:
                 self.properties[key].value = value
             elif key in self.inputs:
                 self.inputs[key]._set_socket_value(value)
+            elif self.inputs._socket_is_dynamic:
+                # if the socket is dynamic, we can add the input dynamically
+                inp = self.add_input(self.SocketPool.any, key)
+                inp._set_socket_value(value)
             else:
                 raise Exception(
                     "No property named {}. Accept name are {}".format(
@@ -442,8 +419,12 @@ class Node:
 
         for key in ("properties", "executor", "node_class", "process"):
             tdata.pop(key, None)
-        for input in tdata["inputs"].values():
+        inputs = []
+        for input in tdata["inputs"]["sockets"].values():
             input.pop("property", None)
+            inputs.append(input)
+
+        tdata["inputs"] = inputs
 
         tdata["label"] = tdata["identifier"]
 

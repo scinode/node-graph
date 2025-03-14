@@ -267,10 +267,14 @@ class Collection:
         """
         return name in self._items
 
-    def _generate_item_name(self, name) -> int:
+    def _generate_item_name(self, item_class) -> int:
         """Generate a new name for the item based on the given name and
         the number of items in the collection.
         """
+        if item_class.default_name is None:
+            name = item_class.identifier.split(".")[-1]
+        else:
+            name = item_class.default_name
         index = len(self._items) + 1
         new_name = f"{name}{index}"
         while new_name in self._items:
@@ -447,7 +451,7 @@ class NodeCollection(Collection):
         ItemClass = get_item_class(
             identifier, self.pool, Node, BaseNodeFactory, inputs=kwargs
         )
-        name = name or self._generate_item_name(ItemClass.identifier.split(".")[-1])
+        name = name or self._generate_item_name(ItemClass)
         node = ItemClass(
             name=name,
             uuid=uuid,
@@ -464,9 +468,8 @@ class NodeCollection(Collection):
 
     def _copy(self, parent: Optional[object] = None) -> object:
         coll = self.__class__(parent=parent)
-        coll._items = {
-            key: item.copy(parent=parent) for key, item in self._items.items()
-        }
+        for key, item in self._items.items():
+            coll._append(item.copy(parent=parent))
         return coll
 
     def __repr__(self) -> str:

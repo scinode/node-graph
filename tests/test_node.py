@@ -48,6 +48,13 @@ def test_set_link_as_input():
     assert add2.inputs["x"].property.value is None
 
 
+def test_set_non_exit_input_for_dynamic_input():
+    node = Node()
+    node.inputs._socket_is_dynamic = True
+    node.set({"x": 1})
+    assert node.inputs.x.value == 1
+
+
 def test_set_property():
 
     ng = NodeGraph(name="test_set_property")
@@ -126,3 +133,26 @@ def test_nodegraph_node():
     assert len(ng.nodes.sub_ng.nodes) == 2
     assert len(ng.nodes.sub_ng.links) == 1
     assert "add1" in ng.nodes.sub_ng.nodes
+    # check intpus
+    assert "add1" in ng.nodes.sub_ng.inputs
+    assert "add1.x" in ng.nodes.sub_ng.inputs
+    assert "add1.result" in ng.nodes.sub_ng.outputs
+    assert set(ng.nodes.sub_ng.inputs._get_all_keys()) == {
+        "add1",
+        "add2",
+        "_wait",
+        "add1.x",
+        "add1.y",
+        "add2.x",
+        "add2.y",
+    }
+    assert set(ng.nodes.sub_ng.outputs._get_all_keys()) == {
+        "add1",
+        "add2",
+        "_outputs",
+        "_wait",
+        "add1._outputs",
+        "add1.result",
+        "add2._outputs",
+        "add2.result",
+    }

@@ -5,6 +5,7 @@ from node_graph.executor import NodeExecutor
 from node_graph.node import Node
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
+from node_graph.utils import list_to_dict
 
 
 def inspect_function(
@@ -86,7 +87,11 @@ def generate_input_sockets(
                 {
                     "identifier": type_mapping.get(arg[1], type_mapping["default"]),
                     "name": arg[0],
-                    "metadata": {"arg_type": "args"},
+                    "metadata": {
+                        "arg_type": "args",
+                        "required": True,
+                        "is_function_input": True,
+                    },
                 }
             )
     for name, kwarg in kwargs.items():
@@ -95,11 +100,15 @@ def generate_input_sockets(
             input = {
                 "identifier": identifier,
                 "name": name,
-                "metadata": {"arg_type": "kwargs", "required": True},
-                "property_data": {"identifier": identifier},
+                "metadata": {
+                    "arg_type": "kwargs",
+                    "required": True,
+                    "is_function_input": True,
+                },
+                "property": {"identifier": identifier},
             }
             if kwarg.get("has_default", False):
-                input["property_data"]["default"] = kwarg["default"]
+                input["property"]["default"] = kwarg["default"]
                 input["metadata"]["required"] = False
             inputs.append(input)
     # if var_args in input_names, set the link_limit to 1e6 and the identifier to namespace
@@ -124,7 +133,7 @@ def generate_input_sockets(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_args,
-                    "metadata": {"arg_type": "var_args"},
+                    "metadata": {"arg_type": "var_args", "is_function_input": True},
                     "link_limit": 1e6,
                 }
             )
@@ -149,11 +158,21 @@ def generate_input_sockets(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_kwargs,
-                    "metadata": {"arg_type": "var_kwargs", "dynamic": True},
+                    "metadata": {
+                        "arg_type": "var_kwargs",
+                        "dynamic": True,
+                        "is_function_input": True,
+                    },
                     "link_limit": 1e6,
                 }
             )
-    return inputs
+    final_inputs = {
+        "name": "inputs",
+        "identifier": "node_graph.namespace",
+        "sockets": list_to_dict(inputs),
+        "metadata": {"dynamic": var_kwargs is not None},
+    }
+    return final_inputs
 
 
 def build_node_from_callable(
@@ -281,7 +300,7 @@ class NodeDecoratorCollection:
     """Collection of node decorators."""
 
     node: Callable[..., Any] = staticmethod(decorator_node)
-    group: Callable[..., Any] = staticmethod(decorator_graph_builder)
+    graph_builder: Callable[..., Any] = staticmethod(decorator_graph_builder)
 
     # Alias '@node' to '@node.node'.
     def __call__(self, *args, **kwargs):

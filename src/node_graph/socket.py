@@ -3,7 +3,6 @@ from __future__ import annotations
 from node_graph.property import NodeProperty
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
-from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 
 
 if TYPE_CHECKING:
@@ -32,6 +31,7 @@ class BaseSocket:
         parent: Optional["NodeSocketNamespace"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
+        **kwargs: Any,
     ) -> None:
         """Initialize an instance of NodeSocket.
 
@@ -109,7 +109,8 @@ class NodeSocket(BaseSocket):
         parent: Optional["NodeSocketNamespace"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
-        property_data: Optional[Dict[str, Any]] = None,
+        property: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> None:
         """Initialize an instance of NodeSocket.
 
@@ -126,15 +127,15 @@ class NodeSocket(BaseSocket):
             parent=parent,
             link_limit=link_limit,
             metadata=metadata,
+            **kwargs,
         )
         # Conditionally add a property if property_identifier is provided
         self.property: Optional[NodeProperty] = None
         if self._socket_property_identifier:
-            property_data = property_data or {}
-            property_data.pop("identifier", None)
-            self.add_property(
-                self._socket_property_identifier, name, **(property_data or {})
-            )
+            property = property or {}
+            property["identifier"] = self._socket_property_identifier
+            property["name"] = name
+            self.add_property(**(property or {}))
 
     def add_property(
         self, identifier: str, name: Optional[str] = None, **kwargs: Any
@@ -174,6 +175,19 @@ class NodeSocket(BaseSocket):
         else:
             data["property"] = None
         return data
+
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> None:
+        # Create a new instance of this class
+        socket = cls(
+            name=data["name"],
+            link_limit=data.get("link_limit", 1),
+            metadata=data.get("metadata", {}),
+        )
+        # Add property
+        if data.get("property"):
+            socket.add_property(**data["property"])
+        return socket
 
     def _copy(
         self, node: Optional["Node"] = None, parent: Optional["Node"] = None
@@ -219,7 +233,6 @@ class NodeSocketNamespace(BaseSocket):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
-    _type_mapping: dict = node_graph_type_mapping
 
     _RESERVED_NAMES = {
         "_RESERVED_NAMES",
@@ -242,7 +255,8 @@ class NodeSocketNamespace(BaseSocket):
         metadata: Optional[dict] = None,
         sockets: Optional[Dict[str, object]] = None,
         pool: Optional[object] = None,
-        entry_point: Optional[str] = "node_graph.socket",
+        entry_point: Optional[str] = None,
+        **kwargs: Any,
     ) -> None:
         # Initialize NodeSocket first
         BaseSocket.__init__(
@@ -252,6 +266,7 @@ class NodeSocketNamespace(BaseSocket):
             parent=parent,
             link_limit=link_limit,
             metadata=metadata,
+            **kwargs,
         )
         #
         self._sockets: Dict[str, object] = {}
@@ -259,14 +274,14 @@ class NodeSocketNamespace(BaseSocket):
         # one can specify the pool or entry_point to get the pool
         if pool is not None:
             self._SocketPool = pool
-        elif entry_point is not None:
+        elif entry_point is not None and self._SocketPool is None:
             self._SocketPool = EntryPointPool(entry_point_group=entry_point)
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
         if sockets is not None:
             for key, socket in sockets.items():
                 kwargs = {}
-                if "property_data" in socket:
-                    kwargs["property_data"] = socket["property_data"]
+                if "property" in socket:
+                    kwargs["property"] = socket["property"]
                 if "sockets" in socket:
                     kwargs["sockets"] = socket["sockets"]
                 self._new(
@@ -285,7 +300,7 @@ class NodeSocketNamespace(BaseSocket):
         **kwargs: Any,
     ) -> object:
 
-        identifier = identifier or self._type_mapping["default"]
+        identifier = identifier or self._SocketPool["any"]
         check_identifier_name(identifier, self._SocketPool)
 
         _names = name.split(".", 1)
@@ -296,7 +311,7 @@ class NodeSocketNamespace(BaseSocket):
                 if self._socket_is_dynamic:
                     # the sub-socket should also be dynamic
                     self._new(
-                        self._type_mapping["namespace"],
+                        self._SocketPool["namespace"],
                         namespace,
                         metadata={"dynamic": True},
                     )
@@ -317,6 +332,7 @@ class NodeSocketNamespace(BaseSocket):
                 parent=self,
                 link_limit=link_limit,
                 metadata=metadata,
+                pool=self._SocketPool,
                 **kwargs,
             )
             self._append(item)
@@ -351,12 +367,12 @@ class NodeSocketNamespace(BaseSocket):
                     if self._socket_is_dynamic:
                         if isinstance(val, dict):
                             self._new(
-                                self._type_mapping["namespace"],
+                                self._SocketPool["namespace"],
                                 key,
                                 metadata={"dynamic": True},
                             )
                         else:
-                            self._new(self._type_mapping["default"], key)
+                            self._new(self._SocketPool["any"], key)
                     else:
                         raise ValueError(
                             f"Socket: {key} does not exist in the namespace socket: {self._name}."
@@ -384,18 +400,43 @@ class NodeSocketNamespace(BaseSocket):
             data["sockets"][item._name] = item._to_dict()
         return data
 
-    def _copy(self, parent: Optional["NodeSocket"] = None) -> "NodeSocketNamespace":
+    @classmethod
+    def _from_dict(
+        cls,
+        data: Dict[str, Any],
+        node: Optional["Node"] = None,
+        parent: Optional["NodeSocket"] = None,
+        pool: Optional[object] = None,
+    ) -> None:
+        # Create a new instance of this class
+        ns = cls(
+            name=data["name"],
+            link_limit=data.get("link_limit", 1),
+            metadata=data.get("metadata", {}),
+            node=node,
+            parent=parent,
+            pool=pool,
+        )
+        # Add nested sockets
+        for item_data in data.get("sockets", {}).values():
+            ns._new(**item_data)
+        return ns
+
+    def _copy(
+        self, node: Optional[Node] = None, parent: Optional[NodeSocket] = None
+    ) -> "NodeSocketNamespace":
         # Copy as parentSocket
         parent = self._parent if parent is None else parent
         ns_copy = self.__class__(
             self._name,
+            node=node,
             parent=parent,
             link_limit=self._link_limit,
             metadata=self._metadata,
         )
         # Copy nested sockets
         for item in self._sockets.values():
-            ns_copy._append(item._copy(parent=parent))
+            ns_copy._append(item._copy(node=node, parent=self))
         return ns_copy
 
     def __iter__(self) -> object:

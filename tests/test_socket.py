@@ -23,7 +23,7 @@ def test_metadata():
         "test",
         metadata={"arg_type": "kwargs", "dynamic": True},
         link_limit=100000,
-        property_data={"default": 1},
+        property={"default": 1},
     )
     assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
     assert socket._link_limit == 100000
@@ -172,6 +172,9 @@ def test_namespace(node_with_namespace_socket):
     # to_dict
     data = n.inputs._to_dict()
     assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
+    # copy
+    inputs = n.inputs._copy()
+    assert inputs._value == n.inputs._value
 
 
 def test_add_namespace_with_socket():
@@ -196,6 +199,8 @@ def test_dynamic_namespace(node_with_namespace_socket):
         n.inputs.non_dynamic._new("node_graph.any", "not_exit.sub")
     # this will create the not exist namespace automatically
     n.inputs.dynamic._new("node_graph.any", "not_exit.sub")
+    assert "not_exit" in n.inputs.dynamic
+    assert "sub" in n.inputs.dynamic.not_exit
 
 
 def test_set_namespace(node_with_namespace_socket):

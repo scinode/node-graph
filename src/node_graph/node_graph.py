@@ -76,10 +76,11 @@ class NodeGraph:
         self.group_inputs = group_inputs or []
         self.group_outputs = group_outputs or []
         self._widget = NodeGraphWidget(parent=self)
+        self._version = 0  # keep track the changes
 
     @property
-    def version(self) -> str:
-        """Retrieve the version dynamically from the package where Graph is implemented."""
+    def platform_version(self) -> str:
+        """Retrieve the platform version dynamically from the package where Graph is implemented."""
         import importlib.metadata
 
         try:
@@ -102,6 +103,7 @@ class NodeGraph:
         elif callable(identifier):
             identifier = build_node_from_callable(identifier)
         node = self.nodes._new(identifier, name, **kwargs)
+        self._version += 1
         return node
 
     def add_link(self, source: NodeSocket | Node, target: NodeSocket) -> NodeLink:
@@ -109,6 +111,7 @@ class NodeGraph:
         if isinstance(source, Node):
             source = source.outputs["_outputs"]
         link = self.links._new(source, target)
+        self._version += 1
         return link
 
     def append_node(self, node: Node) -> None:
@@ -148,7 +151,7 @@ class NodeGraph:
         nodes: Dict[str, Any] = self.export_nodes_to_dict(short=short)
         links: List[Dict[str, Any]] = self.links_to_dict()
         data: Dict[str, Any] = {
-            "version": f"{self.platform}@{self.version}",
+            "platform_version": f"{self.platform}@{self.platform_version}",
             "uuid": self.uuid,
             "name": self.name,
             "state": self.state,
@@ -301,12 +304,12 @@ class NodeGraph:
             NodeGraph: The copied node graph.
         """
         name = f"{self.name}_copy" if name is None else name
-        ng: "NodeGraph" = self.__class__(name=name, uuid=None)
+        ng = self.__class__(name=name, uuid=None)
         ng.nodes = self.nodes._copy(parent=ng)
         for link in self.links:
             ng.add_link(
-                ng.nodes[link.from_node.name].outputs[link.from_socket._name],
-                ng.nodes[link.to_node.name].inputs[link.to_socket._name],
+                ng.nodes[link.from_node.name].outputs[link.from_socket._scoped_name],
+                ng.nodes[link.to_node.name].inputs[link.to_socket._scoped_name],
             )
         return ng
 
