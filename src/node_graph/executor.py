@@ -44,23 +44,26 @@ def serialize_callable(
     callable_name = func.__name__
     if func.__module__ == "__main__" or "." in func.__qualname__.split(".", 1)[-1]:
         mode = "pickled_callable"
-        # Optionally register the module for pickling by value
-        if register_pickle_by_value:
-            module = importlib.import_module(func.__module__)
-            cloudpickle.register_pickle_by_value(module)
-            pickled_data = cloudpickle.dumps(func)
-            # Unregister after pickling
-            cloudpickle.unregister_pickle_by_value(module)
-        else:
-            pickled_data = cloudpickle.dumps(func)
+        pickled_data = cloudpickle.dumps(func)
         # Base64 encode the pickled callable
         pickled_callable = base64.b64encode(pickled_data).decode("utf-8")
         module_path = None
     else:
-        # Global callable (function/class), store its module and name for reference
-        mode = "module"
-        module_path = func.__module__
-        pickled_callable = None
+        # Optionally register the module for pickling by value
+        if register_pickle_by_value:
+            module_path = func.__module__
+            module = importlib.import_module(module_path)
+            cloudpickle.register_pickle_by_value(module)
+            pickled_data = cloudpickle.dumps(func)
+            # Unregister after pickling
+            cloudpickle.unregister_pickle_by_value(module)
+            mode = "pickled_callable"
+            pickled_callable = base64.b64encode(pickled_data).decode("utf-8")
+        else:
+            # Global callable (function/class), store its module and name for reference
+            mode = "module"
+            module_path = func.__module__
+            pickled_callable = None
 
     return {
         "mode": mode,
@@ -159,7 +162,7 @@ class NodeExecutor:
         `module_path` is set. Automatically splits the module_path to extract
         the callable name if `callable_name` is None.
         """
-        if self.module_path is not None:
+        if self.module_path is not None and self.mode is None:
             self.mode = "module"
 
         if self.mode != "module":

@@ -15,7 +15,15 @@ def test_executor_callable():
 
     e = NodeExecutor.from_callable(sqrt)
     assert e.callable_name == "sqrt"
+    assert e.module_path == "math"
     assert e.mode == "module"
+    assert e.pickled_callable is None
+    e.executor(4) == 2
+    e = NodeExecutor.from_callable(sqrt, register_pickle_by_value=True)
+    assert e.callable_name == "sqrt"
+    assert e.module_path == "math"
+    assert e.mode == "pickled_callable"
+    assert e.pickled_callable is not None
     e.executor(4) == 2
 
 
