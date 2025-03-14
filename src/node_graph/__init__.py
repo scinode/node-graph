@@ -4,7 +4,7 @@ from .decorator import node
 from .executor import NodeExecutor
 from .nodes import NodePool
 
-__version__ = "0.1.21"
+__version__ = "0.1.22"
 
 
 __all__ = ["NodeGraph", "Node", "node", "NodeExecutor", "NodePool"]
