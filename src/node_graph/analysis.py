@@ -1,12 +1,14 @@
 from __future__ import annotations
 import numpy as np
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, TYPE_CHECKING
 from node_graph.link import NodeLink
-from node_graph import NodeGraph, Node
+from node_graph import Node
 from node_graph.socket import NodeSocketNamespace
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import depth_first_order
 
+if TYPE_CHECKING:
+    from node_graph import NodeGraph
 # or from scipy.sparse.csgraph import breadth_first_order, connected_components, etc.
 
 
@@ -127,7 +129,7 @@ class NodeGraphAnalysis:
         {
             "added_nodes":    list of node names in g2 but not in g1
             "removed_nodes":  list of node names in g1 but not in g2
-            "changed_nodes":  list of node names that appear in both but differ
+            "modified_nodes":  list of node names that appear in both but differ
         }
 
         "differ" = input links differ OR input socket values differ (no output check).
@@ -135,7 +137,7 @@ class NodeGraphAnalysis:
         summary = {
             "added_nodes": [],
             "removed_nodes": [],
-            "changed_nodes": [],
+            "modified_nodes": [],
         }
 
         # Map by name
@@ -157,10 +159,10 @@ class NodeGraphAnalysis:
             node1 = g1_nodes_by_name[nname]
             node2 = g2_nodes_by_name[nname]
             if NodeGraphAnalysis._node_changed(g1, node1, g2, node2):
-                summary["changed_nodes"].append(nname)
+                summary["modified_nodes"].append(nname)
 
         # Sort changed nodes for consistent output
-        summary["changed_nodes"].sort()
+        summary["modified_nodes"].sort()
         return summary
 
     def build_connectivity(self):

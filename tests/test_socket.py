@@ -199,6 +199,8 @@ def test_dynamic_namespace(node_with_namespace_socket):
         n.inputs.non_dynamic._new("node_graph.any", "not_exit.sub")
     # this will create the not exist namespace automatically
     n.inputs.dynamic._new("node_graph.any", "not_exit.sub")
+    assert "not_exit" in n.inputs.dynamic
+    assert "sub" in n.inputs.dynamic.not_exit
 
 
 def test_set_namespace(node_with_namespace_socket):

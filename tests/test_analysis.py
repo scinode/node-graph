@@ -69,7 +69,7 @@ def test_compare_graphs_no_diff(ng_complex):
     diff = NodeGraphAnalysis.compare_graphs(ng1, ng2)
     assert diff["added_nodes"] == []
     assert diff["removed_nodes"] == []
-    assert diff["changed_nodes"] == []
+    assert diff["modified_nodes"] == []
 
 
 def test_compare_graphs_with_changes(ng_complex, func_with_namespace_socket):
@@ -102,7 +102,7 @@ def test_compare_graphs_with_changes(ng_complex, func_with_namespace_socket):
     # "extra_node" is new
     assert "extra_node" in diff["added_nodes"]
     assert diff["removed_nodes"] == []
-    assert "n3" in diff["changed_nodes"]
-    assert "n4" in diff["changed_nodes"]
+    assert "n3" in diff["modified_nodes"]
+    assert "n4" in diff["modified_nodes"]
     # n1 not changed
-    assert "n1" not in diff["changed_nodes"]
+    assert "n1" not in diff["modified_nodes"]
