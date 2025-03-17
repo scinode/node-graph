@@ -2,7 +2,9 @@ import pytest
 import numpy as np
 from node_graph import NodeGraph
 from node_graph.node import Node
+from node_graph.socket import BaseSocket
 from node_graph.nodes import NodePool
+import operator as op
 
 
 def test_check_identifier():
@@ -241,3 +243,30 @@ def test_keys_order():
     assert node.inputs._get_keys() == ["e", "c", "b"]
     del node.inputs[[0, 2]]
     assert node.inputs._get_keys() == ["c"]
+
+
+@pytest.mark.parametrize(
+    "op, name",
+    (
+        (op.add, "op_add"),
+        (op.sub, "op_sub"),
+        (op.mul, "op_mul"),
+        (op.truediv, "op_truediv"),
+        (op.floordiv, "op_floordiv"),
+        (op.mod, "op_mod"),
+        (op.pow, "op_pow"),
+        (op.lshift, "op_lshift"),
+        (op.rshift, "op_rshift"),
+        (op.and_, "op_and"),
+        (op.or_, "op_or"),
+        (op.xor, "op_xor"),
+    ),
+)
+def test_operation(op, name, decorated_myadd):
+    """Test base type socket.
+    Should raise a error when the input data is not
+    the same type as the socket."""
+
+    result = op(decorated_myadd(1, 2), decorated_myadd(1, 2))
+    assert isinstance(result, BaseSocket)
+    assert name in result._node.name

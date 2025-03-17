@@ -1,4 +1,5 @@
 from __future__ import annotations
+import functools
 from typing import Any, List, Dict, Tuple, Union, Optional, Callable
 import inspect
 from node_graph.executor import NodeExecutor
@@ -6,6 +7,28 @@ from node_graph.node import Node
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
 from node_graph.utils import list_to_dict
+
+
+def set_node_arguments(call_args, call_kwargs, node, NodeCls):
+    input_names = node.inputs._get_keys()
+    for i, value in enumerate(call_args):
+        if i < len(input_names):
+            node.inputs[input_names[i]].value = value
+        else:
+            # Does not support var_args yet
+            raise TypeError(
+                f"Too many positional arguments. expects {len(input_names)} but you supplied {len(call_args)}."
+            )
+    for k, v in call_kwargs.items():
+        if k in node.inputs:
+            node.inputs[k].value = v
+        else:
+            # or treat them as var_kwargs
+            node.inputs._set_socket_value(v)
+    if len(node.outputs) == 3:
+        return node.outputs[0]
+    else:
+        return node.outputs
 
 
 def inspect_function(
@@ -189,19 +212,46 @@ def build_node_from_callable(
 
     # if it already has Node class, return it
     if (
-        hasattr(executor, "NodeCls")
-        and inspect.isclass(executor.NodeCls)
-        and issubclass(executor.NodeCls, Node)
+        hasattr(executor, "_NodeCls")
+        and inspect.isclass(executor._NodeCls)
+        and issubclass(executor._NodeCls, Node)
         or inspect.isclass(executor)
         and issubclass(executor, Node)
     ):
         return executor
-    if inspect.isfunction(executor):
+    if isinstance(executor, str):
+        executor = NodeExecutor(module_path=executor).executor
+    if callable(executor):
         return DecoratedFunctionNodeFactory.from_function(
             executor, inputs=inputs, outputs=outputs
         )
 
     raise ValueError(f"The executor {executor} is not supported.")
+
+
+def _make_wrapper(NodeCls, original_callable):
+    """
+    Common wrapper that, when called, adds a node to the current graph
+    and returns the outputs.
+    """
+
+    @functools.wraps(original_callable)
+    def wrapper(*call_args, **call_kwargs):
+        from node_graph.manager import get_current_graph
+
+        graph = get_current_graph()
+        if graph is None:
+            raise RuntimeError(
+                f"No active Graph available for {original_callable.__name__}."
+            )
+        node = graph.add_node(NodeCls)
+        outputs = set_node_arguments(call_args, call_kwargs, node, NodeCls)
+        return outputs
+
+    # Expose the NodeCls on the wrapper if you want
+    wrapper._NodeCls = NodeCls
+    wrapper._func = original_callable
+    return wrapper
 
 
 def decorator_node(
@@ -213,6 +263,9 @@ def decorator_node(
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
+    After decoration, calling that function `func(x, y, ...)`
+    dynamically creates a node in the current NodeGraph context
+    instead of executing Python code directly.
 
     Attributes:
         indentifier (str): node identifier
@@ -233,8 +286,8 @@ def decorator_node(
             outputs=node_outputs,
             catalog=catalog,
         )
-        func.NodeCls = NodeCls
-        return func
+
+        return _make_wrapper(NodeCls, func)
 
     return decorator
 
@@ -275,25 +328,10 @@ def decorator_graph_builder(
             group_outputs=outputs,
             node_class=GraphBuilderNode,
         )
-        func.NodeCls = NodeCls
-        return func
+
+        return _make_wrapper(NodeCls, func)
 
     return decorator
-
-
-def build_node(
-    executor: Union[Callable, str],
-    inputs: Optional[List[str | dict]] = None,
-    outputs: Optional[List[str | dict]] = None,
-) -> Node:
-    """Build a node from a callable function."""
-    if isinstance(executor, str):
-        executor = NodeExecutor(module_path=executor).executor
-    if callable(executor):
-        return DecoratedFunctionNodeFactory.from_function(
-            func=executor, inputs=inputs, outputs=outputs
-        )
-    raise ValueError("executor must be a callable or a valiate module path.")
 
 
 class NodeDecoratorCollection:

@@ -71,10 +71,10 @@ class NodeLink:
         i = 0
         for link in self.from_socket._links:
             if (
-                link.from_node == self.from_node
-                and link.from_socket == self.from_socket
-                and link.to_node == self.to_node
-                and link.to_socket == self.to_socket
+                link.from_node.name == self.from_node.name
+                and link.from_socket._name == self.from_socket._name
+                and link.to_node.name == self.to_node.name
+                and link.to_socket._name == self.to_socket._name
             ):
                 break
             i += 1
@@ -83,10 +83,10 @@ class NodeLink:
         i = 0
         for link in self.to_socket._links:
             if (
-                link.from_node == self.from_node
-                and link.from_socket == self.from_socket
-                and link.to_node == self.to_node
-                and link.to_socket == self.to_socket
+                link.from_node.name == self.from_node.name
+                and link.from_socket._name == self.from_socket._name
+                and link.to_node.name == self.to_node.name
+                and link.to_socket._name == self.to_socket._name
             ):
                 break
             i += 1

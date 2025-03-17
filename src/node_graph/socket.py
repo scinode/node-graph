@@ -4,10 +4,197 @@ from node_graph.property import NodeProperty
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
 
-
 if TYPE_CHECKING:
     from node_graph.node import Node
     from node_graph.link import NodeLink
+
+
+def op_add(x, y):
+    return x + y
+
+
+def op_sub(x, y):
+    return x - y
+
+
+def op_mul(x, y):
+    return x * y
+
+
+def op_truediv(x, y):
+    return x / y
+
+
+def op_pow(x, y):
+    return x**y
+
+
+def op_mod(x, y):
+    return x % y
+
+
+def op_floordiv(x, y):
+    return x // y
+
+
+def op_and(x, y):
+    return x & y
+
+
+def op_or(x, y):
+    return x | y
+
+
+def op_xor(x, y):
+    return x ^ y
+
+
+def op_lshift(x, y):
+    return x << y
+
+
+def op_rshift(x, y):
+    return x >> y
+
+
+# comparison operations
+def op_lt(x, y):
+    return x < y
+
+
+def op_gt(x, y):
+    return x > y
+
+
+def op_le(x, y):
+    return x <= y
+
+
+def op_ge(x, y):
+    return x >= y
+
+
+def op_eq(x, y):
+    return x == y
+
+
+def op_ne(x, y):
+    return x != y
+
+
+class OperatorSocketMixin:
+    def _create_operator_node(self, op_func, other):
+        """Create a "hidden" operator Node in the WorkGraph,
+        hooking `self` up as 'x' and `other` as 'y'.
+        Return the output socket from that new Node.
+        """
+        from node_graph.decorator import node
+
+        graph = self._node.parent
+        if not graph:
+            raise ValueError("Socket does not belong to a WorkGraph.")
+
+        new_node = graph.nodes._new(
+            node()(op_func)._NodeCls,
+            x=self,
+            y=other,
+        )
+        return new_node.outputs.result
+
+    # Arithmetic Operations
+    def __add__(self, other):
+        return self._create_operator_node(op_add, other)
+
+    def __sub__(self, other):
+        return self._create_operator_node(op_sub, other)
+
+    def __mul__(self, other):
+        return self._create_operator_node(op_mul, other)
+
+    def __truediv__(self, other):
+        return self._create_operator_node(op_truediv, other)
+
+    def __floordiv__(self, other):
+        return self._create_operator_node(op_floordiv, other)
+
+    def __mod__(self, other):
+        return self._create_operator_node(op_mod, other)
+
+    def __pow__(self, other):
+        return self._create_operator_node(op_pow, other)
+
+    # Reverse Arithmetic Operations
+    def __radd__(self, other):
+        return self._create_operator_node(op_add, other)
+
+    def __rsub__(self, other):
+        return self._create_operator_node(op_sub, other)
+
+    def __rmul__(self, other):
+        return self._create_operator_node(op_mul, other)
+
+    def __rtruediv__(self, other):
+        return self._create_operator_node(op_truediv, other)
+
+    def __rfloordiv__(self, other):
+        return self._create_operator_node(op_floordiv, other)
+
+    def __rmod__(self, other):
+        return self._create_operator_node(op_mod, other)
+
+    def __rpow__(self, other):
+        return self._create_operator_node(op_pow, other)
+
+    # Comparison Operations
+    def __lt__(self, other):
+        return self._create_operator_node(op_lt, other)
+
+    def __le__(self, other):
+        return self._create_operator_node(op_le, other)
+
+    def __gt__(self, other):
+        return self._create_operator_node(op_gt, other)
+
+    def __ge__(self, other):
+        return self._create_operator_node(op_ge, other)
+
+    def __eq__(self, other):
+        return self._create_operator_node(op_eq, other)
+
+    def __ne__(self, other):
+        return self._create_operator_node(op_ne, other)
+
+    # Bitwise Operations
+    def __and__(self, other):
+        return self._create_operator_node(op_and, other)
+
+    def __or__(self, other):
+        return self._create_operator_node(op_or, other)
+
+    def __xor__(self, other):
+        return self._create_operator_node(op_xor, other)
+
+    def __lshift__(self, other):
+        return self._create_operator_node(op_lshift, other)
+
+    def __rshift__(self, other):
+        return self._create_operator_node(op_rshift, other)
+
+    # Reverse Bitwise Operations
+    def __rand__(self, other):
+        return self._create_operator_node(op_and, other)
+
+    def __ror__(self, other):
+        return self._create_operator_node(op_or, other)
+
+    def __rxor__(self, other):
+        return self._create_operator_node(op_xor, other)
+
+    def __rlshift__(self, other):
+        return self._create_operator_node(op_lshift, other)
+
+    def __rrshift__(self, other):
+        return self._create_operator_node(op_rshift, other)
 
 
 class BaseSocket:
@@ -94,7 +281,7 @@ class BaseSocket:
         return data
 
 
-class NodeSocket(BaseSocket):
+class NodeSocket(BaseSocket, OperatorSocketMixin):
 
     _identifier: str = "NodeSocket"
 

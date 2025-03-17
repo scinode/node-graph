@@ -101,7 +101,10 @@ class NodeGraph:
             identifier = NodeGraphNodeFactory.create_node(identifier)
         # build the task on the fly if the identifier is a callable
         elif callable(identifier):
-            identifier = build_node_from_callable(identifier)
+            if hasattr(identifier, "_NodeCls"):
+                identifier = identifier._NodeCls
+            else:
+                identifier = build_node_from_callable(identifier)
         node = self.nodes._new(identifier, name, **kwargs)
         self._version += 1
         return node

@@ -57,10 +57,10 @@ def get_item_class(
             raise Exception(
                 f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
             )
-    elif isinstance(getattr(identifier, "NodeCls", None), type) and issubclass(
-        identifier.NodeCls, base_class
+    elif isinstance(getattr(identifier, "_NodeCls", None), type) and issubclass(
+        identifier._NodeCls, base_class
     ):
-        ItemClass = identifier.NodeCls
+        ItemClass = identifier._NodeCls
     else:
         raise Exception(
             f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
