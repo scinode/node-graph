@@ -156,3 +156,8 @@ def test_nodegraph_node():
         "add2._outputs",
         "add2.result",
     }
+
+
+def test_execute(decorated_myadd):
+    result = decorated_myadd(1, 2)
+    result = result._node.execute()

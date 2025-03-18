@@ -268,7 +268,6 @@ def test_operation(op, name, decorated_myadd):
     the same type as the socket."""
     socket1 = decorated_myadd(1, 2)
     socket2 = decorated_myadd(1, 2)
-    print("socket1", socket1)
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name

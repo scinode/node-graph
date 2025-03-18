@@ -353,6 +353,26 @@ class Node:
         """Get the default executor."""
         return self._executor
 
+    def execute(self):
+        """Execute the node."""
+        executor = NodeExecutor(**self.get_executor()).executor
+        # the imported executor could be a wrapped function
+        if hasattr(executor, "_NodeCls") and hasattr(executor, "_func"):
+            executor = getattr(executor, "_func")
+        inputs = self.inputs._value
+        args = [inputs[arg] for arg in self.args_data["args"]]
+        kwargs = {key: inputs[key] for key in self.args_data["kwargs"]}
+        var_kwargs = (
+            inputs[self.args_data["var_kwargs"]]
+            if self.args_data["var_kwargs"]
+            else None
+        )
+        if var_kwargs is None:
+            result = executor(*args, **kwargs)
+        else:
+            result = executor(*args, **kwargs, **var_kwargs)
+        return result
+
     def get_results(self) -> None:
         """Item data from database"""
 
