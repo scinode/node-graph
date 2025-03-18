@@ -69,7 +69,7 @@ class OperatorSocketMixin:
 
         return node
 
-    def _create_operator_node(self, op_func, other):
+    def _create_operator_node(self, op_func, x, y):
         """Create a "hidden" operator Node in the WorkGraph,
         hooking `self` up as 'x' and `other` as 'y'.
         Return the output socket from that new Node.
@@ -81,73 +81,73 @@ class OperatorSocketMixin:
 
         new_node = graph.nodes._new(
             self._decorator()(op_func)._NodeCls,
-            x=self,
-            y=other,
+            x=x,
+            y=y,
         )
         return new_node.outputs.result
 
     # Arithmetic Operations
     def __add__(self, other):
-        return self._create_operator_node(op_add, other)
+        return self._create_operator_node(op_add, self, other)
 
     def __sub__(self, other):
-        return self._create_operator_node(op_sub, other)
+        return self._create_operator_node(op_sub, self, other)
 
     def __mul__(self, other):
-        return self._create_operator_node(op_mul, other)
+        return self._create_operator_node(op_mul, self, other)
 
     def __truediv__(self, other):
-        return self._create_operator_node(op_truediv, other)
+        return self._create_operator_node(op_truediv, self, other)
 
     def __floordiv__(self, other):
-        return self._create_operator_node(op_floordiv, other)
+        return self._create_operator_node(op_floordiv, self, other)
 
     def __mod__(self, other):
-        return self._create_operator_node(op_mod, other)
+        return self._create_operator_node(op_mod, self, other)
 
     def __pow__(self, other):
-        return self._create_operator_node(op_pow, other)
+        return self._create_operator_node(op_pow, self, other)
 
     # Reverse Arithmetic Operations
     def __radd__(self, other):
-        return self._create_operator_node(op_add, other)
+        return self._create_operator_node(op_add, other, self)
 
     def __rsub__(self, other):
-        return self._create_operator_node(op_sub, other)
+        return self._create_operator_node(op_sub, other, self)
 
     def __rmul__(self, other):
-        return self._create_operator_node(op_mul, other)
+        return self._create_operator_node(op_mul, other, self)
 
     def __rtruediv__(self, other):
-        return self._create_operator_node(op_truediv, other)
+        return self._create_operator_node(op_truediv, other, self)
 
     def __rfloordiv__(self, other):
-        return self._create_operator_node(op_floordiv, other)
+        return self._create_operator_node(op_floordiv, other, self)
 
     def __rmod__(self, other):
-        return self._create_operator_node(op_mod, other)
+        return self._create_operator_node(op_mod, other, self)
 
     def __rpow__(self, other):
-        return self._create_operator_node(op_pow, other)
+        return self._create_operator_node(op_pow, other, self)
 
     # Comparison Operations
     def __lt__(self, other):
-        return self._create_operator_node(op_lt, other)
+        return self._create_operator_node(op_lt, self, other)
 
     def __le__(self, other):
-        return self._create_operator_node(op_le, other)
+        return self._create_operator_node(op_le, self, other)
 
     def __gt__(self, other):
-        return self._create_operator_node(op_gt, other)
+        return self._create_operator_node(op_gt, self, other)
 
     def __ge__(self, other):
-        return self._create_operator_node(op_ge, other)
+        return self._create_operator_node(op_ge, self, other)
 
     def __eq__(self, other):
-        return self._create_operator_node(op_eq, other)
+        return self._create_operator_node(op_eq, self, other)
 
     def __ne__(self, other):
-        return self._create_operator_node(op_ne, other)
+        return self._create_operator_node(op_ne, self, other)
 
 
 class BaseSocket:
