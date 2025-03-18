@@ -246,31 +246,40 @@ def test_keys_order():
 
 
 @pytest.mark.parametrize(
-    "op, name",
+    "op, name, ref_result",
     (
-        (op.add, "op_add"),
-        (op.sub, "op_sub"),
-        (op.mul, "op_mul"),
-        (op.truediv, "op_truediv"),
-        (op.floordiv, "op_floordiv"),
-        (op.mod, "op_mod"),
-        (op.pow, "op_pow"),
-        (op.lshift, "op_lshift"),
-        (op.rshift, "op_rshift"),
-        (op.and_, "op_and"),
-        (op.or_, "op_or"),
-        (op.xor, "op_xor"),
+        (op.add, "op_add", 6),
+        (op.sub, "op_sub", 2),
+        (op.mul, "op_mul", 8),
+        (op.truediv, "op_truediv", 2),
+        (op.floordiv, "op_floordiv", 2),
+        (op.mod, "op_mod", 0),
+        (op.pow, "op_pow", 16),
+        (op.lt, "op_lt", False),
+        (op.gt, "op_gt", True),
+        (op.le, "op_le", False),
+        (op.ge, "op_ge", True),
+        (op.eq, "op_eq", False),
+        (op.ne, "op_ne", True),
     ),
 )
-def test_operation(op, name, decorated_myadd):
+def test_operation(op, name, ref_result, decorated_myadd):
     """Test base type socket.
     Should raise a error when the input data is not
     the same type as the socket."""
-    socket1 = decorated_myadd(1, 2)
-    socket2 = decorated_myadd(1, 2)
+    socket1 = decorated_myadd(2, 2)
+    socket2 = decorated_myadd(1, 1)
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
+    result._node.set({"x": 4, "y": 2})
+    result = result._node.execute()
+    assert result == ref_result
+    # test with non-socket value
+    result = op(socket1, 2)
+    result._node.set({"x": 4, "y": 2})
+    result = result._node.execute()
+    assert result == ref_result
 
 
 def test_unpacking():

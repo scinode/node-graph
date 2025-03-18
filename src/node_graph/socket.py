@@ -37,26 +37,6 @@ def op_floordiv(x, y):
     return x // y
 
 
-def op_and(x, y):
-    return x & y
-
-
-def op_or(x, y):
-    return x | y
-
-
-def op_xor(x, y):
-    return x ^ y
-
-
-def op_lshift(x, y):
-    return x << y
-
-
-def op_rshift(x, y):
-    return x >> y
-
-
 # comparison operations
 def op_lt(x, y):
     return x < y
@@ -168,38 +148,6 @@ class OperatorSocketMixin:
 
     def __ne__(self, other):
         return self._create_operator_node(op_ne, other)
-
-    # Bitwise Operations
-    def __and__(self, other):
-        return self._create_operator_node(op_and, other)
-
-    def __or__(self, other):
-        return self._create_operator_node(op_or, other)
-
-    def __xor__(self, other):
-        return self._create_operator_node(op_xor, other)
-
-    def __lshift__(self, other):
-        return self._create_operator_node(op_lshift, other)
-
-    def __rshift__(self, other):
-        return self._create_operator_node(op_rshift, other)
-
-    # Reverse Bitwise Operations
-    def __rand__(self, other):
-        return self._create_operator_node(op_and, other)
-
-    def __ror__(self, other):
-        return self._create_operator_node(op_or, other)
-
-    def __rxor__(self, other):
-        return self._create_operator_node(op_xor, other)
-
-    def __rlshift__(self, other):
-        return self._create_operator_node(op_lshift, other)
-
-    def __rrshift__(self, other):
-        return self._create_operator_node(op_rshift, other)
 
 
 class BaseSocket:
