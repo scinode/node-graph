@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from node_graph import NodeGraph
 from node_graph.node import Node
-from node_graph.socket import BaseSocket
+from node_graph.socket import BaseSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool
 import operator as op
 
@@ -266,7 +266,17 @@ def test_operation(op, name, decorated_myadd):
     """Test base type socket.
     Should raise a error when the input data is not
     the same type as the socket."""
-
-    result = op(decorated_myadd(1, 2), decorated_myadd(1, 2))
+    socket1 = decorated_myadd(1, 2)
+    socket2 = decorated_myadd(1, 2)
+    print("socket1", socket1)
+    result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
+
+
+def test_unpacking():
+    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    s._value = {"a": 1, "b": 2}
+    a, b = s
+    assert a.value == 1
+    assert b.value == 2

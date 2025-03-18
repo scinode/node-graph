@@ -9,7 +9,7 @@ from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
 from node_graph.utils import list_to_dict
 
 
-def set_node_arguments(call_args, call_kwargs, node, NodeCls):
+def set_node_arguments(call_args, call_kwargs, node):
     input_names = node.inputs._get_keys()
     for i, value in enumerate(call_args):
         if i < len(input_names):
@@ -19,14 +19,12 @@ def set_node_arguments(call_args, call_kwargs, node, NodeCls):
             raise TypeError(
                 f"Too many positional arguments. expects {len(input_names)} but you supplied {len(call_args)}."
             )
-    for k, v in call_kwargs.items():
-        if k in node.inputs:
-            node.inputs[k].value = v
-        else:
-            # or treat them as var_kwargs
-            node.inputs._set_socket_value(v)
-    if len(node.outputs) == 3:
-        return node.outputs[0]
+    node.set(call_kwargs)
+    outputs = [
+        output for output in node.outputs if output._name not in ["_wait", "_outputs"]
+    ]
+    if len(outputs) == 1:
+        return outputs[0]
     else:
         return node.outputs
 
@@ -245,7 +243,7 @@ def _make_wrapper(NodeCls, original_callable):
                 f"No active Graph available for {original_callable.__name__}."
             )
         node = graph.add_node(NodeCls)
-        outputs = set_node_arguments(call_args, call_kwargs, node, NodeCls)
+        outputs = set_node_arguments(call_args, call_kwargs, node)
         return outputs
 
     # Expose the NodeCls on the wrapper if you want

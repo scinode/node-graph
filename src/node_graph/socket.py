@@ -83,19 +83,24 @@ def op_ne(x, y):
 
 
 class OperatorSocketMixin:
+    @property
+    def _decorator(self):
+        from node_graph.decorator import node
+
+        return node
+
     def _create_operator_node(self, op_func, other):
         """Create a "hidden" operator Node in the WorkGraph,
         hooking `self` up as 'x' and `other` as 'y'.
         Return the output socket from that new Node.
         """
-        from node_graph.decorator import node
 
         graph = self._node.parent
         if not graph:
             raise ValueError("Socket does not belong to a WorkGraph.")
 
         new_node = graph.nodes._new(
-            node()(op_func)._NodeCls,
+            self._decorator()(op_func)._NodeCls,
             x=self,
             y=other,
         )
@@ -416,7 +421,7 @@ def check_identifier_name(identifier: str, pool: dict) -> None:
         raise ValueError(msg)
 
 
-class NodeSocketNamespace(BaseSocket):
+class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
@@ -463,6 +468,11 @@ class NodeSocketNamespace(BaseSocket):
             self._SocketPool = pool
         elif entry_point is not None and self._SocketPool is None:
             self._SocketPool = EntryPointPool(entry_point_group=entry_point)
+        else:
+            from node_graph.sockets import SocketPool
+
+            self._SocketPool = SocketPool
+
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
         if sockets is not None:
             for key, socket in sockets.items():
