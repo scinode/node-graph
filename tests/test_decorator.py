@@ -1,5 +1,6 @@
-from node_graph.decorator import build_node
+from node_graph.decorator import build_node_from_callable
 from node_graph.decorator import node
+from node_graph.manager import get_current_graph, set_current_graph
 from node_graph import NodeGraph, NodePool
 from node_graph.nodes.factory.base import BaseNodeFactory
 
@@ -9,12 +10,27 @@ def test_build_node():
     ndata = {
         "executor": "math.sqrt",
     }
-    NodeCls = build_node(**ndata)
+    NodeCls = build_node_from_callable(**ndata)
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
     assert task1.to_dict()["executor"]["mode"] == "module"
     assert len(ng.nodes) == 1
     "x" in ng.nodes[0].get_input_names()
+
+
+def test_get_current_graph():
+
+    g = get_current_graph()
+    assert isinstance(g, NodeGraph)
+
+
+def test_set_current_graph(decorated_myadd):
+    sum = decorated_myadd(1, 2)
+    g = get_current_graph()
+    assert g == sum._node.parent
+    g2 = NodeGraph()
+    set_current_graph(g2)
+    assert get_current_graph() == g2
 
 
 def test_create_node():
@@ -58,7 +74,7 @@ def test_decorator_args() -> None:
     def test(a, /, b, *, c, d=1, **e):
         return 1
 
-    task1 = test.NodeCls()
+    task1 = test._NodeCls()
     assert task1.get_executor()["mode"] == "pickled_callable"
     assert task1.inputs["e"]._link_limit > 1
     assert task1.inputs["e"]._identifier == "node_graph.namespace"
@@ -83,7 +99,7 @@ def test_decorator_parameters() -> None:
     def test(*x, a, b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
-    test1 = test.NodeCls()
+    test1 = test._NodeCls()
     assert test1.inputs["kwargs"]._link_limit == 1e6
     assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
@@ -95,8 +111,20 @@ def test_decorator_parameters() -> None:
     assert "sum" in test1.get_output_names()
     assert "product" in test1.get_output_names()
     # create another node
-    test2 = test.NodeCls()
+    test2 = test._NodeCls()
     assert test2.inputs.b.value == test1.inputs.b.value
+
+
+def test_socket():
+    @node(outputs=[{"name": "sum"}, {"name": "product"}])
+    def func(x: int, y: int = 1):
+        return {"sum": x + y, "product": x * y}
+
+    outputs = func(1, 2)
+    assert "sum" in outputs
+    assert "product" in outputs
+    assert outputs._node.inputs.x._identifier == "node_graph.int"
+    assert outputs._node.inputs.y.property.default == 1
 
 
 def create_test_node_group():
@@ -113,14 +141,6 @@ def create_test_node_group():
     ng.group_inputs = [("add1.x", "x"), ("add2.x", "y")]
     ng.group_outputs = [("add3.result", "result")]
     return ng
-
-
-def test_socket(decorated_myadd):
-    """Test simple math."""
-    n = decorated_myadd.NodeCls()
-    assert n.inputs["x"]._identifier == "node_graph.float"
-    assert n.inputs["y"]._identifier == "node_graph.float"
-    assert n.inputs["t"].property.default == 1
 
 
 def test_decorator_node(ng_decorator):

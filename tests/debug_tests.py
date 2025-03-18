@@ -5,31 +5,21 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def get_pytest_args():
-    """Extract pytest arguments from command-line arguments."""
-    try:
-        # Find where "--" appears in the args (separates args from pytest args)
-        index = sys.argv.index("--")
-        return sys.argv[index + 1 :]  # Extract pytest arguments
-    except ValueError:
-        logging.warning(
-            "No `--` separator found. Running pytest with default arguments."
-        )
-        return []
-
-
 def main():
-    """Run pytest and exit with the correct status code."""
-    pytest_args = get_pytest_args()
+    """Run pytest."""
+    pytest_args = [
+        "tests/test_socket.py::test_operation[lt-op_lt-False]",
+        "-sv",  # Show output and verbose mode
+    ]
 
     logging.info(f"Running tests with arguments: {pytest_args}")
 
     # Run pytest with extracted arguments
     result = pytest.main(pytest_args)
 
-    if result.value != 0:
-        logging.error(f"Tests failed with exit code: {result.value}")
-        sys.exit(result.value)
+    if result != 0:  # `pytest.main()` directly returns an integer exit code
+        logging.error(f"Tests failed with exit code: {result}")
+        sys.exit(result)
     else:
         logging.info("All tests passed successfully.")
 

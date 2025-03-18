@@ -4,10 +4,150 @@ from node_graph.property import NodeProperty
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
 
-
 if TYPE_CHECKING:
     from node_graph.node import Node
     from node_graph.link import NodeLink
+
+
+def op_add(x, y):
+    return x + y
+
+
+def op_sub(x, y):
+    return x - y
+
+
+def op_mul(x, y):
+    return x * y
+
+
+def op_truediv(x, y):
+    return x / y
+
+
+def op_pow(x, y):
+    return x**y
+
+
+def op_mod(x, y):
+    return x % y
+
+
+def op_floordiv(x, y):
+    return x // y
+
+
+# comparison operations
+def op_lt(x, y):
+    return x < y
+
+
+def op_gt(x, y):
+    return x > y
+
+
+def op_le(x, y):
+    return x <= y
+
+
+def op_ge(x, y):
+    return x >= y
+
+
+def op_eq(x, y):
+    return x == y
+
+
+def op_ne(x, y):
+    return x != y
+
+
+class OperatorSocketMixin:
+    @property
+    def _decorator(self):
+        from node_graph.decorator import node
+
+        return node
+
+    def _create_operator_node(self, op_func, x, y):
+        """Create a "hidden" operator Node in the WorkGraph,
+        hooking `self` up as 'x' and `other` as 'y'.
+        Return the output socket from that new Node.
+        """
+
+        graph = self._node.parent
+        if not graph:
+            raise ValueError("Socket does not belong to a WorkGraph.")
+
+        new_node = graph.nodes._new(
+            self._decorator()(op_func)._NodeCls,
+            x=x,
+            y=y,
+        )
+        return new_node.outputs.result
+
+    # Arithmetic Operations
+    def __add__(self, other):
+        return self._create_operator_node(op_add, self, other)
+
+    def __sub__(self, other):
+        return self._create_operator_node(op_sub, self, other)
+
+    def __mul__(self, other):
+        return self._create_operator_node(op_mul, self, other)
+
+    def __truediv__(self, other):
+        return self._create_operator_node(op_truediv, self, other)
+
+    def __floordiv__(self, other):
+        return self._create_operator_node(op_floordiv, self, other)
+
+    def __mod__(self, other):
+        return self._create_operator_node(op_mod, self, other)
+
+    def __pow__(self, other):
+        return self._create_operator_node(op_pow, self, other)
+
+    # Reverse Arithmetic Operations
+    def __radd__(self, other):
+        return self._create_operator_node(op_add, other, self)
+
+    def __rsub__(self, other):
+        return self._create_operator_node(op_sub, other, self)
+
+    def __rmul__(self, other):
+        return self._create_operator_node(op_mul, other, self)
+
+    def __rtruediv__(self, other):
+        return self._create_operator_node(op_truediv, other, self)
+
+    def __rfloordiv__(self, other):
+        return self._create_operator_node(op_floordiv, other, self)
+
+    def __rmod__(self, other):
+        return self._create_operator_node(op_mod, other, self)
+
+    def __rpow__(self, other):
+        return self._create_operator_node(op_pow, other, self)
+
+    # Comparison Operations
+    def __lt__(self, other):
+        return self._create_operator_node(op_lt, self, other)
+
+    def __le__(self, other):
+        return self._create_operator_node(op_le, self, other)
+
+    def __gt__(self, other):
+        return self._create_operator_node(op_gt, self, other)
+
+    def __ge__(self, other):
+        return self._create_operator_node(op_ge, self, other)
+
+    def __eq__(self, other):
+        return self._create_operator_node(op_eq, self, other)
+
+    def __ne__(self, other):
+        return self._create_operator_node(op_ne, self, other)
 
 
 class BaseSocket:
@@ -94,7 +234,7 @@ class BaseSocket:
         return data
 
 
-class NodeSocket(BaseSocket):
+class NodeSocket(BaseSocket, OperatorSocketMixin):
 
     _identifier: str = "NodeSocket"
 
@@ -229,7 +369,7 @@ def check_identifier_name(identifier: str, pool: dict) -> None:
         raise ValueError(msg)
 
 
-class NodeSocketNamespace(BaseSocket):
+class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
@@ -276,6 +416,11 @@ class NodeSocketNamespace(BaseSocket):
             self._SocketPool = pool
         elif entry_point is not None and self._SocketPool is None:
             self._SocketPool = EntryPointPool(entry_point_group=entry_point)
+        else:
+            from node_graph.sockets import SocketPool
+
+            self._SocketPool = SocketPool
+
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
         if sockets is not None:
             for key, socket in sockets.items():

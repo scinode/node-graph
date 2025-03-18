@@ -71,6 +71,7 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         tdata["executor"] = NodeExecutor.from_callable(func).to_dict()
         if node_class:
             tdata["metadata"]["node_class"] = node_class
+        tdata["default_name"] = func.__name__
         additional_data = additional_data or {}
         tdata.update(additional_data)
 

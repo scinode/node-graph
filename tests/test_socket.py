@@ -2,7 +2,9 @@ import pytest
 import numpy as np
 from node_graph import NodeGraph
 from node_graph.node import Node
+from node_graph.socket import BaseSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool
+import operator as op
 
 
 def test_check_identifier():
@@ -241,3 +243,80 @@ def test_keys_order():
     assert node.inputs._get_keys() == ["e", "c", "b"]
     del node.inputs[[0, 2]]
     assert node.inputs._get_keys() == ["c"]
+
+
+@pytest.mark.parametrize(
+    "op, name, ref_result",
+    (
+        (op.add, "op_add", 6),
+        (op.sub, "op_sub", 2),
+        (op.mul, "op_mul", 8),
+        (op.truediv, "op_truediv", 2),
+        (op.floordiv, "op_floordiv", 2),
+        (op.mod, "op_mod", 0),
+        (op.pow, "op_pow", 16),
+    ),
+)
+def test_operation(op, name, ref_result, decorated_myadd):
+    """Test socket operation."""
+    socket1 = decorated_myadd(2, 2)
+    socket2 = decorated_myadd(1, 1)
+    result = op(socket1, socket2)
+    assert isinstance(result, BaseSocket)
+    assert name in result._node.name
+    result._node.set({"x": 4, "y": 2})
+    result = result._node.execute()
+    assert result == ref_result
+    # test with non-socket value
+    result = op(socket1, 2)
+    result._node.inputs.x.value = 4
+    result = result._node.execute()
+    assert result == ref_result
+    # test reverse operation
+    result = op(4, socket2)
+    result._node.inputs.y.value = 2
+    result = result._node.execute()
+    assert result == ref_result
+
+
+@pytest.mark.parametrize(
+    "op, name, ref_result",
+    (
+        (op.lt, "op_lt", False),
+        (op.gt, "op_gt", True),
+        (op.le, "op_le", False),
+        (op.ge, "op_ge", True),
+        (op.eq, "op_eq", False),
+        (op.ne, "op_ne", True),
+    ),
+)
+def test_operation_comparision(op, name, ref_result, decorated_myadd):
+    """Test socket comparision operation."""
+    socket1 = decorated_myadd(2, 2)
+    socket2 = decorated_myadd(1, 1)
+    result = op(socket1, socket2)
+    assert isinstance(result, BaseSocket)
+    assert name in result._node.name
+    result._node.set({"x": 4, "y": 2})
+    result = result._node.execute()
+    assert result == ref_result
+    # test with non-socket value
+    result = op(socket1, 2)
+    result._node.inputs.x.value = 4
+    result = result._node.execute()
+    assert result == ref_result
+    # test reverse operation
+    # note in the comparision operation, there is not reverse operation
+    # so the inputs.x will be always the socket
+    result = op(4, socket2)
+    result._node.inputs.x.value = 2
+    result = result._node.execute()
+    assert result == ref_result
+
+
+def test_unpacking():
+    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    s._value = {"a": 1, "b": 2}
+    a, b = s
+    assert a.value == 1
+    assert b.value == 2

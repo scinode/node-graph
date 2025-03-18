@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_link_another_node_graph(ng, ng_decorator):
     """Test link between two node_graph."""
     try:
@@ -25,3 +28,12 @@ def test_clear(ng):
 def test_repr(ng):
     """Test __repr__ method."""
     assert repr(ng.links) == "LinkCollection({} links)\n".format(len(ng.links))
+
+
+def test_delete_link(ng):
+    """Test delete node."""
+    nlink = len(ng.links)
+    del ng.links[[0, 1]]
+    assert len(ng.links) == nlink - 2
+    with pytest.raises(ValueError, match="Invalid index type for __delitem__: "):
+        del ng.links[sum]

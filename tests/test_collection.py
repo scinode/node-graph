@@ -1,9 +1,11 @@
+import pytest
+from node_graph.collection import Collection
+from node_graph.node import Node
+from node_graph import NodeGraph
+
+
 def test_base_collection():
     """Test base collection."""
-    from node_graph.collection import Collection
-    from node_graph.node import Node
-    from node_graph import NodeGraph
-
     ng = NodeGraph(name="test_base_collection")
     coll = Collection(parent=ng)
     coll.path = "builtins"
@@ -26,3 +28,16 @@ def test_base_collection():
     assert coll._get_by_uuid(node2.uuid) == node2
     # __repr__
     assert repr(coll) == "Collection()\n"
+
+
+def test_delete_items():
+    coll = Collection()
+    coll._items = {"a": 1, "b": 2, "c": 3, "d": 4}
+    del coll[0]
+    assert coll._items == {"b": 2, "c": 3, "d": 4}
+    del coll[[1, 2]]
+    assert coll._items == {"b": 2}
+    with pytest.raises(ValueError, match="Invalid index type for __delitem__: "):
+        del coll[sum]
+    coll._pop(0)
+    assert coll._items == {}
