@@ -23,10 +23,12 @@ def test_metadata():
     socket = n.add_input(
         "node_graph.any",
         "test",
+        graph=ng,
         metadata={"arg_type": "kwargs", "dynamic": True},
         link_limit=100000,
         property={"default": 1},
     )
+    assert socket._graph == ng
     assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
     assert socket._link_limit == 100000
     assert socket.property.default == 1

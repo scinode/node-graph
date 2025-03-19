@@ -73,10 +73,10 @@ class Node:
         self._executor = executor
         self.properties = self.PropertyCollectionClass(self, pool=self.PropertyPool)
         self.inputs = self.InputCollectionClass(
-            "inputs", node=self, pool=self.SocketPool
+            "inputs", node=self, pool=self.SocketPool, graph=self.graph
         )
         self.outputs = self.OutputCollectionClass(
-            "outputs", node=self, pool=self.SocketPool
+            "outputs", node=self, pool=self.SocketPool, graph=self.graph
         )
         self.state = "CREATED"
         self.action = "NONE"

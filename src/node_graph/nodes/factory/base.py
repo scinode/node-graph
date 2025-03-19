@@ -54,13 +54,13 @@ class BaseNodeFactory:
                     self._ndata.get("inputs", {}),
                     node=self,
                     pool=BaseClass.SocketPool,
-                    graph=self.parent,
+                    graph=self.graph,
                 )
                 self.outputs = BaseClass.OutputCollectionClass._from_dict(
                     self._ndata.get("outputs", {}),
                     node=self,
                     pool=BaseClass.SocketPool,
-                    graph=self.parent,
+                    graph=self.graph,
                 )
 
             def get_executor(self):

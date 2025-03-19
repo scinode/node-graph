@@ -544,6 +544,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             )
         else:
             ItemClass = get_item_class(identifier, self._SocketPool, BaseSocket)
+            kwargs.pop("graph", None)
             item = ItemClass(
                 name,
                 node=self._node,
@@ -641,6 +642,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             metadata=data.get("metadata", {}),
             node=node,
             parent=parent,
+            graph=kwargs.pop("graph", None),
             pool=pool,
             **kwargs,
         )
