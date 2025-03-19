@@ -26,6 +26,11 @@ def build_adjacency_matrix(graph: NodeGraph):
     row = []
     col = []
     for link in graph.links:
+        if (
+            link.from_node.name not in name_to_index
+            or link.to_node.name not in name_to_index
+        ):
+            continue
         i = name_to_index[link.from_node.name]
         j = name_to_index[link.to_node.name]
         row.append(i)
@@ -260,6 +265,9 @@ class NodeGraphAnalysis:
         for link in self.graph.links:
             from_name = link.from_node.name
             to_name = link.to_node.name
+            # in case the node does not belong to the graph
+            if from_name not in self.graph.nodes or to_name not in self.graph.nodes:
+                continue
             self._cache_output_links[from_name].append(to_name)
             self._cache_input_links[to_name].append(from_name)
 
