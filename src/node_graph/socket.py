@@ -439,6 +439,40 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     **kwargs,
                 )
 
+    def __getattr__(self, name: str) -> Any:
+        """
+        We check if it is in our _sockets. If so, return that sub-socket.
+        Otherwise, raise AttributeError.
+        """
+        # By explicitly raising an AttributeError, Python will continue its normal flow
+        # We still hardcoded the built-in sockets: _wait and outputs
+        if name.startswith("_") and name not in ["_wait", "_outputs"]:
+            raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
+        try:
+            return self._sockets[name]
+        except KeyError:
+            raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """
+        Override __setattr__ so that doing `namespace_socket.some_name = x`
+        either sets the property or links to another socket, rather than
+        replacing the entire sub-socket object.
+        """
+        # If the attribute name is "private" or reserved, do normal attribute setting
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+
+        self._set_socket_value({name: value})
+
+    def __dir__(self) -> list[str]:
+        """
+        Make tab-completion more friendly:
+        """
+        socket_attrs = set(self._sockets.keys())
+        return socket_attrs
+
     def _new(
         self,
         identifier: Union[str, type] = None,
@@ -635,8 +669,6 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
         if item._name.upper() in self._RESERVED_NAMES:
             raise ValueError(f"Name '{item._name}' is reserved by the namespace.")
         self._sockets[item._name] = item
-        # Set the item as an attribute on the instance
-        setattr(self, item._name, item)
 
     def _get(self, name: str) -> object:
         """Find item by name
