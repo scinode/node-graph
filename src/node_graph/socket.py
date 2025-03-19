@@ -76,7 +76,7 @@ class OperatorSocketMixin:
         Return the output socket from that new Node.
         """
 
-        graph = self._node.parent
+        graph = self._node.graph
         if not graph:
             raise ValueError("Socket does not belong to a WorkGraph.")
 
@@ -150,6 +150,39 @@ class OperatorSocketMixin:
     def __ne__(self, other):
         return self._create_operator_node(op_ne, self, other)
 
+    def __rshift__(self, other: "Node"):
+        """
+        Called when we do: self >> other
+        So we link them or mark that 'other' must wait for 'self'.
+        """
+        other._waiting_on.add(self)
+        return other
+
+    def __lshift__(self, other: "Node"):
+        """
+        Called when we do: self << other
+        Means the same as: other >> self
+        """
+        self._waiting_on.add(other)
+        return other
+
+
+class WaitingOn:
+    """
+    A small helper class that manages 'waiting on' dependencies for a Socket.
+    """
+
+    def __init__(self, parent: "BaseSocket") -> None:
+        self.parent = parent
+        self._waiting_on = set()
+
+    def add(self, socket: "BaseSocket") -> None:
+        if socket._name not in self._waiting_on:
+            self._waiting_on.add(socket._name)
+            self.parent._graph.add_link(
+                socket._node.outputs._wait, self.parent._node.inputs._wait
+            )
+
 
 class BaseSocket:
     """Socket object for input and output sockets of a Node.
@@ -190,6 +223,7 @@ class BaseSocket:
         self._links = []
         self._link_limit = link_limit
         self._metadata = metadata or {}
+        self._waiting_on = WaitingOn(self)
 
     @property
     def _full_name(self) -> str:
@@ -250,6 +284,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         name: str,
         node: Optional["Node"] = None,
         parent: Optional["NodeSocketNamespace"] = None,
+        graph: Optional["NodeGraph"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
         property: Optional[Dict[str, Any]] = None,
@@ -268,6 +303,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
             name=name,
             node=node,
             parent=parent,
+            graph=graph,
             link_limit=link_limit,
             metadata=metadata,
             **kwargs,
@@ -302,7 +338,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
 
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
-            self._node.parent.add_link(value, self)
+            self._node.graph.add_link(value, self)
         elif self.property:
             self.property.value = value
         else:
@@ -512,6 +548,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 name,
                 node=self._node,
                 parent=self,
+                graph=self._graph,
                 link_limit=link_limit,
                 metadata=metadata,
                 pool=self._SocketPool,
@@ -544,7 +581,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         if value is None:
             return
         if isinstance(value, BaseSocket):
-            self._node.parent.add_link(value, self)
+            self._node.graph.add_link(value, self)
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:
@@ -595,6 +632,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         node: Optional["Node"] = None,
         parent: Optional["NodeSocket"] = None,
         pool: Optional[object] = None,
+        **kwargs: Any,
     ) -> None:
         # Create a new instance of this class
         ns = cls(
@@ -604,6 +642,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             node=node,
             parent=parent,
             pool=pool,
+            **kwargs,
         )
         # Add nested sockets
         for item_data in data.get("sockets", {}).values():

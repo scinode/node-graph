@@ -332,7 +332,7 @@ def test_set_socket_value():
 
 def test_set_namespace_attr():
     ng = NodeGraph()
-    n = Node(parent=ng)
+    n = Node(graph=ng)
     s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
     # auto create a sub-socket "x"
     s.x = 1

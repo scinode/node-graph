@@ -27,7 +27,7 @@ def test_get_current_graph():
 def test_set_current_graph(decorated_myadd):
     sum = decorated_myadd(1, 2)
     g = get_current_graph()
-    assert g == sum._node.parent
+    assert g == sum._node.graph
     g2 = NodeGraph()
     set_current_graph(g2)
     assert get_current_graph() == g2
