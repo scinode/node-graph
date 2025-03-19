@@ -76,7 +76,7 @@ class OperatorSocketMixin:
         Return the output socket from that new Node.
         """
 
-        graph = self._node.parent
+        graph = self._node.graph
         if not graph:
             raise ValueError("Socket does not belong to a WorkGraph.")
 
@@ -150,6 +150,39 @@ class OperatorSocketMixin:
     def __ne__(self, other):
         return self._create_operator_node(op_ne, self, other)
 
+    def __rshift__(self, other: "Node"):
+        """
+        Called when we do: self >> other
+        So we link them or mark that 'other' must wait for 'self'.
+        """
+        other._waiting_on.add(self)
+        return other
+
+    def __lshift__(self, other: "Node"):
+        """
+        Called when we do: self << other
+        Means the same as: other >> self
+        """
+        self._waiting_on.add(other)
+        return other
+
+
+class WaitingOn:
+    """
+    A small helper class that manages 'waiting on' dependencies for a Socket.
+    """
+
+    def __init__(self, parent: "BaseSocket") -> None:
+        self.parent = parent
+        self._waiting_on = set()
+
+    def add(self, socket: "BaseSocket") -> None:
+        if socket._name not in self._waiting_on:
+            self._waiting_on.add(socket._name)
+            self.parent._graph.add_link(
+                socket._node.outputs._wait, self.parent._node.inputs._wait
+            )
+
 
 class BaseSocket:
     """Socket object for input and output sockets of a Node.
@@ -190,6 +223,7 @@ class BaseSocket:
         self._links = []
         self._link_limit = link_limit
         self._metadata = metadata or {}
+        self._waiting_on = WaitingOn(self)
 
     @property
     def _full_name(self) -> str:
@@ -250,6 +284,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         name: str,
         node: Optional["Node"] = None,
         parent: Optional["NodeSocketNamespace"] = None,
+        graph: Optional["NodeGraph"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
         property: Optional[Dict[str, Any]] = None,
@@ -268,6 +303,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
             name=name,
             node=node,
             parent=parent,
+            graph=graph,
             link_limit=link_limit,
             metadata=metadata,
             **kwargs,
@@ -302,7 +338,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
 
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
-            self._node.parent.add_link(value, self)
+            self._node.graph.add_link(value, self)
         elif self.property:
             self.property.value = value
         else:
@@ -439,6 +475,40 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     **kwargs,
                 )
 
+    def __getattr__(self, name: str) -> Any:
+        """
+        We check if it is in our _sockets. If so, return that sub-socket.
+        Otherwise, raise AttributeError.
+        """
+        # By explicitly raising an AttributeError, Python will continue its normal flow
+        # We still hardcoded the built-in sockets: _wait and outputs
+        if name.startswith("_") and name not in ["_wait", "_outputs"]:
+            raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
+        try:
+            return self._sockets[name]
+        except KeyError:
+            raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """
+        Override __setattr__ so that doing `namespace_socket.some_name = x`
+        either sets the property or links to another socket, rather than
+        replacing the entire sub-socket object.
+        """
+        # If the attribute name is "private" or reserved, do normal attribute setting
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+
+        self._set_socket_value({name: value})
+
+    def __dir__(self) -> list[str]:
+        """
+        Make tab-completion more friendly:
+        """
+        socket_attrs = set(self._sockets.keys())
+        return socket_attrs
+
     def _new(
         self,
         identifier: Union[str, type] = None,
@@ -474,10 +544,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             )
         else:
             ItemClass = get_item_class(identifier, self._SocketPool, BaseSocket)
+            kwargs.pop("graph", None)
             item = ItemClass(
                 name,
                 node=self._node,
                 parent=self,
+                graph=self._graph,
                 link_limit=link_limit,
                 metadata=metadata,
                 pool=self._SocketPool,
@@ -510,7 +582,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         if value is None:
             return
         if isinstance(value, BaseSocket):
-            self._node.parent.add_link(value, self)
+            self._node.graph.add_link(value, self)
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:
@@ -561,6 +633,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         node: Optional["Node"] = None,
         parent: Optional["NodeSocket"] = None,
         pool: Optional[object] = None,
+        **kwargs: Any,
     ) -> None:
         # Create a new instance of this class
         ns = cls(
@@ -569,7 +642,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             metadata=data.get("metadata", {}),
             node=node,
             parent=parent,
+            graph=kwargs.pop("graph", None),
             pool=pool,
+            **kwargs,
         )
         # Add nested sockets
         for item_data in data.get("sockets", {}).values():
@@ -635,8 +710,6 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
         if item._name.upper() in self._RESERVED_NAMES:
             raise ValueError(f"Name '{item._name}' is reserved by the namespace.")
         self._sockets[item._name] = item
-        # Set the item as an attribute on the instance
-        setattr(self, item._name, item)
 
     def _get(self, name: str) -> object:
         """Find item by name

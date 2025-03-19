@@ -293,7 +293,7 @@ class Collection:
         self._items[item.name] = item
         # Set the item as an attribute on the instance
         setattr(self, item.name, item)
-        setattr(item, "parent", self.parent)
+        setattr(item, "_coll", self)
 
     def _extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
@@ -423,13 +423,13 @@ class NodeCollection(Collection):
 
     def __init__(
         self,
-        parent: Optional[object] = None,
+        graph: Optional[object] = None,
         pool: Optional[object] = None,
         entry_point: Optional[str] = "node_graph.node",
         post_creation_hooks: Optional[List[Callable]] = None,
     ) -> None:
         super().__init__(
-            parent,
+            parent=graph,
             pool=pool,
             entry_point=entry_point,
             post_creation_hooks=post_creation_hooks,
@@ -455,7 +455,7 @@ class NodeCollection(Collection):
         node = ItemClass(
             name=name,
             uuid=uuid,
-            parent=self.parent,
+            graph=self.parent,
             metadata=_metadata,
             executor=_executor,
         )
@@ -466,10 +466,15 @@ class NodeCollection(Collection):
         self._execute_post_creation_hooks(node)
         return node
 
-    def _copy(self, parent: Optional[object] = None) -> object:
-        coll = self.__class__(parent=parent)
+    def _append(self, item: object) -> None:
+        """Append item into this collection."""
+        super()._append(item)
+        setattr(item, "graph", self.parent)
+
+    def _copy(self, graph: Optional[object] = None) -> object:
+        coll = self.__class__(graph=graph)
         for key, item in self._items.items():
-            coll._append(item.copy(parent=parent))
+            coll._append(item.copy(graph=graph))
         return coll
 
     def __repr__(self) -> str:

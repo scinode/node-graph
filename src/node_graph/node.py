@@ -17,7 +17,7 @@ class Node:
     Attributes:
         identifier (str): The identifier is used for loading the Node.
         node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
-        parent_uuid (str): UUID of the node graph this node belongs to.
+        graph_uuid (str): UUID of the node graph this node belongs to.
 
     Examples:
         Add nodes:
@@ -42,7 +42,7 @@ class Node:
     identifier: str = "Node"
     default_name: str = None
     node_type: str = "Normal"
-    parent_uuid: str = ""
+    graph_uuid: str = ""
     catalog: str = "Node"
     group_properties: List[List[str]] = None
     group_inputs: List[List[str]] = None
@@ -53,6 +53,7 @@ class Node:
         self,
         name: Optional[str] = None,
         uuid: Optional[str] = None,
+        graph: Optional[Any] = None,
         parent: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         executor: Optional[NodeExecutor] = None,
@@ -62,19 +63,20 @@ class Node:
         Args:
             name (str, optional): Name of the node. Defaults to None.
             uuid (str, optional): UUID of the node. Defaults to None.
-            parent (Any, optional): Parent node. Defaults to None.
+            graph (Any, optional): The node graph this node belongs to. Defaults to None.
         """
         self.name = name or self.identifier
         self.uuid = uuid or str(uuid1())
+        self.graph = graph
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
         self.properties = self.PropertyCollectionClass(self, pool=self.PropertyPool)
         self.inputs = self.InputCollectionClass(
-            "inputs", node=self, pool=self.SocketPool
+            "inputs", node=self, pool=self.SocketPool, graph=self.graph
         )
         self.outputs = self.OutputCollectionClass(
-            "outputs", node=self, pool=self.SocketPool
+            "outputs", node=self, pool=self.SocketPool, graph=self.graph
         )
         self.state = "CREATED"
         self.action = "NONE"
@@ -178,7 +180,7 @@ class Node:
             {
                 "node_type": self.node_type,
                 "catalog": self.catalog,
-                "parent_uuid": self.parent.uuid if self.parent else self.parent_uuid,
+                "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
                 "group_properties": self.group_properties
                 if self.group_properties
                 else [],
@@ -277,7 +279,7 @@ class Node:
         # read all the metadata
         for key in [
             "parent",
-            "parent_uuid",
+            "graph_uuid",
         ]:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
@@ -317,29 +319,29 @@ class Node:
     def copy(
         self,
         name: Optional[str] = None,
-        parent: Optional[Any] = None,
+        graph: Optional[Any] = None,
     ) -> Any:
         """Copy a node.
 
-        Copy a node to a new node. If parent is None, the node will be copied inside the same parent,
-        otherwise the node will be copied to a new parent.
+        Copy a node to a new node. If graph is None, the node will be copied inside the same graph,
+        otherwise the node will be copied to a new graph.
         The properties, inputs and outputs will be copied.
 
         Args:
             name (str, optional): _description_. Defaults to None.
-            parent (NodeGraph, optional): _description_. Defaults to None.
+            graph (NodeGraph, optional): _description_. Defaults to None.
 
         Returns:
             Node: _description_
         """
-        if parent is not None:
-            # copy node to a new parent, keep the name
+        if graph is not None:
+            # copy node to a new graph, keep the name
             name = self.name if name is None else name
         else:
-            # copy node inside the same parent, change the name
-            parent = self.parent
+            # copy node inside the same graph, change the name
+            graph = self.graph
             name = f"{self.name}_copy" if name is None else name
-        node = self.__class__(name=name, uuid=None, parent=parent)
+        node = self.__class__(name=name, uuid=None, graph=graph)
         # becareful when copy the properties, the value should be copied
         # it will update the sockets, so we copy the properties first
         # then overwrite the sockets
@@ -401,7 +403,7 @@ class Node:
         for key, value in data.items():
             # if the value is a node, link the node's top-level output to the input
             if isinstance(value, Node):
-                self.parent.add_link(value.outputs["_outputs"], self.inputs[key])
+                self.graph.add_link(value.outputs["_outputs"], self.inputs[key])
                 continue
             if key in self.properties:
                 self.properties[key].value = value

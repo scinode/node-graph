@@ -51,10 +51,16 @@ class BaseNodeFactory:
 
             def create_sockets(self):
                 self.inputs = BaseClass.InputCollectionClass._from_dict(
-                    self._ndata.get("inputs", {}), node=self, pool=BaseClass.SocketPool
+                    self._ndata.get("inputs", {}),
+                    node=self,
+                    pool=BaseClass.SocketPool,
+                    graph=self.graph,
                 )
                 self.outputs = BaseClass.OutputCollectionClass._from_dict(
-                    self._ndata.get("outputs", {}), node=self, pool=BaseClass.SocketPool
+                    self._ndata.get("outputs", {}),
+                    node=self,
+                    pool=BaseClass.SocketPool,
+                    graph=self.graph,
                 )
 
             def get_executor(self):

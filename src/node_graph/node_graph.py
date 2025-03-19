@@ -308,7 +308,7 @@ class NodeGraph:
         """
         name = f"{self.name}_copy" if name is None else name
         ng = self.__class__(name=name, uuid=None)
-        ng.nodes = self.nodes._copy(parent=ng)
+        ng.nodes = self.nodes._copy(graph=ng)
         for link in self.links:
             ng.add_link(
                 ng.nodes[link.from_node.name].outputs[link.from_socket._scoped_name],
@@ -336,14 +336,14 @@ class NodeGraph:
         """
         ng: "NodeGraph" = self.__class__(name=name, uuid=None)
         for node_name in node_list:
-            ng.append_node(self.nodes[node_name].copy(parent=ng))
+            ng.append_node(self.nodes[node_name].copy(graph=ng))
         for link in self.links:
             if (
                 add_ref
                 and link.from_node.name not in ng.get_node_names()
                 and link.to_node.name in ng.get_node_names()
             ):
-                ng.append_node(self.nodes[link.from_node.name].copy(parent=ng))
+                ng.append_node(self.nodes[link.from_node.name].copy(graph=ng))
             if (
                 link.from_node.name in ng.get_node_names()
                 and link.to_node.name in ng.get_node_names()
@@ -381,7 +381,7 @@ class NodeGraph:
         Returns:
             NodeGraph: The combined node graph.
         """
-        self.nodes._extend(other.nodes._copy(parent=self))
+        self.nodes._extend(other.nodes._copy(graph=self))
         for link in other.links:
             self.add_link(
                 self.nodes[link.from_node.name].outputs[link.from_socket._name],

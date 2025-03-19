@@ -10,10 +10,10 @@ def test_base_node():
     n = Node.new(NodePool.node_graph.test_float)
     # added to nodegraph
     ng.append_node(n)
-    assert n.parent == ng
+    assert n.graph == ng
     # copy
     n1 = n.copy(name="n1")
-    assert n1.parent == ng
+    assert n1.graph == ng
     assert n1.name == "n1"
 
 
@@ -84,7 +84,7 @@ def test_copy():
     math1 = math.copy()
     assert math1.properties["t"].value == 5
     assert math1.inputs["x"].property.value == 2
-    assert math1.parent.uuid == ng.uuid
+    assert math1.graph.uuid == ng.uuid
     assert math1.name == f"{math.name}_copy"
     #
     ng.append_node(math1)

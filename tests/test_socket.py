@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from node_graph import NodeGraph
 from node_graph.node import Node
-from node_graph.socket import BaseSocket, NodeSocketNamespace
+from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool
 import operator as op
 
@@ -23,10 +23,12 @@ def test_metadata():
     socket = n.add_input(
         "node_graph.any",
         "test",
+        graph=ng,
         metadata={"arg_type": "kwargs", "dynamic": True},
         link_limit=100000,
         property={"default": 1},
     )
+    assert socket._graph == ng
     assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
     assert socket._link_limit == 100000
     assert socket.property.default == 1
@@ -328,3 +330,18 @@ def test_set_socket_value():
     s._set_socket_value(value, link_limit=100000)
     assert s._value == value
     assert s.a._link_limit == 100000
+
+
+def test_set_namespace_attr():
+    ng = NodeGraph()
+    n = Node(graph=ng)
+    s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    # auto create a sub-socket "x"
+    s.x = 1
+    assert s.x.value == 1
+    s1 = NodeSocket("b", node=n, graph=ng)
+    s.x = s1
+    assert len(s.x._links) == 1
+    s.y = s1
+    assert s.y.value is None
+    assert len(s.y._links) == 1

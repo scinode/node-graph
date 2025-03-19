@@ -1,5 +1,5 @@
 import pytest
-from node_graph.collection import Collection
+from node_graph.collection import NodeCollection, Collection
 from node_graph.node import Node
 from node_graph import NodeGraph
 
@@ -7,7 +7,7 @@ from node_graph import NodeGraph
 def test_base_collection():
     """Test base collection."""
     ng = NodeGraph(name="test_base_collection")
-    coll = Collection(parent=ng)
+    coll = NodeCollection(graph=ng)
     coll.path = "builtins"
     node1 = Node(name="node1")
     node2 = Node(name="node2")
@@ -15,7 +15,7 @@ def test_base_collection():
     coll._append(node1)
     coll._append(node2)
     assert len(coll) == 2
-    assert node1.parent == ng
+    assert node1.graph == ng
     # copy
     coll1 = coll._copy()
     assert len(coll1) == 2
@@ -27,7 +27,10 @@ def test_base_collection():
     # get by uuid
     assert coll._get_by_uuid(node2.uuid) == node2
     # __repr__
-    assert repr(coll) == "Collection()\n"
+    assert (
+        repr(coll)
+        == """NodeCollection(parent = "test_base_collection", nodes = ["node2"])"""
+    )
 
 
 def test_delete_items():
