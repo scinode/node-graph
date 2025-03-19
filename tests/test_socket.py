@@ -320,3 +320,11 @@ def test_unpacking():
     a, b = s
     assert a.value == 1
     assert b.value == 2
+
+
+def test_set_socket_value():
+    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    value = {"a": 1, "b": 2}
+    s._set_socket_value(value, link_limit=100000)
+    assert s._value == value
+    assert s.a._link_limit == 100000

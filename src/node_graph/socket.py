@@ -7,6 +7,7 @@ from node_graph.collection import get_item_class, EntryPointPool
 if TYPE_CHECKING:
     from node_graph.node import Node
     from node_graph.link import NodeLink
+    from node_graph.node_graph import NodeGraph
 
 
 def op_add(x, y):
@@ -169,6 +170,7 @@ class BaseSocket:
         name: str,
         node: Optional["Node"] = None,
         parent: Optional["NodeSocketNamespace"] = None,
+        graph: Optional["NodeGraph"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
         **kwargs: Any,
@@ -181,12 +183,13 @@ class BaseSocket:
             type (str, optional): Socket type. Defaults to "INPUT".
             link_limit (int, optional): Maximum number of links. Defaults to 1.
         """
-        self._name: str = name
-        self._node: Optional["Node"] = node
-        self._parent: Optional["NodeSocketNamespace"] = parent
-        self._links: List["NodeLink"] = []
-        self._link_limit: int = link_limit
-        self._metadata: Optional[dict] = metadata or {}
+        self._name = name
+        self._node = node
+        self._parent = parent
+        self._graph = graph
+        self._links = []
+        self._link_limit = link_limit
+        self._metadata = metadata or {}
 
     @property
     def _full_name(self) -> str:
@@ -501,7 +504,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
 
-    def _set_socket_value(self, value: Dict[str, Any] | NodeSocket) -> None:
+    def _set_socket_value(self, value: Dict[str, Any] | NodeSocket, **kwargs) -> None:
+        """Set the value of the socket.
+        In the kwargs, one can specify the pool, link_limit, metadata etc"""
         if value is None:
             return
         if isinstance(value, BaseSocket):
@@ -515,14 +520,18 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                                 self._SocketPool["namespace"],
                                 key,
                                 metadata={"dynamic": True},
+                                **kwargs,
                             )
                         else:
-                            self._new(self._SocketPool["any"], key)
+                            self._new(self._SocketPool["any"], key, **kwargs)
                     else:
                         raise ValueError(
                             f"Socket: {key} does not exist in the namespace socket: {self._name}."
                         )
-                self[key]._set_socket_value(val)
+                if isinstance(self[key], NodeSocketNamespace):
+                    self[key]._set_socket_value(val, **kwargs)
+                else:
+                    self[key]._set_socket_value(val)
         else:
             raise ValueError(
                 f"Invalid value type for socket {self._name}: {value}, expected dict or Socket."
