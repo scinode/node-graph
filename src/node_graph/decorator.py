@@ -243,6 +243,9 @@ def _make_wrapper(NodeCls, original_callable):
                 f"No active Graph available for {original_callable.__name__}."
             )
         node = graph.add_node(NodeCls)
+        active_zone = getattr(graph, "_active_zone", None)
+        if active_zone:
+            active_zone.children.add(node)
         outputs = set_node_arguments(call_args, call_kwargs, node)
         return outputs
 

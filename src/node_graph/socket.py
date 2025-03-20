@@ -85,6 +85,9 @@ class OperatorSocketMixin:
             x=x,
             y=y,
         )
+        active_zone = getattr(graph, "_active_zone", None)
+        if active_zone:
+            active_zone.children.add(new_node)
         return new_node.outputs.result
 
     # Arithmetic Operations
