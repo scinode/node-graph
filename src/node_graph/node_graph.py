@@ -141,7 +141,9 @@ class NodeGraph:
         """Saves the node graph to the database."""
         raise NotImplementedError("The 'save' method is not implemented.")
 
-    def to_dict(self, short: bool = False) -> Dict[str, Any]:
+    def to_dict(
+        self, short: bool = False, should_serialize: bool = False
+    ) -> Dict[str, Any]:
         """Converts the node graph to a dictionary.
 
         Args:
@@ -151,7 +153,9 @@ class NodeGraph:
             Dict[str, Any]: The node graph data.
         """
         metadata: Dict[str, Any] = self.get_metadata()
-        nodes: Dict[str, Any] = self.export_nodes_to_dict(short=short)
+        nodes: Dict[str, Any] = self.export_nodes_to_dict(
+            short=short, should_serialize=should_serialize
+        )
         links: List[Dict[str, Any]] = self.links_to_dict()
         data: Dict[str, Any] = {
             "platform_version": f"{self.platform}@{self.platform_version}",
@@ -181,7 +185,9 @@ class NodeGraph:
         }
         return metadata
 
-    def export_nodes_to_dict(self, short: bool = False) -> Dict[str, Any]:
+    def export_nodes_to_dict(
+        self, short: bool = False, should_serialize: bool = False
+    ) -> Dict[str, Any]:
         """Converts the nodes to a dictionary.
 
         Args:
@@ -192,7 +198,9 @@ class NodeGraph:
         """
         nodes: Dict[str, Any] = {}
         for node in self.nodes:
-            nodes[node.name] = node.to_dict(short=short)
+            nodes[node.name] = node.to_dict(
+                short=short, should_serialize=should_serialize
+            )
         return nodes
 
     def links_to_dict(self) -> List[Dict[str, Any]]:

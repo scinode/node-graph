@@ -130,7 +130,9 @@ class Node:
     def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
 
-    def to_dict(self, short: bool = False) -> Dict[str, Any]:
+    def to_dict(
+        self, short: bool = False, should_serialize: bool = False
+    ) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
 
         if short:
@@ -167,7 +169,14 @@ class Node:
         # which happens when {} is used as default value
         # we copy the value only
         data = deep_copy_only_dicts(data)
+        if should_serialize:
+            self.serialize_data(data)
         return data
+
+    def serialize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize the node for database storage.
+        This should be overrided by the subclass."""
+        pass
 
     @property
     def metadata(self) -> Dict[str, Any]:
