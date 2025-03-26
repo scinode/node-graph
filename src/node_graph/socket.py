@@ -464,6 +464,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             self._SocketPool = SocketPool
 
         self._socket_is_dynamic = self._metadata.get("dynamic", False)
+        if self._socket_is_dynamic:
+            self._link_limit = 1e6
         if sockets is not None:
             for key, socket in sockets.items():
                 kwargs = {}
