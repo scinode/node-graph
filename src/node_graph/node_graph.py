@@ -56,6 +56,7 @@ class NodeGraph:
         group_properties: List[dict] = None,
         group_inputs: List[dict] = None,
         group_outputs: List[dict] = None,
+        interactive_widget: bool = False,
     ) -> None:
         """Initializes a new instance of the NodeGraph class.
 
@@ -75,7 +76,8 @@ class NodeGraph:
         self.group_properties = group_properties or []
         self.group_inputs = group_inputs or []
         self.group_outputs = group_outputs or []
-        self._widget = NodeGraphWidget(parent=self)
+        self._widget = None
+        self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
 
     @property
@@ -88,6 +90,12 @@ class NodeGraph:
             return importlib.metadata.version(package_name)
         except importlib.metadata.PackageNotFoundError:
             return "unknown"
+
+    @property
+    def widget(self) -> NodeGraphWidget:
+        if self._widget is None:
+            self._widget = NodeGraphWidget(parent=self)
+        return self._widget
 
     def add_node(
         self, identifier: Union[str, Callable], name: str = None, **kwargs
@@ -441,13 +449,13 @@ class NodeGraph:
 
     def _repr_mimebundle_(self, *args, **kwargs):
         # if ipywdigets > 8.0.0, use _repr_mimebundle_ instead of _ipython_display_
-        self._widget.value = self.to_widget_value()
-        if hasattr(self._widget, "_repr_mimebundle_"):
-            return self._widget._repr_mimebundle_(*args, **kwargs)
+        self.widget.value = self.to_widget_value()
+        if hasattr(self.widget, "_repr_mimebundle_"):
+            return self.widget._repr_mimebundle_(*args, **kwargs)
         else:
-            return self._widget._ipython_display_(*args, **kwargs)
+            return self.widget._ipython_display_(*args, **kwargs)
 
     def to_html(self, output: str = None, **kwargs):
         """Write a standalone html file to visualize the graph."""
-        self._widget.value = self.to_widget_value()
-        return self._widget.to_html(output=output, **kwargs)
+        self.widget.value = self.to_widget_value()
+        return self.widget.to_html(output=output, **kwargs)

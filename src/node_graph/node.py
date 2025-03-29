@@ -86,10 +86,16 @@ class Node:
         self.create_properties()
         self.create_sockets()
         self._args_data = None
-        self._widget = NodeGraphWidget(
-            settings={"minmap": False},
-            style={"width": "80%", "height": "600px"},
-        )
+        self._widget = None
+
+    @property
+    def widget(self) -> NodeGraphWidget:
+        if self._widget is None:
+            self._widget = NodeGraphWidget(
+                settings={"minmap": False},
+                style={"width": "80%", "height": "600px"},
+            )
+        return self._widget
 
     @classmethod
     def generate_name(cls) -> str:
@@ -464,13 +470,13 @@ class Node:
 
     def _repr_mimebundle_(self, *args: Any, **kwargs: Any) -> any:
         # if ipywdigets > 8.0.0, use _repr_mimebundle_ instead of _ipython_display_
-        self._widget.value = self.to_widget_value()
-        if hasattr(self._widget, "_repr_mimebundle_"):
-            return self._widget._repr_mimebundle_(*args, **kwargs)
+        self.widget.value = self.to_widget_value()
+        if hasattr(self.widget, "_repr_mimebundle_"):
+            return self.widget._repr_mimebundle_(*args, **kwargs)
         else:
-            return self._widget._ipython_display_(*args, **kwargs)
+            return self.widget._ipython_display_(*args, **kwargs)
 
     def to_html(self, output: str = None, **kwargs):
         """Write a standalone html file to visualize the task."""
-        self._widget.value = self.to_widget_value()
-        return self._widget.to_html(output=output, **kwargs)
+        self.widget.value = self.to_widget_value()
+        return self.widget.to_html(output=output, **kwargs)
