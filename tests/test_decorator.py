@@ -78,14 +78,15 @@ def test_decorator_args() -> None:
     assert task1.get_executor()["mode"] == "pickled_callable"
     assert task1.inputs["e"]._link_limit > 1
     assert task1.inputs["e"]._identifier == "node_graph.namespace"
-    assert task1.inputs["c"]._metadata["required"] is True
-    assert task1.inputs["d"]._metadata["required"] is False
+    assert task1.inputs["c"]._metadata.required is True
+    assert task1.inputs["d"]._metadata.required is False
+    assert task1.inputs["d"]._metadata.function_socket is True
     assert task1.inputs["d"].property.default == 1
     assert set(task1.args_data["args"]) == set(["a"])
     assert set(task1.args_data["kwargs"]) == set(["b", "c", "d"])
     assert task1.args_data["var_kwargs"] == "e"
     assert isinstance(task1.inputs.e, NodeSocketNamespace)
-    assert task1.inputs.e._socket_is_dynamic is True
+    assert task1.inputs.e._metadata.dynamic is True
 
 
 def test_decorator_parameters() -> None:

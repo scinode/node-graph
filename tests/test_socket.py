@@ -29,11 +29,19 @@ def test_metadata():
         property={"default": 1},
     )
     assert socket._graph == ng
-    assert socket._metadata == {"dynamic": True, "arg_type": "kwargs"}
+    assert socket._metadata.dynamic is True
+    assert socket._metadata.arg_type == "kwargs"
     assert socket._link_limit == 100000
     assert socket.property.default == 1
     data = socket._to_dict()
-    assert data["metadata"] == {"dynamic": True, "arg_type": "kwargs"}
+    assert data["metadata"] == {
+        "dynamic": True,
+        "arg_type": "kwargs",
+        "socket_type": "INPUT",
+        "required": False,
+        "builtin_socket": False,
+        "function_socket": False,
+    }
 
 
 @pytest.mark.parametrize(
