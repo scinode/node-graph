@@ -24,8 +24,6 @@ class NodeGraph:
         action (str): The action of this node graph.
         platform (str): The platform used to create this node graph.
         description (str): A description of the node graph.
-        group_inputs (List[str]): Group inputs of the node graph.
-        group_outputs (List[str]): Group outputs of the node graph.
 
     Examples:
         >>> from node_graph import NodeGraph
@@ -80,11 +78,11 @@ class NodeGraph:
         self.meta_nodes = NodeCollection(self, pool=self.NodePool)
         # add group_inputs and group_outputs nodes
         group_inputs = self.meta_nodes._new("any", name="group_inputs")
-        group_inputs.outputs._socket_is_dynamic = True
+        group_inputs.outputs._metadata.dynamic = True
         group_outputs = self.meta_nodes._new("any", name="group_outputs")
-        group_outputs.inputs._socket_is_dynamic = True
+        group_outputs.inputs._metadata.dynamic = True
         ctx = self.meta_nodes._new("any", name="ctx")
-        ctx.inputs._socket_is_dynamic = True
+        ctx.inputs._metadata.dynamic = True
         ctx.inputs._default_link_limit = 1e6
 
     @property
@@ -170,6 +168,47 @@ class NodeGraph:
             "group_outputs": self.group_outputs,
             "ctx": self.ctx,
         }
+
+    def meta_sockets_to_dict(self) -> Dict[str, Any]:
+        meta_sockets = {
+            "ctx": self.ctx._to_dict(),
+            "group_inputs": self.group_inputs._to_dict(),
+            "group_outputs": self.group_outputs._to_dict(),
+        }
+        return meta_sockets
+
+    def meta_sockets_from_dict(self, meta_sockets: Dict[str, Any]) -> None:
+        ctx_data = meta_sockets.get("ctx", {})
+        if ctx_data:
+            self.meta_nodes["ctx"].inputs = self.ctx.__class__._from_dict(
+                ctx_data, node=self.meta_nodes["ctx"], pool=self.SocketPool, graph=self
+            )
+        else:
+            self.meta_nodes["ctx"].inputs._clear()
+        group_inputs_data = meta_sockets.get("group_inputs", {})
+        if group_inputs_data:
+            self.meta_nodes[
+                "group_inputs"
+            ].outputs = self.group_inputs.__class__._from_dict(
+                group_inputs_data,
+                node=self.meta_nodes["group_inputs"],
+                pool=self.SocketPool,
+                graph=self,
+            )
+        else:
+            self.meta_nodes["group_inputs"].outputs._clear()
+        group_outputs_data = meta_sockets.get("group_outputs", {})
+        if group_outputs_data:
+            self.meta_nodes[
+                "group_outputs"
+            ].inputs = self.group_outputs.__class__._from_dict(
+                group_outputs_data,
+                node=self.meta_nodes["group_outputs"],
+                pool=self.SocketPool,
+                graph=self,
+            )
+        else:
+            self.meta_nodes["group_outputs"].inputs._clear()
 
     @property
     def platform_version(self) -> str:
@@ -272,19 +311,6 @@ class NodeGraph:
             "description": self.description,
         }
         return data
-
-    def meta_sockets_to_dict(self) -> Dict[str, Any]:
-        meta_sockets = {
-            "ctx": self.ctx._value,
-            "group_inputs": self.group_inputs._value,
-            "group_outputs": self.group_outputs._value,
-        }
-        return meta_sockets
-
-    def meta_sockets_from_dict(self, meta_sockets: Dict[str, Any]) -> None:
-        self.ctx = meta_sockets.get("ctx", {})
-        self.group_inputs = meta_sockets.get("group_inputs", {})
-        self.group_outputs = meta_sockets.get("group_outputs", {})
 
     def get_metadata(self) -> Dict[str, Any]:
         """Converts the metadata to a dictionary.
@@ -418,8 +444,6 @@ class NodeGraph:
             state=ngdata.get("state", "CREATED"),
             action=ngdata.get("action", "NONE"),
             description=ngdata.get("description", ""),
-            # group_inputs=ngdata["metadata"].get("group_inputs", []),
-            # group_outputs=ngdata["metadata"].get("group_outputs", []),
         )
         for name, ndata in ngdata["nodes"].items():
             if ndata.get("metadata", {}).get("is_dynamic", False):

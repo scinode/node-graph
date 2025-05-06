@@ -50,7 +50,7 @@ def test_set_link_as_input():
 
 def test_set_non_exit_input_for_dynamic_input():
     node = Node()
-    node.inputs._socket_is_dynamic = True
+    node.inputs._metadata.dynamic = True
     node.set({"x": 1})
     assert node.inputs.x.value == 1
 

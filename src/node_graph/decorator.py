@@ -111,7 +111,7 @@ def generate_input_sockets(
                     "metadata": {
                         "arg_type": "args",
                         "required": True,
-                        "is_function_input": True,
+                        "function_socket": True,
                     },
                 }
             )
@@ -124,7 +124,7 @@ def generate_input_sockets(
                 "metadata": {
                     "arg_type": "kwargs",
                     "required": True,
-                    "is_function_input": True,
+                    "function_socket": True,
                 },
                 "property": {"identifier": identifier},
             }
@@ -154,7 +154,7 @@ def generate_input_sockets(
                 {
                     "identifier": type_mapping["namespace"],
                     "name": var_args,
-                    "metadata": {"arg_type": "var_args", "is_function_input": True},
+                    "metadata": {"arg_type": "var_args", "function_socket": True},
                     "link_limit": 1e6,
                 }
             )
@@ -182,7 +182,7 @@ def generate_input_sockets(
                     "metadata": {
                         "arg_type": "var_kwargs",
                         "dynamic": True,
-                        "is_function_input": True,
+                        "function_socket": True,
                     },
                     "link_limit": 1e6,
                 }

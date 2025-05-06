@@ -18,6 +18,7 @@ class NodeProperty:
         default: Any = None,
         update: Optional[Callable[[], None]] = None,
         arg_type: Optional[str] = "kwargs",
+        value: Any = None,
         **kwargs,
     ) -> None:
         """
@@ -29,12 +30,14 @@ class NodeProperty:
             default (Any, optional): The default value of the property. Defaults to None.
             update (Callable[[], None], optional): Callback to invoke when the value changes. Defaults to None.
         """
-        self.name: str = name
-        self.description: str = description
-        self.default: Any = default
-        self.update: Optional[Callable[[], None]] = update
-        self.arg_type: Optional[str] = arg_type
-        self._value: Any = default
+        self.name = name
+        self.description = description
+        self.default = default
+        self.update = update
+        self.arg_type = arg_type
+        self._value = default
+        if value is not None:
+            self.value = value
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the property to a dictionary for database storage."""
@@ -111,8 +114,8 @@ class NodeProperty:
         cls,
         identifier: Union[str, type],
         name: str = None,
-        data: Dict[str, Any] = {},
         PropertyPool: Dict[str, "NodeProperty"] = None,
+        **kwargs,
     ) -> "NodeProperty":
         """Create a new property from an identifier."""
         from node_graph.collection import get_item_class
@@ -121,7 +124,7 @@ class NodeProperty:
             from node_graph.properties import PropertyPool
 
         ItemClass = get_item_class(identifier, PropertyPool, NodeProperty)
-        return ItemClass(name=name, **data)
+        return ItemClass(name=name, **kwargs)
 
     def __str__(self) -> str:
         return f'{self.__class__.__name__}(name="{self.name}", value={self._value})'

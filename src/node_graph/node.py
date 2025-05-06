@@ -233,7 +233,7 @@ class Node:
             get_arg_type(
                 input._name,
                 args_data,
-                input._metadata.get("arg_type", "kwargs"),
+                input._metadata.arg_type,
             )
         return args_data
 
@@ -424,7 +424,7 @@ class Node:
                 self.properties[key].value = value
             elif key in self.inputs:
                 self.inputs[key]._set_socket_value(value)
-            elif self.inputs._socket_is_dynamic:
+            elif self.inputs._metadata.dynamic:
                 # if the socket is dynamic, we can add the input dynamically
                 inp = self.add_input(self.SocketPool.any, key)
                 inp._set_socket_value(value)

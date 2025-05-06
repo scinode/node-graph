@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from node_graph.property import NodeProperty
-from typing import List, Optional, Dict, Any, TYPE_CHECKING, Union
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
+from dataclasses import dataclass, field, asdict
 
 if TYPE_CHECKING:
     from node_graph.node import Node
@@ -187,6 +188,73 @@ class WaitingOn:
             )
 
 
+@dataclass()
+class SocketMetadata:
+    """A *typed* container for additional socket information.
+
+    Parameters
+    ----------
+    dynamic
+        Whether the socket collection is *dynamic* - i.e. it may grow
+        automatically when assigning unknown keys.
+    builtin_socket
+        Marks sockets that are intrinsic to the framework (e.g. ``_wait`` or
+        ``outputs``) so that user code can filter / style them differently.
+    extras
+        Free form mapping for user extensions.  Any key not matching one of the
+        reserved field names ends up in here when converting from an untyped
+        ``dict``.
+    """
+
+    dynamic: bool = False
+    required: bool = False
+    builtin_socket: bool = False
+    function_socket: bool = False
+    socket_type: str = "INPUT"
+    arg_type: str = "kwargs"
+    extras: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a *plain* dict suitable for JSON serialisation."""
+
+        data = asdict(self)
+        # Do not bloat output with empty *extras*
+        if not data.get("extras"):
+            data.pop("extras", None)
+        return data
+
+    @classmethod
+    def from_raw(
+        cls, raw: Union["SocketMetadata", Dict[str, Any], None]
+    ) -> "SocketMetadata":
+        """Normalise *raw* user input into a :class:`SocketMetadata` instance."""
+
+        if raw is None:
+            return cls()
+        if isinstance(raw, cls):
+            return raw
+        if isinstance(raw, dict):
+            # Extract known keys and forward unknown ones into *extras*
+            known_keys = {
+                "dynamic",
+                "builtin_socket",
+                "function_socket",
+                "socket_type",
+                "arg_type",
+                "required",
+                "extras",
+            }
+            known = {k: v for k, v in raw.items() if k in known_keys}
+            known.setdefault("extras", {})
+            known["extras"].update(
+                {k: v for k, v in raw.items() if k not in known_keys}
+            )
+            return cls(**known)
+        raise TypeError(
+            "metadata must be dict | SocketMetadata | None – got " f"{type(raw)!r}"
+        )
+
+
 class BaseSocket:
     """Socket object for input and output sockets of a Node.
 
@@ -208,7 +276,7 @@ class BaseSocket:
         parent: Optional["NodeSocketNamespace"] = None,
         graph: Optional["NodeGraph"] = None,
         link_limit: int = 1,
-        metadata: Optional[dict] = None,
+        metadata: Union[SocketMetadata, Dict[str, Any], None] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize an instance of NodeSocket.
@@ -225,7 +293,7 @@ class BaseSocket:
         self._graph = graph
         self._links = []
         self._link_limit = link_limit
-        self._metadata = metadata or {}
+        self._metadata: SocketMetadata = SocketMetadata.from_raw(metadata)
         self._waiting_on = WaitingOn(self)
 
     @property
@@ -247,10 +315,10 @@ class BaseSocket:
             "identifier": self._identifier,
             "link_limit": self._link_limit,
             "links": [],
-            "metadata": self._metadata,
+            "metadata": self._metadata.to_dict(),
         }
         for link in self._links:
-            if self._metadata.get("socket_type", "INPUT").upper() == "INPUT":
+            if self._metadata.socket_type.upper() == "INPUT":
                 data["links"].append(
                     {
                         "from_node": link.from_node.name,
@@ -325,9 +393,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         """Add a property to this socket."""
         if name is None:
             name = self._name
-        self.property = self._socket_property_class.new(
-            identifier, name=name, data=kwargs
-        )
+        self.property = self._socket_property_class.new(identifier, name=name, **kwargs)
 
     @property
     def _value(self) -> Any:
@@ -443,7 +509,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         node: Optional["Node"] = None,
         parent: Optional["NodeSocket"] = None,
         link_limit: int = 1e6,
-        metadata: Optional[dict] = None,
+        metadata: Union[SocketMetadata, Dict[str, Any], None] = None,
         sockets: Optional[Dict[str, object]] = None,
         pool: Optional[object] = None,
         entry_point: Optional[str] = None,
@@ -473,8 +539,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
             self._SocketPool = SocketPool
 
-        self._socket_is_dynamic = self._metadata.get("dynamic", False)
-        if self._socket_is_dynamic:
+        if self._metadata.dynamic:
             self._link_limit = 1e6
         if sockets is not None:
             for key, socket in sockets.items():
@@ -541,7 +606,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             namespace = _names[0]
             if namespace not in self:
                 # if the namespace is dynamic, create sub-sockets if it does not exist
-                if self._socket_is_dynamic:
+                if self._metadata.dynamic:
                     # the sub-socket should also be dynamic
                     self._new(
                         self._SocketPool["namespace"],
@@ -601,7 +666,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:
-                    if self._socket_is_dynamic:
+                    if self._metadata.dynamic:
                         if isinstance(val, dict):
                             self._new(
                                 self._SocketPool["namespace"],

@@ -49,7 +49,7 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         }
         for out in node_outputs["sockets"].values():
             out.setdefault("metadata", {})
-            out["metadata"]["is_function_output"] = True
+            out["metadata"]["function_socket"] = True
         # add built-in sockets
         for input in builtin_inputs:
             node_inputs["sockets"][input["name"]] = input.copy()
