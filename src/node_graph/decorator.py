@@ -325,8 +325,6 @@ def decorator_graph_builder(
             inputs=inputs,
             outputs=node_outputs,
             catalog=catalog,
-            group_inputs=inputs,
-            group_outputs=outputs,
             node_class=GraphBuilderNode,
         )
 

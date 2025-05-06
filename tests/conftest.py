@@ -127,7 +127,7 @@ def decorated_myadd_group(decorated_myadd):
     """Generate a decorated node group for test."""
     myadd = decorated_myadd
 
-    @node.graph_builder(outputs=[{"name": "result", "from": "add3.result"}])
+    @node.graph_builder(outputs=[{"name": "result"}])
     def myaddgroup(x, y):
         ng = NodeGraph()
         add1 = ng.add_node(myadd, "add1")
@@ -138,6 +138,7 @@ def decorated_myadd_group(decorated_myadd):
         add3.set({"t": 2})
         ng.add_link(add1.outputs[0], add3.inputs[0])
         ng.add_link(add2.outputs[0], add3.inputs[1])
+        ng.group_outputs.result = ng.nodes.add3.outputs.result
         return ng
 
     return myaddgroup

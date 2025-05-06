@@ -20,8 +20,6 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         outputs: Optional[List[Union[str, dict]]] = None,
         error_handlers: Optional[List[Dict[str, Any]]] = None,
         catalog: str = "Others",
-        group_inputs: List[Tuple[str, str]] = None,
-        group_outputs: List[Tuple[str, str]] = None,
         additional_data: Optional[Dict[str, Any]] = None,
         node_class: Optional[Callable] = None,
     ):
@@ -61,8 +59,6 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
             "metadata": {
                 "node_type": node_type,
                 "catalog": catalog,
-                "group_inputs": group_inputs or [],
-                "group_outputs": group_outputs or [],
             },
             "properties": properties,
             "inputs": node_inputs,
