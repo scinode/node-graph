@@ -58,6 +58,7 @@ tests = [
 
 
 [project.entry-points."node_graph.node"]
+"node_graph.node" = "node_graph.node:Node"
 "node_graph.test_float" = "node_graph.nodes.test_nodes:TestFloat"
 "node_graph.test_string" = "node_graph.nodes.test_nodes:TestString"
 "node_graph.test_add" = "node_graph.nodes.test_nodes:TestAdd"

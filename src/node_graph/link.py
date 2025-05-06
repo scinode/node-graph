@@ -11,9 +11,9 @@ class NodeLink:
             from_socket (Socket): The socket where the link originates from.
             to_socket (Socket): The socket where the link connects to.
         """
-        self.from_socket: "Socket" = from_socket
+        self.from_socket = from_socket
         self.from_node = from_socket._node
-        self.to_socket: "Socket" = to_socket
+        self.to_socket = to_socket
         self.to_node = to_socket._node
         self.check_socket_match()
         self.mount()
@@ -22,9 +22,9 @@ class NodeLink:
     def name(self) -> str:
         return "{}.{} -> {}.{}".format(
             self.from_node.name,
-            self.from_socket._name,
+            self.from_socket._scoped_name,
             self.to_node.name,
-            self.to_socket._name,
+            self.to_socket._scoped_name,
         )
 
     def check_socket_match(self) -> None:
@@ -110,8 +110,8 @@ class NodeLink:
         s = ""
         s += 'NodeLink(from="{}.{}", to="{}.{}")'.format(
             self.from_node.name,
-            self.from_socket._name,
+            self.from_socket._scoped_name,
             self.to_node.name,
-            self.to_socket._name,
+            self.to_socket._scoped_name,
         )
         return s

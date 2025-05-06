@@ -39,7 +39,7 @@ class Node:
     OutputCollectionClass = NodeSocketNamespace
     PropertyCollectionClass = PropertyCollection
 
-    identifier: str = "Node"
+    identifier: str = "node_graph.node"
     default_name: str = None
     node_type: str = "Normal"
     graph_uuid: str = ""

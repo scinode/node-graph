@@ -238,7 +238,7 @@ class BaseSocket:
     @property
     def _scoped_name(self) -> str:
         """The name relative to its immediate parent, excluding the root namespace."""
-        return self._full_name.split(".", 1)[1]
+        return self._full_name.split(".", 1)[-1]
 
     def _to_dict(self) -> Dict[str, Any]:
         """Export the socket to a dictionary for database storage."""
@@ -330,10 +330,15 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         )
 
     @property
-    def value(self) -> Any:
+    def _value(self) -> Any:
+        """Get the value of the socket."""
         if self.property:
             return self.property.value
         return None
+
+    @property
+    def value(self) -> Any:
+        return self._value
 
     @value.setter
     def value(self, value: Any) -> None:
@@ -372,7 +377,10 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         return socket
 
     def _copy(
-        self, node: Optional["Node"] = None, parent: Optional["Node"] = None
+        self,
+        node: Optional["Node"] = None,
+        parent: Optional["Node"] = None,
+        **kwargs: Any,
     ) -> "NodeSocket":
         """Copy this socket.
 
@@ -415,6 +423,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
+    _default_link_limit = 1
 
     _RESERVED_NAMES = {
         "_RESERVED_NAMES",
@@ -453,6 +462,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         #
         self._sockets: Dict[str, object] = {}
         self._parent = parent
+        self._SocketPool = None
         # one can specify the pool or entry_point to get the pool
         if pool is not None:
             self._SocketPool = pool
@@ -505,7 +515,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             object.__setattr__(self, name, value)
             return
 
-        self._set_socket_value({name: value})
+        self._set_socket_value({name: value}, link_limit=self._default_link_limit)
 
     def __dir__(self) -> list[str]:
         """
@@ -657,7 +667,11 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         return ns
 
     def _copy(
-        self, node: Optional[Node] = None, parent: Optional[NodeSocket] = None
+        self,
+        node: Optional[Node] = None,
+        parent: Optional[NodeSocket] = None,
+        skip_linked: bool = False,
+        skip_builtin: bool = False,
     ) -> "NodeSocketNamespace":
         # Copy as parentSocket
         parent = self._parent if parent is None else parent
@@ -670,7 +684,13 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         )
         # Copy nested sockets
         for item in self._sockets.values():
-            ns_copy._append(item._copy(node=node, parent=self))
+            if len(item._links) > 0 and skip_linked:
+                continue
+            if skip_builtin and item._name in ["_wait", "_outputs"]:
+                continue
+            ns_copy._append(
+                item._copy(node=node, parent=ns_copy, skip_linked=skip_linked)
+            )
         return ns_copy
 
     def __iter__(self) -> object:
