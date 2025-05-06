@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
+from node_graph.sockets import SocketPool
 from node_graph.nodes import NodePool
 from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
@@ -23,7 +24,6 @@ class NodeGraph:
         action (str): The action of this node graph.
         platform (str): The platform used to create this node graph.
         description (str): A description of the node graph.
-        group_properties (List[str]): Group properties of the node graph.
         group_inputs (List[str]): Group inputs of the node graph.
         group_outputs (List[str]): Group outputs of the node graph.
 
@@ -43,6 +43,7 @@ class NodeGraph:
     """
 
     NodePool: Dict[str, Any] = NodePool
+    SocketPool = SocketPool
     platform: str = "node_graph"
 
     def __init__(
@@ -53,9 +54,6 @@ class NodeGraph:
         state: str = "CREATED",
         action: str = "NONE",
         description: str = "",
-        group_properties: List[dict] = None,
-        group_inputs: List[dict] = None,
-        group_outputs: List[dict] = None,
         interactive_widget: bool = False,
     ) -> None:
         """Initializes a new instance of the NodeGraph class.
@@ -70,15 +68,108 @@ class NodeGraph:
         self.graph_type = graph_type
         self.nodes = NodeCollection(self, pool=self.NodePool)
         self.links = LinkCollection(self)
+        self.init_meta_nodes()
         self.state = state
         self.action = action
         self.description = description
-        self.group_properties = group_properties or []
-        self.group_inputs = group_inputs or []
-        self.group_outputs = group_outputs or []
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
+
+    def init_meta_nodes(self) -> None:
+        self.meta_nodes = NodeCollection(self, pool=self.NodePool)
+        # add group_inputs and group_outputs nodes
+        group_inputs = self.meta_nodes._new("any", name="group_inputs")
+        group_inputs.outputs._socket_is_dynamic = True
+        group_outputs = self.meta_nodes._new("any", name="group_outputs")
+        group_outputs.inputs._socket_is_dynamic = True
+        ctx = self.meta_nodes._new("any", name="ctx")
+        ctx.inputs._socket_is_dynamic = True
+        ctx.inputs._default_link_limit = 1e6
+
+    @property
+    def group_inputs(self) -> Node:
+        """Group inputs node."""
+        return self.meta_nodes["group_inputs"].outputs
+
+    @group_inputs.setter
+    def group_inputs(self, value: Dict[str, Any]) -> None:
+        """Set group inputs node."""
+        self.meta_nodes["group_inputs"].outputs._clear()
+        self.meta_nodes["group_inputs"].outputs._set_socket_value(value)
+
+    @property
+    def group_outputs(self) -> Node:
+        """Group outputs node."""
+        return self.meta_nodes["group_outputs"].inputs
+
+    @group_outputs.setter
+    def group_outputs(self, value: Dict[str, Any]) -> None:
+        """Set group outputs node."""
+        self.meta_nodes["group_outputs"].inputs._clear()
+        self.meta_nodes["group_outputs"].inputs._set_socket_value(value)
+
+    @property
+    def ctx(self) -> Node:
+        """Context node."""
+        return self.meta_nodes["ctx"].inputs
+
+    @ctx.setter
+    def ctx(self, value: Dict[str, Any]) -> None:
+        """Set context node."""
+        self.meta_nodes["ctx"].inputs._clear()
+        self.meta_nodes["ctx"].inputs._set_socket_value(value, link_limit=100000)
+
+    def generate_group_inputs(self) -> None:
+        """Generate group inputs from nodes."""
+        self.group_inputs._clear()
+        for node in self.nodes:
+            # skip linked sockets
+            socket = node.inputs._copy(
+                node=self.meta_nodes["group_inputs"],
+                parent=self.group_inputs,
+                skip_linked=True,
+                skip_builtin=True,
+            )
+            socket._name = node.name
+            self.group_inputs._append(socket)
+            keys = node.inputs._get_all_keys()
+            exist_keys = socket._get_all_keys()
+            for key in keys:
+                new_key = f"{node.name}.{key}"
+                if new_key not in exist_keys:
+                    continue
+                # add link from group inputs to node inputs
+                self.add_link(self.group_inputs[new_key], node.inputs[key])
+
+    def generate_group_outputs(self) -> None:
+        """Generate group outputs from nodes."""
+        self.group_outputs._clear()
+        for node in self.nodes:
+            socket = node.outputs._copy(
+                node=self.meta_nodes["group_outputs"],
+                parent=self.group_outputs,
+                skip_builtin=True,
+            )
+            socket._name = node.name
+            self.group_outputs._append(socket)
+            keys = node.outputs._get_all_keys()
+            exist_keys = socket._get_all_keys()
+            for key in keys:
+                new_key = f"{node.name}.{key}"
+                if new_key not in exist_keys:
+                    continue
+                # add link from node outputs to group outputs
+                self.add_link(node.outputs[key], self.group_outputs[new_key])
+
+    @property
+    def meta_sockets(self) -> Node:
+        """Meta sockets node."""
+        return {
+            "group_inputs": self.group_inputs,
+            "group_outputs": self.group_outputs,
+            "ctx": self.ctx,
+        }
 
     @property
     def platform_version(self) -> str:
@@ -160,12 +251,13 @@ class NodeGraph:
         Returns:
             Dict[str, Any]: The node graph data.
         """
-        metadata: Dict[str, Any] = self.get_metadata()
-        nodes: Dict[str, Any] = self.export_nodes_to_dict(
+        metadata = self.get_metadata()
+        nodes = self.export_nodes_to_dict(
             short=short, should_serialize=should_serialize
         )
-        links: List[Dict[str, Any]] = self.links_to_dict()
-        data: Dict[str, Any] = {
+
+        links, meta_links = self.links_to_dict()
+        data = {
             "platform_version": f"{self.platform}@{self.platform_version}",
             "uuid": self.uuid,
             "name": self.name,
@@ -174,10 +266,25 @@ class NodeGraph:
             "error": "",
             "metadata": metadata,
             "nodes": nodes,
+            "meta_sockets": self.meta_sockets_to_dict(),
             "links": links,
+            "meta_links": meta_links,
             "description": self.description,
         }
         return data
+
+    def meta_sockets_to_dict(self) -> Dict[str, Any]:
+        meta_sockets = {
+            "ctx": self.ctx._value,
+            "group_inputs": self.group_inputs._value,
+            "group_outputs": self.group_outputs._value,
+        }
+        return meta_sockets
+
+    def meta_sockets_from_dict(self, meta_sockets: Dict[str, Any]) -> None:
+        self.ctx = meta_sockets.get("ctx", {})
+        self.group_inputs = meta_sockets.get("group_inputs", {})
+        self.group_outputs = meta_sockets.get("group_outputs", {})
 
     def get_metadata(self) -> Dict[str, Any]:
         """Converts the metadata to a dictionary.
@@ -187,9 +294,8 @@ class NodeGraph:
         """
         metadata: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            "group_properties": self.group_properties,
-            "group_inputs": self.group_inputs,
-            "group_outputs": self.group_outputs,
+            # "group_inputs": self.group_inputs,
+            # "group_outputs": self.group_outputs,
         }
         return metadata
 
@@ -204,7 +310,7 @@ class NodeGraph:
         Returns:
             Dict[str, Any]: The nodes data.
         """
-        nodes: Dict[str, Any] = {}
+        nodes = {}
         for node in self.nodes:
             nodes[node.name] = node.to_dict(
                 short=short, should_serialize=should_serialize
@@ -217,8 +323,17 @@ class NodeGraph:
         Returns:
             List[Dict[str, Any]]: The links data.
         """
-        links: List[Dict[str, Any]] = [link.to_dict() for link in self.links]
-        return links
+        links = []
+        meta_links = []
+        for link in self.links:
+            if (
+                link.from_node.name in self.meta_nodes
+                or link.to_node.name in self.meta_nodes
+            ):
+                meta_links.append(link.to_dict())
+            else:
+                links.append(link.to_dict())
+        return links, meta_links
 
     def to_yaml(self) -> str:
         """Exports the node graph to a YAML format data.
@@ -236,6 +351,49 @@ class NodeGraph:
     def update(self) -> None:
         """Updates the node graph from the database."""
         raise NotImplementedError("The 'update' method is not implemented.")
+
+    def links_from_dict(self, links: list, meta_links: list) -> None:
+        """Adds links to the node graph from a dictionary.
+
+        Args:
+            links (List[Dict[str, Any]]): The links data.
+        """
+        for link in links:
+            self.add_link(
+                self.nodes[link["from_node"]].outputs[link["from_socket"]],
+                self.nodes[link["to_node"]].inputs[link["to_socket"]],
+            )
+        # add meta links
+        for link in meta_links:
+            if link["from_node"] in self.meta_sockets:
+                meta_socket = self.meta_sockets[link["from_node"]]
+                if link["from_socket"] not in meta_socket:
+                    meta_socket._set_socket_value(
+                        {link["from_socket"]: None}, link_limit=100000
+                    )
+                if link["to_node"] in self.meta_sockets:
+                    if link["to_socket"] not in self.meta_sockets[link["to_node"]]:
+                        self.meta_sockets[link["to_node"]]._set_socket_value(
+                            {link["to_socket"]: None}, link_limit=100000
+                        )
+                    to_socket = self.meta_sockets[link["to_node"]][link["to_socket"]]
+                else:
+                    to_socket = self.nodes[link["to_node"]].inputs[link["to_socket"]]
+                self.add_link(meta_socket[link["from_socket"]], to_socket)
+            elif link["to_node"] in self.meta_sockets:
+                meta_socket = self.meta_sockets[link["to_node"]]
+                if link["from_node"] in self.meta_sockets:
+                    from_socket = self.meta_sockets[link["from_node"]][
+                        link["from_socket"]
+                    ]
+                else:
+                    from_socket = self.nodes[link["from_node"]].outputs[
+                        link["from_socket"]
+                    ]
+                meta_socket._set_socket_value(
+                    {link["to_socket"]: from_socket},
+                    link_limit=100000,
+                )
 
     @classmethod
     def from_dict(
@@ -260,9 +418,8 @@ class NodeGraph:
             state=ngdata.get("state", "CREATED"),
             action=ngdata.get("action", "NONE"),
             description=ngdata.get("description", ""),
-            group_properties=ngdata["metadata"].get("group_properties", []),
-            group_inputs=ngdata["metadata"].get("group_inputs", []),
-            group_outputs=ngdata["metadata"].get("group_outputs", []),
+            # group_inputs=ngdata["metadata"].get("group_inputs", []),
+            # group_outputs=ngdata["metadata"].get("group_outputs", []),
         )
         for name, ndata in ngdata["nodes"].items():
             if ndata.get("metadata", {}).get("is_dynamic", False):
@@ -277,11 +434,8 @@ class NodeGraph:
                 _executor=ndata.get("executor", None),
             )
             node.update_from_dict(ndata)
-        for link in ngdata.get("links", []):
-            ng.add_link(
-                ng.nodes[link["from_node"]].outputs[link["from_socket"]],
-                ng.nodes[link["to_node"]].inputs[link["to_socket"]],
-            )
+        ng.meta_sockets_from_dict(ngdata.get("meta_sockets", {}))
+        ng.links_from_dict(ngdata.get("links", []), ngdata.get("meta_links", []))
         return ng
 
     @classmethod
