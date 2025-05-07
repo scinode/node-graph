@@ -4,11 +4,16 @@ from node_graph import NodeGraph, NodePool
 def test_meta_nodes() -> None:
     """Test meta nodes of a node graph."""
     ng = NodeGraph()
+    ng.add_input("node_graph.any", "x")
+    ng.add_input("node_graph.any", "y")
+    ng.add_output("node_graph.any", "result")
     assert len(ng.meta_nodes) == 3
     assert ng.inputs._metadata.dynamic is True
     assert ng.outputs._metadata.dynamic is True
     assert ng.ctx._metadata.dynamic is True
     assert ng.ctx._default_link_limit == 1e6
+    assert len(ng.inputs) == 2
+    assert len(ng.outputs) == 1
 
 
 def test_ctx() -> None:
