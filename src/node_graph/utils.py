@@ -40,7 +40,7 @@ def nodegaph_to_short_json(
         "uuid": ngdata["uuid"],
         "state": ngdata["state"],
         "nodes": {},
-        "links": ngdata["links"],
+        "links": ngdata["links"] + ngdata["meta_links"],
     }
     #
     for name, node in ngdata["nodes"].items():
@@ -62,8 +62,25 @@ def nodegaph_to_short_json(
             "position": node["position"],
             "children": node.get("children", []),
         }
+    for name, socket in ngdata["meta_sockets"].items():
+        inputs = []
+        for input in socket["sockets"].values():
+            metadata = input.get("metadata", {}) or {}
+            if metadata.get("required", False):
+                inputs.append(
+                    {"name": input["name"], "identifier": input["identifier"]}
+                )
+        ngdata_short["nodes"][name] = {
+            "label": name,
+            "node_type": name,
+            "inputs": inputs,
+            "properties": {},
+            "outputs": [],
+            "position": [0, 0],
+            "children": [],
+        }
     # Add links to nodes
-    for link in ngdata["links"]:
+    for link in ngdata_short["links"]:
         ngdata_short["nodes"][link["to_node"]]["inputs"].append(
             {
                 "name": link["to_socket"],
@@ -74,6 +91,7 @@ def nodegaph_to_short_json(
                 "name": link["from_socket"],
             }
         )
+
     return ngdata_short
 
 

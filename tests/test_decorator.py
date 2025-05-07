@@ -135,12 +135,9 @@ def create_test_node_group():
     add3 = ng.add_node(NodePool.node_graph.test_add, "add3")
     ng.add_link(add1.outputs[0], add3.inputs[0])
     ng.add_link(add2.outputs[0], add3.inputs[1])
-    ng.group_properties = [
-        ("add1.t", "t1"),
-        ("add2.t", "t2"),
-    ]
-    ng.group_inputs = [("add1.x", "x"), ("add2.x", "y")]
-    ng.group_outputs = [("add3.result", "result")]
+    ng.inputs.x = add1.inputs.x
+    ng.inputs.y = add2.inputs.x
+    ng.outputs.result = add3.outputs.result
     return ng
 
 

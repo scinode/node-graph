@@ -53,7 +53,6 @@ class NodeGraphNodeFactory(BaseNodeFactory):
             "identifier": "node_graph.namespace",
             "sockets": {},
         }
-        group_outputs = []
 
         for node in nodegraph.nodes:
             # inputs
@@ -64,13 +63,6 @@ class NodeGraphNodeFactory(BaseNodeFactory):
             data = node.outputs._to_dict()
             data["name"] = node.name
             outputs["sockets"][node.name] = data
-            for socket in node.outputs:
-                group_outputs.append(
-                    {
-                        "name": f"{node.name}.{socket._name}",
-                        "from": f"{node.name}.{socket._name}",
-                    }
-                )
         # add built-in sockets
         for input in builtin_inputs:
             inputs["sockets"][input["name"]] = input.copy()
@@ -86,7 +78,6 @@ class NodeGraphNodeFactory(BaseNodeFactory):
             "callable_name": "NodeGraphEngine",
             "graph_data": graph_data,
         }
-        tdata["metadata"]["group_outputs"] = group_outputs
         tdata["metadata"]["node_class"] = NodeGraphNode
         tdata["executor"] = executor
 

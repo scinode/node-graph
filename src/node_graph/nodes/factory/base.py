@@ -40,8 +40,6 @@ class BaseNodeFactory:
                 self.catalog = self._ndata.get("metadata", {}).get("catalog", "Others")
                 self._error_handlers = self._ndata.get("error_handlers", [])
                 super().__init__(*args, **kwargs)
-                self.group_inputs = ndata["metadata"].get("group_inputs", [])
-                self.group_outputs = ndata["metadata"].get("group_outputs", [])
 
             def create_properties(self):
                 properties = list_to_dict(self._ndata.get("properties", {}))

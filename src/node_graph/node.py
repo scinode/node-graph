@@ -44,9 +44,6 @@ class Node:
     node_type: str = "Normal"
     graph_uuid: str = ""
     catalog: str = "Node"
-    group_properties: List[List[str]] = None
-    group_inputs: List[List[str]] = None
-    group_outputs: List[List[str]] = None
     is_dynamic: bool = False
 
     def __init__(
@@ -196,11 +193,6 @@ class Node:
                 "node_type": self.node_type,
                 "catalog": self.catalog,
                 "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
-                "group_properties": self.group_properties
-                if self.group_properties
-                else [],
-                "group_inputs": self.group_inputs if self.group_inputs else [],
-                "group_outputs": self.group_outputs if self.group_outputs else [],
                 "is_dynamic": self.is_dynamic,
             }
         )

@@ -72,9 +72,9 @@ One can define a nodegroup use a Node class, and specify the `node_type` to `GRO
             ng.add_link(sqrt2.outputs[0], add1.inputs[1])
             ng.group_properties = [("sqrt1", "t", "t1"),
                                     ("add1", "t", "t2"),]
-            ng.group_inputs = [("sqrt1", "x", "x"),
+            ng.inputs = [("sqrt1", "x", "x"),
                             ("sqrt2", "x", "y"),]
-            ng.group_outputs = [("add1", "Result", "Result")]
+            ng.outputs = [("add1", "Result", "Result")]
             return ng
 
 

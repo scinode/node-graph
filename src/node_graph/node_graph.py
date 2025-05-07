@@ -76,61 +76,61 @@ class NodeGraph:
 
     def init_meta_nodes(self) -> None:
         self.meta_nodes = NodeCollection(self, pool=self.NodePool)
-        # add group_inputs and group_outputs nodes
-        group_inputs = self.meta_nodes._new("any", name="group_inputs")
-        group_inputs.outputs._metadata.dynamic = True
-        group_outputs = self.meta_nodes._new("any", name="group_outputs")
-        group_outputs.inputs._metadata.dynamic = True
-        ctx = self.meta_nodes._new("any", name="ctx")
+        # add inputs and outputs nodes
+        inputs = self.meta_nodes._new("any", name="_inputs")
+        inputs.outputs._metadata.dynamic = True
+        outputs = self.meta_nodes._new("any", name="_outputs")
+        outputs.inputs._metadata.dynamic = True
+        ctx = self.meta_nodes._new("any", name="_ctx")
         ctx.inputs._metadata.dynamic = True
         ctx.inputs._default_link_limit = 1e6
 
     @property
-    def group_inputs(self) -> Node:
+    def inputs(self) -> Node:
         """Group inputs node."""
-        return self.meta_nodes["group_inputs"].outputs
+        return self.meta_nodes["_inputs"].outputs
 
-    @group_inputs.setter
-    def group_inputs(self, value: Dict[str, Any]) -> None:
+    @inputs.setter
+    def inputs(self, value: Dict[str, Any]) -> None:
         """Set group inputs node."""
-        self.meta_nodes["group_inputs"].outputs._clear()
-        self.meta_nodes["group_inputs"].outputs._set_socket_value(value)
+        self.meta_nodes["_inputs"].outputs._clear()
+        self.meta_nodes["_inputs"].outputs._set_socket_value(value)
 
     @property
-    def group_outputs(self) -> Node:
+    def outputs(self) -> Node:
         """Group outputs node."""
-        return self.meta_nodes["group_outputs"].inputs
+        return self.meta_nodes["_outputs"].inputs
 
-    @group_outputs.setter
-    def group_outputs(self, value: Dict[str, Any]) -> None:
+    @outputs.setter
+    def outputs(self, value: Dict[str, Any]) -> None:
         """Set group outputs node."""
-        self.meta_nodes["group_outputs"].inputs._clear()
-        self.meta_nodes["group_outputs"].inputs._set_socket_value(value)
+        self.meta_nodes["_outputs"].inputs._clear()
+        self.meta_nodes["_outputs"].inputs._set_socket_value(value)
 
     @property
     def ctx(self) -> Node:
         """Context node."""
-        return self.meta_nodes["ctx"].inputs
+        return self.meta_nodes["_ctx"].inputs
 
     @ctx.setter
     def ctx(self, value: Dict[str, Any]) -> None:
         """Set context node."""
-        self.meta_nodes["ctx"].inputs._clear()
-        self.meta_nodes["ctx"].inputs._set_socket_value(value, link_limit=100000)
+        self.meta_nodes["_ctx"].inputs._clear()
+        self.meta_nodes["_ctx"].inputs._set_socket_value(value, link_limit=100000)
 
-    def generate_group_inputs(self) -> None:
+    def generate_inputs(self) -> None:
         """Generate group inputs from nodes."""
-        self.group_inputs._clear()
+        self.inputs._clear()
         for node in self.nodes:
             # skip linked sockets
             socket = node.inputs._copy(
-                node=self.meta_nodes["group_inputs"],
-                parent=self.group_inputs,
+                node=self.meta_nodes["_inputs"],
+                parent=self.inputs,
                 skip_linked=True,
                 skip_builtin=True,
             )
             socket._name = node.name
-            self.group_inputs._append(socket)
+            self.inputs._append(socket)
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -138,19 +138,19 @@ class NodeGraph:
                 if new_key not in exist_keys:
                     continue
                 # add link from group inputs to node inputs
-                self.add_link(self.group_inputs[new_key], node.inputs[key])
+                self.add_link(self.inputs[new_key], node.inputs[key])
 
-    def generate_group_outputs(self) -> None:
+    def generate_outputs(self) -> None:
         """Generate group outputs from nodes."""
-        self.group_outputs._clear()
+        self.outputs._clear()
         for node in self.nodes:
             socket = node.outputs._copy(
-                node=self.meta_nodes["group_outputs"],
-                parent=self.group_outputs,
+                node=self.meta_nodes["_outputs"],
+                parent=self.outputs,
                 skip_builtin=True,
             )
             socket._name = node.name
-            self.group_outputs._append(socket)
+            self.outputs._append(socket)
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -158,57 +158,53 @@ class NodeGraph:
                 if new_key not in exist_keys:
                     continue
                 # add link from node outputs to group outputs
-                self.add_link(node.outputs[key], self.group_outputs[new_key])
+                self.add_link(node.outputs[key], self.outputs[new_key])
 
     @property
     def meta_sockets(self) -> Node:
         """Meta sockets node."""
         return {
-            "group_inputs": self.group_inputs,
-            "group_outputs": self.group_outputs,
-            "ctx": self.ctx,
+            "_inputs": self.inputs,
+            "_outputs": self.outputs,
+            "_ctx": self.ctx,
         }
 
     def meta_sockets_to_dict(self) -> Dict[str, Any]:
         meta_sockets = {
-            "ctx": self.ctx._to_dict(),
-            "group_inputs": self.group_inputs._to_dict(),
-            "group_outputs": self.group_outputs._to_dict(),
+            "_ctx": self.ctx._to_dict(),
+            "_inputs": self.inputs._to_dict(),
+            "_outputs": self.outputs._to_dict(),
         }
         return meta_sockets
 
     def meta_sockets_from_dict(self, meta_sockets: Dict[str, Any]) -> None:
-        ctx_data = meta_sockets.get("ctx", {})
+        ctx_data = meta_sockets.get("_ctx", {})
         if ctx_data:
-            self.meta_nodes["ctx"].inputs = self.ctx.__class__._from_dict(
-                ctx_data, node=self.meta_nodes["ctx"], pool=self.SocketPool, graph=self
+            self.meta_nodes["_ctx"].inputs = self.ctx.__class__._from_dict(
+                ctx_data, node=self.meta_nodes["_ctx"], pool=self.SocketPool, graph=self
             )
         else:
-            self.meta_nodes["ctx"].inputs._clear()
-        group_inputs_data = meta_sockets.get("group_inputs", {})
-        if group_inputs_data:
-            self.meta_nodes[
-                "group_inputs"
-            ].outputs = self.group_inputs.__class__._from_dict(
-                group_inputs_data,
-                node=self.meta_nodes["group_inputs"],
+            self.meta_nodes["_ctx"].inputs._clear()
+        inputs_data = meta_sockets.get("_inputs", {})
+        if inputs_data:
+            self.meta_nodes["_inputs"].outputs = self.inputs.__class__._from_dict(
+                inputs_data,
+                node=self.meta_nodes["_inputs"],
                 pool=self.SocketPool,
                 graph=self,
             )
         else:
-            self.meta_nodes["group_inputs"].outputs._clear()
-        group_outputs_data = meta_sockets.get("group_outputs", {})
-        if group_outputs_data:
-            self.meta_nodes[
-                "group_outputs"
-            ].inputs = self.group_outputs.__class__._from_dict(
-                group_outputs_data,
-                node=self.meta_nodes["group_outputs"],
+            self.meta_nodes["_inputs"].outputs._clear()
+        outputs_data = meta_sockets.get("_outputs", {})
+        if outputs_data:
+            self.meta_nodes["_outputs"].inputs = self.outputs.__class__._from_dict(
+                outputs_data,
+                node=self.meta_nodes["_outputs"],
                 pool=self.SocketPool,
                 graph=self,
             )
         else:
-            self.meta_nodes["group_outputs"].inputs._clear()
+            self.meta_nodes["_outputs"].inputs._clear()
 
     @property
     def platform_version(self) -> str:
@@ -320,8 +316,8 @@ class NodeGraph:
         """
         metadata: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            # "group_inputs": self.group_inputs,
-            # "group_outputs": self.group_outputs,
+            # "inputs": self.inputs,
+            # "outputs": self.outputs,
         }
         return metadata
 
