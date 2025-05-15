@@ -13,9 +13,12 @@ def test_from_dict(ng_decorator):
 
 def test_new_node(ng):
     """Test new node."""
-    n = len(ng.nodes)
-    ng.add_node(NodePool.node_graph.test_add)
-    assert len(ng.nodes) == n + 1
+    ng = NodeGraph(name="test_nodegraph")
+    n1 = ng.add_node(NodePool.node_graph.test_add)
+    n2 = ng.add_node(NodePool.node_graph.test_add)
+    assert n1.name == "test_add"
+    assert n2.name == "test_add1"
+    assert len(ng.nodes) == 2
 
 
 def test_delete_node(ng):

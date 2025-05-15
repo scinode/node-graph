@@ -275,7 +275,9 @@ class Collection:
             name = item_class.identifier.split(".")[-1]
         else:
             name = item_class.default_name
-        index = len(self._items) + 1
+        if name not in self._items:
+            return name
+        index = 1
         new_name = f"{name}{index}"
         while new_name in self._items:
             index += 1
