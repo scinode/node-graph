@@ -1,6 +1,6 @@
 from __future__ import annotations
 import numpy as np
-from typing import Any, Dict, List, Set, TYPE_CHECKING
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
 from node_graph.link import NodeLink
 from node_graph import Node
 from node_graph.socket import NodeSocketNamespace
@@ -9,7 +9,6 @@ from scipy.sparse.csgraph import depth_first_order
 
 if TYPE_CHECKING:
     from node_graph import NodeGraph
-# or from scipy.sparse.csgraph import breadth_first_order, connected_components, etc.
 
 
 def build_adjacency_matrix(graph: NodeGraph):
@@ -66,6 +65,7 @@ class NodeGraphAnalysis:
         self._cache_input_links: Dict[str, List[str]] = {}
         self._cache_output_links: Dict[str, List[str]] = {}
         self._cache_descendants: Dict[str, Set[str]] = {}
+        self._cache_zone: Dict[str, Dict[str, List[str]]] = {}
 
     # -------------------------------------------------------------------------
     # Public API that uses cached data
@@ -148,8 +148,28 @@ class NodeGraphAnalysis:
             "child_node": self._cache_descendants,
             "input_node": self._cache_input_links,
             "output_node": self._cache_output_links,
+            "zone": self._cache_zone,
         }
         return connectivity
+
+    def build_zone(self) -> Dict[str, Dict[str, List[str]]]:
+        """
+        Analyse *zones* (nodes that own a non-empty ``children`` list).
+
+        For each such node we return::
+
+            {
+                zone_name: {
+                    "children":     [...names inside the zone...],
+                    "input_tasks":  [...external nodes feeding the zone...]
+                }
+            }
+
+        *External inputs* are compressed to the **closest ancestor** outside
+        the zone – matching the logic in ``WorkGraphSaver.find_zone_inputs``.
+        """
+        self._ensure_cache_valid()
+        return self._cache_zone
 
     # -------------------------------------------------------------------------
     # Internals
@@ -286,3 +306,137 @@ class NodeGraphAnalysis:
             self._cache_descendants[node.name] = [
                 self._nodes_list[x].name for x in order
             ]
+        # Build zone cache
+        self._compute_zone_cache()
+
+    def _compute_zone_cache(self):
+        """
+        Populate ``_cache_zone`` for every node (each node is a "zone").
+
+        This method faithfully implements the WorkGraphSaver logic:
+
+        1) **Direct child / parent mapping**
+           - Build `direct_children[node]` from `node.children`.
+           - Build `parent_of[child] = parent` for each child.
+
+        2) **Parent chains**
+           - `parent_chain(name)` returns a list [`parent`, ..., None]
+             matching WorkGraphSaver.update_parent_task.
+
+        3) **Recursive zone input discovery** via `zone_inputs(zone_name)`:
+
+           A) **Raw inputs**: tasks linked directly into `zone_name`.
+
+           B) **Child zone inputs**:
+              - If a child is itself a zone, recurse `zone_inputs(child)`;
+                include sources that lie outside the child's direct children.
+              - Otherwise, include the child's direct inputs.
+
+           C) **Filter internal**:
+              - Exclude sources whose `parent_chain` ever enters
+                this zone's direct children.
+
+           D) **Collapse to producer-zones**:
+              - For each source, compute its `parent_chain`.
+              - Find the first common ancestor with the current zone's chain.
+              - If ancestor is itself, keep source; else pick the zone one level up.
+
+           E) **Cache result**:
+              - Store under `_cache_zone[zone_name]` with
+                {
+                  'children': direct children,
+                  'input_tasks': sorted unique final inputs
+                }.
+
+        Finally, invoke `zone_inputs` for every node to populate the cache.
+        """
+        # --- 1) build child / parent mappings --------------------------------
+        direct_children: Dict[str, List[str]] = {
+            n.name: [
+                c.name if isinstance(c, Node) else c for c in getattr(n, "children", [])
+            ]
+            for n in self.graph.nodes
+        }
+        parent_of: Dict[str, Optional[str]] = {}
+        for parent, kids in direct_children.items():
+            for k in kids:
+                parent_of[k] = parent
+
+        # helper – parent chain (like WorkGraphSaver.update_parent_task)
+        parent_chain_cache: Dict[str, List[Optional[str]]] = {}
+
+        def parent_chain(name: str) -> List[Optional[str]]:
+            if name in parent_chain_cache:
+                return parent_chain_cache[name]
+            parent = parent_of.get(name)
+            if parent is None:
+                chain = [None]
+            else:
+                chain = [parent] + parent_chain(parent)
+            parent_chain_cache[name] = chain
+            return chain
+
+        # --- 2) recursive zone input discovery ------------------------------
+        zone_cache: Dict[str, Dict[str, List[str]]] = {}
+
+        def zone_inputs(zone_name: str) -> List[str]:
+            if zone_name in zone_cache:
+                return zone_cache[zone_name]["input_tasks"]
+
+            # gather all direct children (may be empty for a leaf-zone)
+            kids = direct_children[zone_name]
+
+            # step A – raw input tasks (direct links into zone itself)
+            inputs: List[str] = list(self._cache_input_links.get(zone_name, []))
+
+            # step B – recurse into children
+            for child in kids:
+                if direct_children[child]:  # child is itself a zone
+                    for src in zone_inputs(child):
+                        if src not in kids:
+                            inputs.append(src)
+                else:  # child is a plain task
+                    inputs.extend(self._cache_input_links.get(child, []))
+
+            # step C – keep only tasks that are *truly outside* the zone
+            new_inputs: List[str] = []
+            for src in inputs:
+                chain_to_check = [src] + parent_chain(src)
+                if not any(t in kids for t in chain_to_check):
+                    new_inputs.append(src)
+
+            # step D – collapse each source to the correct producer-zone
+            final_inputs: List[str] = []
+            parents_of_zone = parent_chain(zone_name)
+            for src in new_inputs:
+                # first common ancestor between src-zone chain and this zone
+                src_chain = parent_chain(src)
+                common_parent: Optional[str] = None
+                for p in parents_of_zone:
+                    if p in src_chain:
+                        common_parent = p
+                        break
+                # find index to pick correct zone level
+                idx = (
+                    src_chain.index(common_parent) if common_parent in src_chain else 0
+                )
+                chosen = src if idx == 0 else src_chain[idx - 1]
+                final_inputs.append(chosen)
+
+            final_inputs = sorted(set(final_inputs))
+
+            zone_cache[zone_name] = {
+                "children": kids,
+                "input_tasks": final_inputs,
+            }
+            return final_inputs
+
+        # build cache for *every* node (every task is a zone)
+        for n in self.graph.nodes:
+            zone_inputs(n.name)
+
+        self._cache_zone = zone_cache
+
+    @staticmethod
+    def _to_name(obj) -> str:
+        return obj if isinstance(obj, str) else obj.name
