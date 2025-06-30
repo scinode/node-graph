@@ -106,3 +106,15 @@ def test_compare_graphs_with_changes(ng_complex, func_with_namespace_socket):
     assert "n4" in diff["modified_nodes"]
     # n1 not changed
     assert "n1" not in diff["modified_nodes"]
+
+
+def test_zone(ng_with_zone):
+    """
+    Two identical graphs => no added/removed/changed nodes
+    """
+    analysis = NodeGraphAnalysis(ng_with_zone)
+    zones = analysis.build_zone()
+    assert zones["zone1"]["input_tasks"] == ["n1"]
+    assert zones["zone2"]["input_tasks"] == ["zone1"]
+    assert zones["n3"]["input_tasks"] == ["zone1"]
+    assert zones["n5"]["input_tasks"] == ["zone2"]

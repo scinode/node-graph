@@ -91,6 +91,36 @@ def ng_complex(func_with_namespace_socket) -> NodeGraph:
 
 
 @pytest.fixture
+def ng_with_zone() -> NodeGraph:
+    """
+    Create a small NodeGraph:
+    zone1: n1, n2
+    zone2: n3, n4
+        n1 -> n2
+        n2 -> n3
+        n3 -> n4
+        n4 -> n5
+    """
+
+    ng = NodeGraph(name="test_graph")
+    zone1 = ng.add_node(NodePool.node_graph.test_add, name="zone1")
+    zone2 = ng.add_node(NodePool.node_graph.test_add, name="zone2")
+    n1 = ng.add_node(NodePool.node_graph.test_add, name="n1")
+    n2 = ng.add_node(NodePool.node_graph.test_add, name="n2")
+    n3 = ng.add_node(NodePool.node_graph.test_add, name="n3")
+    n4 = ng.add_node(NodePool.node_graph.test_add, name="n4")
+    n5 = ng.add_node(NodePool.node_graph.test_add, name="n5")
+    zone1.children = [n2, n3]
+    zone2.children = [n3, n4]
+    ng.add_link(n1.outputs.result, n2.inputs.x)
+    ng.add_link(n2.outputs.result, n3.inputs.x)
+    ng.add_link(n3.outputs.result, n4.inputs.x)
+    ng.add_link(n4.outputs.result, n5.inputs.x)
+
+    return ng
+
+
+@pytest.fixture
 def ng_group():
     ng = NodeGraph(name="test_node_group")
     # auto generate name for the node
