@@ -18,6 +18,8 @@ def test_meta_nodes() -> None:
 
 def test_ctx() -> None:
     """Test the ctx of a node graph."""
+    from node_graph.socket import NodeSocketNamespace
+
     ng = NodeGraph(name="test_ctx")
     ng.ctx = {"x": 1.0, "y": 2.0}
     node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=1, y=ng.ctx.y)
@@ -27,6 +29,9 @@ def test_ctx() -> None:
     )
     ng.ctx.sum = node2.outputs.result
     assert len(ng.ctx.sum._links) == 2
+    # assign a namespace socket to the ctx
+    ng.ctx.node1 = node1.outputs
+    assert isinstance(ng.ctx.node1, NodeSocketNamespace)
 
 
 def test_link() -> None:
