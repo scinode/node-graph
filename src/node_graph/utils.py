@@ -157,3 +157,29 @@ def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]
             if value is not None:
                 values[key] = value
     return values
+
+
+def valid_name_string(s: str) -> bool:
+    """
+    Check whether the input string s contains only alphanumeric characters and underscores.
+    If not, raise a ValueError with a clean message.
+
+    Args:
+        s: The string to validate.
+
+    Returns:
+        True if s is valid.
+
+    Raises:
+        ValueError: if s contains any character other than A-Z, a-z, 0-9 or underscore.
+    """
+    import re
+
+    if " " in s:
+        raise ValueError(f"Invalid name: {s!r}: spaces are not allowed")
+
+    if not re.fullmatch(r"[A-Za-z0-9_]+", s):
+        raise ValueError(
+            f"Invalid name: {s!r}. Only letters, digits and underscores are allowed"
+        )
+    return True

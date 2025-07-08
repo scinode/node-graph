@@ -287,6 +287,9 @@ class BaseSocket:
             type (str, optional): Socket type. Defaults to "INPUT".
             link_limit (int, optional): Maximum number of links. Defaults to 1.
         """
+        from node_graph.utils import valid_name_string
+
+        valid_name_string(name)
         self._name = name
         self._node = node
         self._parent = parent
