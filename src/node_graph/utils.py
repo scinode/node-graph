@@ -175,6 +175,9 @@ def valid_name_string(s: str) -> bool:
     """
     import re
 
+    if not isinstance(s, str):
+        raise ValueError(f"Invalid name: {s!r}: must be a string")
+
     if " " in s:
         raise ValueError(f"Invalid name: {s!r}: spaces are not allowed")
 
@@ -182,4 +185,3 @@ def valid_name_string(s: str) -> bool:
         raise ValueError(
             f"Invalid name: {s!r}. Only letters, digits and underscores are allowed"
         )
-    return True

@@ -409,13 +409,15 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
             else:
                 msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
             raise ValueError(msg)
+        name = None
         if len(args) > 2:
             name = args[2]
         if kwargs.get("name", None):
             name = kwargs.get("name")
-        valid_name_string(name)
-        if name in args[0]._get_keys():
-            raise ValueError(f"{name} already exists, please choose another name.")
+        if name is not None:
+            valid_name_string(name)
+            if name in args[0]._get_keys():
+                raise ValueError(f"{name} already exists, please choose another name.")
         item = func(*args, **kwargs)
         return item
 

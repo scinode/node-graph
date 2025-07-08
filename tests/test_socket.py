@@ -152,6 +152,12 @@ def test_check_name():
         match=f"Name '{key}' is reserved by the namespace.",
     ):
         node.add_input("node_graph.int", key)
+    key = "x 1"
+    with pytest.raises(
+        ValueError,
+        match="spaces are not allowed",
+    ):
+        node.add_input("node_graph.int", key)
 
 
 def test_namespace(node_with_namespace_socket):
