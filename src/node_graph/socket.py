@@ -670,7 +670,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             for key, val in value.items():
                 if key not in self:
                     if self._metadata.dynamic:
-                        if isinstance(val, dict):
+                        if isinstance(val, dict) or isinstance(
+                            val, NodeSocketNamespace
+                        ):
                             self._new(
                                 self._SocketPool["namespace"],
                                 key,
