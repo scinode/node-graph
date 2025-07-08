@@ -1,5 +1,6 @@
 from node_graph import NodeGraph, NodePool
 from node_graph.node import Node
+import pytest
 
 
 def test_base_node():
@@ -112,6 +113,12 @@ def test_check_name():
         )
     else:
         raise AssertionError("Name already exists.")
+    key = "x 1"
+    with pytest.raises(
+        ValueError,
+        match="spaces are not allowed",
+    ):
+        ng.add_node(NodePool.node_graph.test_add, key)
 
 
 def test_repr():

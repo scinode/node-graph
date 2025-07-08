@@ -399,6 +399,7 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
     """
 
     def wrapper_func(*args, **kwargs):
+        from node_graph.utils import valid_name_string
 
         identifier = args[1]
         if isinstance(identifier, str) and identifier.lower() not in args[0].pool:
@@ -408,12 +409,15 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
             else:
                 msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
             raise ValueError(msg)
-        if len(args) > 2 and args[2] in args[0]._get_keys():
-            raise ValueError(f"{args[2]} already exists, please choose another name.")
-        if kwargs.get("name", None) in args[0]._get_keys():
-            raise ValueError(
-                f"{kwargs.get('name')} already exists, please choose another name."
-            )
+        name = None
+        if len(args) > 2:
+            name = args[2]
+        if kwargs.get("name", None):
+            name = kwargs.get("name")
+        if name is not None:
+            valid_name_string(name)
+            if name in args[0]._get_keys():
+                raise ValueError(f"{name} already exists, please choose another name.")
         item = func(*args, **kwargs)
         return item
 
