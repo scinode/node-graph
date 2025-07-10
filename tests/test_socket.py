@@ -359,3 +359,15 @@ def test_set_namespace_attr():
     s.y = s1
     assert s.y.value is None
     assert len(s.y._links) == 1
+
+
+def test_socket_waiting_on():
+    """Test socket waiting_on."""
+
+    ng = NodeGraph(name="test_socket_waiting_on")
+    n1 = ng.add_node(NodePool.node_graph.test_add)
+    n2 = ng.add_node(NodePool.node_graph.test_add)
+    n3 = ng.add_node(NodePool.node_graph.test_add)
+    n1.outputs.result >> n3.inputs.x
+    n2.outputs.result >> n3.inputs.x
+    assert len(n3.inputs._wait._links) == 2

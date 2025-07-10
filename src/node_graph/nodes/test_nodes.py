@@ -68,8 +68,14 @@ class TestAdd(Node):
         self.outputs._clear()
         self.add_input("node_graph.float", "x")
         self.add_input("node_graph.float", "y")
+        self.add_input(
+            "node_graph.any", "_wait", link_limit=100000, metadata={"arg_type": "none"}
+        )
         self.add_output("node_graph.float", "result")
         self.add_output("node_graph.any", "_outputs")
+        self.add_output(
+            "node_graph.any", "_wait", link_limit=100000, metadata={"arg_type": "none"}
+        )
 
     def get_executor(self):
         executor = {

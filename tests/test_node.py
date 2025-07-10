@@ -150,8 +150,10 @@ def test_nodegraph_node():
         "_wait",
         "add1.x",
         "add1.y",
+        "add1._wait",
         "add2.x",
         "add2.y",
+        "add2._wait",
     }
     assert set(ng.nodes.sub_ng.outputs._get_all_keys()) == {
         "add1",
@@ -160,8 +162,10 @@ def test_nodegraph_node():
         "_wait",
         "add1._outputs",
         "add1.result",
+        "add1._wait",
         "add2._outputs",
         "add2.result",
+        "add2._wait",
     }
 
 
