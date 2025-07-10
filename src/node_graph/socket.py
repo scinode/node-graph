@@ -181,8 +181,9 @@ class WaitingOn:
         self._waiting_on = set()
 
     def add(self, socket: "BaseSocket") -> None:
-        if socket._name not in self._waiting_on:
-            self._waiting_on.add(socket._name)
+        """Add a socket to the waiting list."""
+        if socket._node.name not in self._waiting_on:
+            self._waiting_on.add(socket._node.name)
             self.parent._graph.add_link(
                 socket._node.outputs._wait, self.parent._node.inputs._wait
             )
