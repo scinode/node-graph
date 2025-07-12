@@ -154,21 +154,19 @@ class OperatorSocketMixin:
     def __ne__(self, other):
         return self._create_operator_node(op_ne, self, other)
 
-    def __rshift__(self, other: "Node"):
+    def __rshift__(self, other: "BaseSocket" | "Node"):
         """
         Called when we do: self >> other
         So we link them or mark that 'other' must wait for 'self'.
         """
         other._waiting_on.add(self)
-        return other
 
-    def __lshift__(self, other: "Node"):
+    def __lshift__(self, other: "BaseSocket" | "Node"):
         """
         Called when we do: self << other
         Means the same as: other >> self
         """
         self._waiting_on.add(other)
-        return other
 
 
 class WaitingOn:
@@ -176,27 +174,25 @@ class WaitingOn:
     A small helper class that manages 'waiting on' dependencies for a Socket.
     """
 
-    def __init__(self, parent: "BaseSocket") -> None:
-        self.parent = parent
-        self._waiting_on = set()
+    def __init__(self, node: "BaseSocket", graph: "NodeGraph") -> None:
+        self.node = node
+        self.graph = graph
 
-    def add(self, socket: "BaseSocket" | "Node") -> None:
+    def add(self, other: "BaseSocket" | "Node") -> None:
         """Add a socket to the waiting list."""
         from node_graph.node import Node
 
-        if isinstance(socket, BaseSocket):
-            node = socket._node
-        elif isinstance(socket, Node):
-            node = socket
+        if isinstance(other, BaseSocket):
+            node = other._node
+        elif isinstance(other, Node):
+            node = other
         else:
-            raise TypeError(
-                f"Expected BaseSocket or Node, got {type(socket).__name__}."
-            )
-        if node.name not in self._waiting_on:
-            self._waiting_on.add(node.name)
-            self.parent._graph.add_link(
-                node.outputs._wait, self.parent._node.inputs._wait
-            )
+            raise TypeError(f"Expected BaseSocket or Node, got {type(other).__name__}.")
+        link_name = f"{node.name}._wait -> {self.node.name}._wait"
+        if link_name not in self.graph.links:
+            self.graph.add_link(node.outputs._wait, self.node.inputs._wait)
+        else:
+            print(f"Link {link_name} already exists, skipping creation.")
 
 
 @dataclass()
@@ -308,7 +304,7 @@ class BaseSocket:
         self._links = []
         self._link_limit = link_limit
         self._metadata: SocketMetadata = SocketMetadata.from_raw(metadata)
-        self._waiting_on = WaitingOn(self)
+        self._waiting_on = WaitingOn(node=self._node, graph=self._graph)
 
     @property
     def _full_name(self) -> str:

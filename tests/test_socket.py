@@ -368,6 +368,14 @@ def test_socket_waiting_on():
     n1 = ng.add_node(NodePool.node_graph.test_add)
     n2 = ng.add_node(NodePool.node_graph.test_add)
     n3 = ng.add_node(NodePool.node_graph.test_add)
-    n1.outputs.result >> n3.inputs.x
-    n2.outputs.result >> n3.inputs.x
-    assert len(n3.inputs._wait._links) == 2
+    n4 = ng.add_node(NodePool.node_graph.test_add)
+    n5 = ng.add_node(NodePool.node_graph.test_add)
+    # left shift
+    # wait for socket
+    n1.outputs.result >> n5.inputs.x
+    # wait for node
+    n2.outputs.result >> n5
+    # rshift
+    n5 << n3.outputs.result
+    n5 << n4
+    assert len(n5.inputs._wait._links) == 4
