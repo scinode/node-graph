@@ -160,6 +160,7 @@ class OperatorSocketMixin:
         So we link them or mark that 'other' must wait for 'self'.
         """
         other._waiting_on.add(self)
+        return other
 
     def __lshift__(self, other: "BaseSocket" | "Node"):
         """
@@ -167,6 +168,7 @@ class OperatorSocketMixin:
         Means the same as: other >> self
         """
         self._waiting_on.add(other)
+        return other
 
 
 class WaitingOn:
