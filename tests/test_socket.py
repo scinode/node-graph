@@ -379,3 +379,17 @@ def test_socket_waiting_on():
     n5 << n3.outputs.result
     n5 << n4
     assert len(n5.inputs._wait._links) == 4
+    # chaining dependency
+    n6 = ng.add_node(NodePool.node_graph.test_add)
+    n7 = ng.add_node(NodePool.node_graph.test_add)
+    n8 = ng.add_node(NodePool.node_graph.test_add)
+    n6 >> n7 >> n8
+    assert n8.inputs._wait._links[0].from_node.name == n7.name
+    assert n7.inputs._wait._links[0].from_node.name == n6.name
+    # chaining dependency
+    n9 = ng.add_node(NodePool.node_graph.test_add)
+    n10 = ng.add_node(NodePool.node_graph.test_add)
+    n11 = ng.add_node(NodePool.node_graph.test_add)
+    n11 << n10 << n9
+    assert n11.inputs._wait._links[0].from_node.name == n10.name
+    assert n10.inputs._wait._links[0].from_node.name == n9.name
