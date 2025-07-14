@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from node_graph.group import DependencyGroup
 from node_graph.property import NodeProperty
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Sequence, Union
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
 from dataclasses import dataclass, field, asdict
 

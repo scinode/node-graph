@@ -4,7 +4,7 @@ from uuid import uuid1
 from node_graph.group import DependencyGroup
 from node_graph.sockets import SocketPool
 from node_graph.properties import PropertyPool
-from typing import List, Optional, Dict, Any, Sequence, Union
+from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
 from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace, WaitingOn
 from node_graph_widget import NodeGraphWidget
