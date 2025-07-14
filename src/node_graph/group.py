@@ -1,4 +1,4 @@
-class Group:
+class DependencyGroup:
     """
     A group that can be used to create dependencies between multiple nodes/sockets.
     """
@@ -18,5 +18,5 @@ class Group:
 
 
 def group(*items):
-    """Create a group of items (nodes/sockets)."""
-    return Group(*items)
+    """Create a dependency group of items (nodes/sockets)."""
+    return DependencyGroup(*items)
