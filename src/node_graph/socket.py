@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from node_graph.group import Group
 from node_graph.property import NodeProperty
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Sequence, Union
 from node_graph.collection import get_item_class, EntryPointPool
 from dataclasses import dataclass, field, asdict
 
@@ -154,20 +155,28 @@ class OperatorSocketMixin:
     def __ne__(self, other):
         return self._create_operator_node(op_ne, self, other)
 
-    def __rshift__(self, other: "BaseSocket" | "Node"):
+    def __rshift__(self, other: BaseSocket | Node | Group):
         """
         Called when we do: self >> other
         So we link them or mark that 'other' must wait for 'self'.
         """
-        other._waiting_on.add(self)
+        if isinstance(other, Group):
+            for item in other.items:
+                self >> item
+        else:
+            other._waiting_on.add(self)
         return other
 
-    def __lshift__(self, other: "BaseSocket" | "Node"):
+    def __lshift__(self, other: BaseSocket | Node | Group):
         """
         Called when we do: self << other
         Means the same as: other >> self
         """
-        self._waiting_on.add(other)
+        if isinstance(other, Group):
+            for item in other.items:
+                self << item
+        else:
+            self._waiting_on.add(other)
         return other
 
 
@@ -260,7 +269,7 @@ class SocketMetadata:
             )
             return cls(**known)
         raise TypeError(
-            "metadata must be dict | SocketMetadata | None – got " f"{type(raw)!r}"
+            f"metadata must be dict | SocketMetadata | None – got {type(raw)!r}"
         )
 
 
@@ -355,7 +364,6 @@ class BaseSocket:
 
 
 class NodeSocket(BaseSocket, OperatorSocketMixin):
-
     _identifier: str = "NodeSocket"
 
     _socket_property_class = NodeProperty
@@ -609,7 +617,6 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         metadata: Optional[dict] = None,
         **kwargs: Any,
     ) -> object:
-
         identifier = identifier or self._SocketPool["any"]
         check_identifier_name(identifier, self._SocketPool)
 
@@ -652,7 +659,6 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
     @property
     def _value(self) -> Dict[str, Any]:
-
         data = {}
         for name, item in self._sockets.items():
             if isinstance(item, NodeSocketNamespace):
@@ -863,4 +869,4 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
 
     def __repr__(self) -> str:
         nested = list(self._sockets.keys())
-        return f"{self.__class__.__name__}(name='{self._name}', " f"sockets={nested})"
+        return f"{self.__class__.__name__}(name='{self._name}', sockets={nested})"

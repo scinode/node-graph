@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 from node_graph import NodeGraph
+from node_graph.group import group
 from node_graph.node import Node
 from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool
@@ -99,7 +100,6 @@ def test_base_socket_type_validation(id, data):
 
 
 def test_general_property():
-
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
     socket = n.add_input("node_graph.any", "test")
@@ -393,3 +393,25 @@ def test_socket_waiting_on():
     n11 << n10 << n9
     assert n11.inputs._wait._links[0].from_node.name == n10.name
     assert n10.inputs._wait._links[0].from_node.name == n9.name
+
+
+def test_socket_group_waiting_on():
+    """Test socket group waiting_on."""
+
+    ng = NodeGraph(name="test_socket_group_waiting_on")
+    n1 = ng.add_node(NodePool.node_graph.test_add)
+    n2 = ng.add_node(NodePool.node_graph.test_add)
+    n3 = ng.add_node(NodePool.node_graph.test_add)
+
+    # Test sockets 2 and 3 wait on socket 1
+    n1.outputs.result >> group(n2.outputs.result, n3.outputs.result)
+    assert len(n2.inputs._wait._links) == 1
+    assert n2.inputs._wait._links[0].from_node.name == n1.name
+    assert len(n3.inputs._wait._links) == 1
+    assert n3.inputs._wait._links[0].from_node.name == n1.name
+
+    # Test socket 3 waits on sockets 1 and 2
+    n3.outputs.result << group(n1.inputs._wait, n2.inputs._wait)
+    assert len(n3.inputs._wait._links) == 2
+    assert n3.inputs._wait._links[0].from_node.name == n1.name
+    assert n3.inputs._wait._links[1].from_node.name == n2.name
