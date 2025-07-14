@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uuid import uuid1
+from node_graph.group import DependencyGroup
 from node_graph.sockets import SocketPool
 from node_graph.properties import PropertyPool
 from typing import List, Optional, Dict, Any, Union
@@ -446,7 +447,6 @@ class Node:
         """Modify and save a node to database."""
 
     def to_widget_value(self):
-
         tdata = self.to_dict()
 
         for key in ("properties", "executor", "node_class", "process"):
@@ -476,18 +476,26 @@ class Node:
         self.widget.value = self.to_widget_value()
         return self.widget.to_html(output=output, **kwargs)
 
-    def __rshift__(self, other: "Node" | BaseSocket):
+    def __rshift__(self, other: "Node" | BaseSocket | DependencyGroup):
         """
         Called when we do: self >> other
         So we link them or mark that 'other' must wait for 'self'.
         """
-        other._waiting_on.add(self)
+        if isinstance(other, DependencyGroup):
+            for item in other.items:
+                self >> item
+        else:
+            other._waiting_on.add(self)
         return other
 
-    def __lshift__(self, other: "Node" | BaseSocket):
+    def __lshift__(self, other: "Node" | BaseSocket | DependencyGroup):
         """
         Called when we do: self << other
         Means the same as: other >> self
         """
-        self._waiting_on.add(other)
+        if isinstance(other, DependencyGroup):
+            for item in other.items:
+                self << item
+        else:
+            self._waiting_on.add(other)
         return other
