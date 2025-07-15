@@ -13,6 +13,9 @@ from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
 
 
+BUILTINS_NODES = ["graph_ctx", "graph_inputs", "graph_outputs"]
+
+
 class NodeGraph:
     """A collection of nodes and links.
 
@@ -66,7 +69,6 @@ class NodeGraph:
         self.graph_type = graph_type
         self.nodes = NodeCollection(self, pool=self.NodePool)
         self.links = LinkCollection(self)
-        self.init_meta_nodes()
         self.state = state
         self.action = action
         self.description = description
@@ -74,57 +76,73 @@ class NodeGraph:
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
 
-    def init_meta_nodes(self) -> None:
-        self.meta_nodes = NodeCollection(self, pool=self.NodePool)
-        # add inputs and outputs nodes
-        graph_inputs = self.meta_nodes._new("any", name="graph_inputs")
-        graph_inputs.outputs._metadata.dynamic = True
-        graph_outputs = self.meta_nodes._new("any", name="graph_outputs")
-        graph_outputs.inputs._metadata.dynamic = True
-        ctx = self.meta_nodes._new("any", name="graph_ctx")
-        ctx.inputs._metadata.dynamic = True
-        ctx.inputs._default_link_limit = 1e6
+    @property
+    def graph_inputs(self) -> Node:
+        """Group inputs node."""
+        if "graph_inputs" not in self.nodes:
+            graph_inputs = self.nodes._new("graph_inputs", name="graph_inputs")
+            graph_inputs.outputs._metadata.dynamic = True
+        return self.nodes["graph_inputs"]
+
+    @property
+    def graph_outputs(self) -> Node:
+        """Group outputs node."""
+        if "graph_outputs" not in self.nodes:
+            graph_outputs = self.nodes._new("graph_outputs", name="graph_outputs")
+            graph_outputs.inputs._metadata.dynamic = True
+        return self.nodes["graph_outputs"]
+
+    @property
+    def graph_ctx(self) -> Node:
+        """Context variable node."""
+        if "graph_ctx" not in self.nodes:
+            ctx = self.nodes._new("graph_ctx", name="graph_ctx")
+            ctx.inputs._metadata.dynamic = True
+            ctx.inputs._default_link_limit = 1e6
+        return self.nodes["graph_ctx"]
 
     @property
     def inputs(self) -> Node:
         """Group inputs node."""
-        return self.meta_nodes["graph_inputs"].outputs
+        return self.graph_inputs.outputs
 
     @inputs.setter
     def inputs(self, value: Dict[str, Any]) -> None:
         """Set group inputs node."""
-        self.meta_nodes["graph_inputs"].outputs._clear()
-        self.meta_nodes["graph_inputs"].outputs._set_socket_value(value)
+        self.graph_inputs.outputs._clear()
+        self.graph_inputs.outputs._set_socket_value(value)
 
     @property
     def outputs(self) -> Node:
         """Group outputs node."""
-        return self.meta_nodes["graph_outputs"].inputs
+        return self.graph_outputs.inputs
 
     @outputs.setter
     def outputs(self, value: Dict[str, Any]) -> None:
         """Set group outputs node."""
-        self.meta_nodes["graph_outputs"].inputs._clear()
-        self.meta_nodes["graph_outputs"].inputs._set_socket_value(value)
+        self.graph_outputs.inputs._clear()
+        self.graph_outputs.inputs._set_socket_value(value)
 
     @property
     def ctx(self) -> Node:
         """Context node."""
-        return self.meta_nodes["graph_ctx"].inputs
+        return self.graph_ctx.inputs
 
     @ctx.setter
     def ctx(self, value: Dict[str, Any]) -> None:
         """Set context node."""
-        self.meta_nodes["graph_ctx"].inputs._clear()
-        self.meta_nodes["graph_ctx"].inputs._set_socket_value(value, link_limit=100000)
+        self.graph_ctx.inputs._clear()
+        self.graph_ctx.inputs._set_socket_value(value, link_limit=100000)
 
     def generate_inputs(self) -> None:
         """Generate group inputs from nodes."""
         self.inputs._clear()
         for node in self.nodes:
+            if node.name in BUILTINS_NODES:
+                continue
             # skip linked sockets
             socket = node.inputs._copy(
-                node=self.meta_nodes["graph_inputs"],
+                node=self.graph_inputs,
                 parent=self.inputs,
                 skip_linked=True,
                 skip_builtin=True,
@@ -144,8 +162,10 @@ class NodeGraph:
         """Generate group outputs from nodes."""
         self.outputs._clear()
         for node in self.nodes:
+            if node.name in BUILTINS_NODES:
+                continue
             socket = node.outputs._copy(
-                node=self.meta_nodes["graph_outputs"],
+                node=self.graph_outputs,
                 parent=self.outputs,
                 skip_builtin=True,
             )
@@ -159,55 +179,6 @@ class NodeGraph:
                     continue
                 # add link from node outputs to group outputs
                 self.add_link(node.outputs[key], self.outputs[new_key])
-
-    @property
-    def meta_sockets(self) -> Node:
-        """Meta sockets node."""
-        return {
-            "graph_inputs": self.inputs,
-            "graph_outputs": self.outputs,
-            "graph_ctx": self.ctx,
-        }
-
-    def meta_sockets_to_dict(self) -> Dict[str, Any]:
-        meta_sockets = {
-            "graph_ctx": self.ctx._to_dict(),
-            "graph_inputs": self.inputs._to_dict(),
-            "graph_outputs": self.outputs._to_dict(),
-        }
-        return meta_sockets
-
-    def meta_sockets_from_dict(self, meta_sockets: Dict[str, Any]) -> None:
-        ctx_data = meta_sockets.get("graph_ctx", {})
-        if ctx_data:
-            self.meta_nodes["graph_ctx"].inputs = self.ctx.__class__._from_dict(
-                ctx_data,
-                node=self.meta_nodes["graph_ctx"],
-                pool=self.SocketPool,
-                graph=self,
-            )
-        else:
-            self.meta_nodes["graph_ctx"].inputs._clear()
-        inputs_data = meta_sockets.get("graph_inputs", {})
-        if inputs_data:
-            self.meta_nodes["graph_inputs"].outputs = self.inputs.__class__._from_dict(
-                inputs_data,
-                node=self.meta_nodes["graph_inputs"],
-                pool=self.SocketPool,
-                graph=self,
-            )
-        else:
-            self.meta_nodes["graph_inputs"].outputs._clear()
-        outputs_data = meta_sockets.get("graph_outputs", {})
-        if outputs_data:
-            self.meta_nodes["graph_outputs"].inputs = self.outputs.__class__._from_dict(
-                outputs_data,
-                node=self.meta_nodes["graph_outputs"],
-                pool=self.SocketPool,
-                graph=self,
-            )
-        else:
-            self.meta_nodes["graph_outputs"].inputs._clear()
 
     @property
     def platform_version(self) -> str:
@@ -234,8 +205,8 @@ class NodeGraph:
         from node_graph.decorator import build_node_from_callable
         from node_graph.nodes.factory.nodegraph_node import NodeGraphNodeFactory
 
-        if name in ["graph_ctx", "graph_inputs", "graph_inputs"]:
-            raise ValueError(f"Name {name} can not be used, it is reserved.")
+        # if name in ["graph_ctx", "graph_inputs", "graph_inputs"]:
+        # raise ValueError(f"Name {name} can not be used, it is reserved.")
 
         if isinstance(identifier, NodeGraph):
             identifier = NodeGraphNodeFactory.create_node(identifier)
@@ -307,7 +278,7 @@ class NodeGraph:
             short=short, should_serialize=should_serialize
         )
 
-        links, meta_links = self.links_to_dict()
+        links = self.links_to_dict()
         data = {
             "platform_version": f"{self.platform}@{self.platform_version}",
             "uuid": self.uuid,
@@ -317,9 +288,7 @@ class NodeGraph:
             "error": "",
             "metadata": metadata,
             "nodes": nodes,
-            "meta_sockets": self.meta_sockets_to_dict(),
             "links": links,
-            "meta_links": meta_links,
             "description": self.description,
         }
         return data
@@ -362,16 +331,9 @@ class NodeGraph:
             List[Dict[str, Any]]: The links data.
         """
         links = []
-        meta_links = []
         for link in self.links:
-            if (
-                link.from_node.name in self.meta_nodes
-                or link.to_node.name in self.meta_nodes
-            ):
-                meta_links.append(link.to_dict())
-            else:
-                links.append(link.to_dict())
-        return links, meta_links
+            links.append(link.to_dict())
+        return links
 
     def to_yaml(self) -> str:
         """Exports the node graph to a YAML format data.
@@ -390,48 +352,18 @@ class NodeGraph:
         """Updates the node graph from the database."""
         raise NotImplementedError("The 'update' method is not implemented.")
 
-    def links_from_dict(self, links: list, meta_links: list) -> None:
+    def links_from_dict(self, links: list) -> None:
         """Adds links to the node graph from a dictionary.
 
         Args:
             links (List[Dict[str, Any]]): The links data.
         """
         for link in links:
+            print(link)
             self.add_link(
                 self.nodes[link["from_node"]].outputs[link["from_socket"]],
                 self.nodes[link["to_node"]].inputs[link["to_socket"]],
             )
-        # add meta links
-        for link in meta_links:
-            if link["from_node"] in self.meta_sockets:
-                meta_socket = self.meta_sockets[link["from_node"]]
-                if link["from_socket"] not in meta_socket:
-                    meta_socket._set_socket_value(
-                        {link["from_socket"]: None}, link_limit=100000
-                    )
-                if link["to_node"] in self.meta_sockets:
-                    if link["to_socket"] not in self.meta_sockets[link["to_node"]]:
-                        self.meta_sockets[link["to_node"]]._set_socket_value(
-                            {link["to_socket"]: None}, link_limit=100000
-                        )
-                    to_socket = self.meta_sockets[link["to_node"]][link["to_socket"]]
-                else:
-                    to_socket = self.nodes[link["to_node"]].inputs[link["to_socket"]]
-                self.add_link(meta_socket[link["from_socket"]], to_socket)
-            elif link["to_node"] in self.meta_sockets:
-                meta_socket = self.meta_sockets[link["to_node"]]
-                if link["from_node"] in self.meta_sockets:
-                    from_socket = self.meta_sockets[link["from_node"]][
-                        link["from_socket"]
-                    ]
-                else:
-                    from_socket = self.nodes[link["from_node"]].outputs[
-                        link["from_socket"]
-                    ]
-                meta_socket._set_socket_value(
-                    {link["to_socket"]: from_socket},
-                    link_limit=100000,
-                )
 
     @classmethod
     def from_dict(
@@ -470,8 +402,7 @@ class NodeGraph:
                 _executor=ndata.get("executor", None),
             )
             node.update_from_dict(ndata)
-        ng.meta_sockets_from_dict(ngdata.get("meta_sockets", {}))
-        ng.links_from_dict(ngdata.get("links", []), ngdata.get("meta_links", []))
+        ng.links_from_dict(ngdata.get("links", []))
         return ng
 
     @classmethod
