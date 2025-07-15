@@ -81,7 +81,7 @@ class NodeGraph:
         """Group inputs node."""
         if "graph_inputs" not in self.nodes:
             graph_inputs = self.nodes._new("graph_inputs", name="graph_inputs")
-            graph_inputs.outputs._metadata.dynamic = True
+            graph_inputs.inputs._metadata.dynamic = True
         return self.nodes["graph_inputs"]
 
     @property
@@ -104,13 +104,13 @@ class NodeGraph:
     @property
     def inputs(self) -> Node:
         """Group inputs node."""
-        return self.graph_inputs.outputs
+        return self.graph_inputs.inputs
 
     @inputs.setter
     def inputs(self, value: Dict[str, Any]) -> None:
         """Set group inputs node."""
-        self.graph_inputs.outputs._clear()
-        self.graph_inputs.outputs._set_socket_value(value)
+        self.graph_inputs.inputs._clear()
+        self.graph_inputs.inputs._set_socket_value(value)
 
     @property
     def outputs(self) -> Node:
@@ -359,7 +359,6 @@ class NodeGraph:
             links (List[Dict[str, Any]]): The links data.
         """
         for link in links:
-            print(link)
             self.add_link(
                 self.nodes[link["from_node"]].outputs[link["from_socket"]],
                 self.nodes[link["to_node"]].inputs[link["to_socket"]],
