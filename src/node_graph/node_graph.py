@@ -198,15 +198,19 @@ class NodeGraph:
         return self._widget
 
     def add_node(
-        self, identifier: Union[str, Callable], name: str = None, **kwargs
+        self,
+        identifier: Union[str, Callable],
+        name: str = None,
+        include_builtins: bool = False,
+        **kwargs,
     ) -> Node:
         """Adds a node to the node graph."""
 
         from node_graph.decorator import build_node_from_callable
         from node_graph.nodes.factory.nodegraph_node import NodeGraphNodeFactory
 
-        # if name in ["graph_ctx", "graph_inputs", "graph_inputs"]:
-        # raise ValueError(f"Name {name} can not be used, it is reserved.")
+        if name in BUILTINS_NODES and not include_builtins:
+            raise ValueError(f"Name {name} can not be used, it is reserved.")
 
         if isinstance(identifier, NodeGraph):
             identifier = NodeGraphNodeFactory.create_node(identifier)
@@ -399,6 +403,7 @@ class NodeGraph:
                 uuid=ndata.pop("uuid", None),
                 _metadata=ndata.get("metadata", None),
                 _executor=ndata.get("executor", None),
+                include_builtins=ndata["name"] in BUILTINS_NODES,
             )
             node.update_from_dict(ndata)
         ng.links_from_dict(ngdata.get("links", []))
