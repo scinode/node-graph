@@ -13,7 +13,7 @@ from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
 
 
-BUILTINS_NODES = ["graph_ctx", "graph_inputs", "graph_outputs"]
+BUILTIN_NODES = ["graph_ctx", "graph_inputs", "graph_outputs"]
 
 
 class NodeGraph:
@@ -138,7 +138,7 @@ class NodeGraph:
         """Generate group inputs from nodes."""
         self.inputs._clear()
         for node in self.nodes:
-            if node.name in BUILTINS_NODES:
+            if node.name in BUILTIN_NODES:
                 continue
             # skip linked sockets
             socket = node.inputs._copy(
@@ -162,7 +162,7 @@ class NodeGraph:
         """Generate group outputs from nodes."""
         self.outputs._clear()
         for node in self.nodes:
-            if node.name in BUILTINS_NODES:
+            if node.name in BUILTIN_NODES:
                 continue
             socket = node.outputs._copy(
                 node=self.graph_outputs,
@@ -209,7 +209,7 @@ class NodeGraph:
         from node_graph.decorator import build_node_from_callable
         from node_graph.nodes.factory.nodegraph_node import NodeGraphNodeFactory
 
-        if name in BUILTINS_NODES and not include_builtins:
+        if name in BUILTIN_NODES and not include_builtins:
             raise ValueError(f"Name {name} can not be used, it is reserved.")
 
         if isinstance(identifier, NodeGraph):
@@ -403,7 +403,7 @@ class NodeGraph:
                 uuid=ndata.pop("uuid", None),
                 _metadata=ndata.get("metadata", None),
                 _executor=ndata.get("executor", None),
-                include_builtins=ndata["name"] in BUILTINS_NODES,
+                include_builtins=ndata["name"] in BUILTIN_NODES,
             )
             node.update_from_dict(ndata)
         ng.links_from_dict(ngdata.get("links", []))

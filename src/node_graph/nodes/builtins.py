@@ -52,6 +52,6 @@ class GraphOutputs(GraphLevelNode):
     name = "Graph_Outputs"
 
 
-class GraphCtx(GraphLevelNode):
+class GraphContext(GraphLevelNode):
     identifier = "node_graph.graph_ctx"
     name = "Graph_Ctx"
