@@ -5,7 +5,7 @@ from .executor import NodeExecutor
 from .nodes import NodePool
 from .group import group
 
-__version__ = "0.2.13"
+__version__ = "0.2.14"
 
 
 __all__ = ["NodeGraph", "Node", "node", "NodeExecutor", "NodePool", "group"]
