@@ -1,13 +1,13 @@
 from node_graph import NodeGraph, NodePool
 
 
-def test_meta_nodes() -> None:
-    """Test meta nodes of a node graph."""
+def test_builtin_nodes() -> None:
+    """Test builtin nodes of a node graph."""
     ng = NodeGraph()
     ng.add_input("node_graph.any", "x")
     ng.add_input("node_graph.any", "y")
     ng.add_output("node_graph.any", "result")
-    assert len(ng.meta_nodes) == 3
+    assert len(ng.nodes) == 2
     assert ng.inputs._metadata.dynamic is True
     assert ng.outputs._metadata.dynamic is True
     assert ng.ctx._metadata.dynamic is True
@@ -46,7 +46,7 @@ def test_link() -> None:
         y=node1.outputs.result,
     )
     ng.outputs.sum = ng.nodes.add2.outputs.result
-    assert len(ng.meta_nodes) == 3
+    assert len(ng.nodes) == 4
     assert len(ng.links) == 4
 
 
@@ -68,7 +68,7 @@ def test_from_dict() -> None:
     assert len(ng.links) == 6
     ng.to_dict()
     ng1 = NodeGraph.from_dict(ng.to_dict())
-    assert len(ng1.meta_nodes) == 3
+    assert len(ng1.nodes) == 5
     assert len(ng1.links) == 6
     assert ng1.ctx.y.value == 2.0
 

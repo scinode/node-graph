@@ -1,4 +1,5 @@
 from node_graph import NodeGraph, node, NodePool
+import pytest
 
 
 def test_from_dict(ng_decorator):
@@ -19,6 +20,13 @@ def test_new_node(ng):
     assert n1.name == "test_add"
     assert n2.name == "test_add1"
     assert len(ng.nodes) == 2
+    # add builtin node is not allowed
+    name = "graph_inputs"
+    with pytest.raises(
+        ValueError,
+        match=f"Name {name} can not be used, it is reserved.",
+    ):
+        ng.add_node(NodePool.node_graph.test_add, name=name)
 
 
 def test_delete_node(ng):
