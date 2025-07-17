@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from node_graph.group import DependencyGroup
+from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
@@ -155,24 +155,24 @@ class OperatorSocketMixin:
     def __ne__(self, other):
         return self._create_operator_node(op_ne, self, other)
 
-    def __rshift__(self, other: BaseSocket | Node | DependencyGroup):
+    def __rshift__(self, other: BaseSocket | Node | DependencyCollection):
         """
         Called when we do: self >> other
         So we link them or mark that 'other' must wait for 'self'.
         """
-        if isinstance(other, DependencyGroup):
+        if isinstance(other, DependencyCollection):
             for item in other.items:
                 self >> item
         else:
             other._waiting_on.add(self)
         return other
 
-    def __lshift__(self, other: BaseSocket | Node | DependencyGroup):
+    def __lshift__(self, other: BaseSocket | Node | DependencyCollection):
         """
         Called when we do: self << other
         Means the same as: other >> self
         """
-        if isinstance(other, DependencyGroup):
+        if isinstance(other, DependencyCollection):
             for item in other.items:
                 self << item
         else:

@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from node_graph import NodeGraph
-from node_graph.group import group
+from node_graph.collection import group
 from node_graph.node import Node
 from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool

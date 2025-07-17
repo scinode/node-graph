@@ -8,6 +8,7 @@ import logging
 if TYPE_CHECKING:
     from node_graph.node import Node
     from node_graph.nodes.factory.base import BaseNodeFactory
+    from node_graph.socket import BaseSocket
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +390,39 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self._paren
         """Execute all functions in post_deletion_hooks with the given item."""
         for func in self.post_deletion_hooks:
             func(self, item)
+
+
+class DependencyCollection:
+    """
+    A collection that can be used to create dependencies between multiple nodes/sockets.
+
+    This does not inherit from `Collection`, as it is a simple wrapper around items
+    strictly for creating/chaining dependencies.
+    """
+
+    def __init__(self, *items: Node | BaseSocket) -> None:
+        self.items = list(items)
+
+    def __rshift__(
+        self,
+        other: Node | BaseSocket | "DependencyCollection",
+    ) -> Node | BaseSocket | "DependencyCollection":
+        for item in self.items:
+            item >> other
+        return other
+
+    def __lshift__(
+        self,
+        other: Node | BaseSocket | "DependencyCollection",
+    ) -> Node | BaseSocket | "DependencyCollection":
+        for item in self.items:
+            item << other
+        return other
+
+
+def group(*items):
+    """Create a dependency collection of items (nodes/sockets)."""
+    return DependencyCollection(*items)
 
 
 def decorator_check_identifier_name(func: Callable) -> Callable:
