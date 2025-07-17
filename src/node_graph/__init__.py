@@ -3,9 +3,16 @@ from .node import Node
 from .decorator import node
 from .executor import NodeExecutor
 from .nodes import NodePool
-from .group import group
+from .collection import group
 
 __version__ = "0.2.14"
 
 
-__all__ = ["NodeGraph", "Node", "node", "NodeExecutor", "NodePool", "group"]
+__all__ = [
+    "NodeGraph",
+    "Node",
+    "node",
+    "NodeExecutor",
+    "NodePool",
+    "group",
+]
