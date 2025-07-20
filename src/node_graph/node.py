@@ -295,8 +295,8 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         # properties first, because the socket may be dynamic
-        for prop in data.get("properties", {}).values():
-            self.properties[prop["name"]].value = prop["value"]
+        for name, prop in data.get("properties", {}).items():
+            self.properties[name].value = prop["value"]
         # inputs
         input_values = collect_values_inside_namespace(data["inputs"])
         self.inputs._set_socket_value(input_values)

@@ -1,5 +1,4 @@
 from typing import Dict
-from node_graph.utils import list_to_dict
 from node_graph.node import Node
 import importlib
 
@@ -42,9 +41,10 @@ class BaseNodeFactory:
                 super().__init__(*args, **kwargs)
 
             def create_properties(self):
-                properties = list_to_dict(self._ndata.get("properties", {}))
-                for prop in properties.values():
+                properties = self._ndata.get("properties", {})
+                for name, prop in properties.items():
                     prop.setdefault("identifier", BaseClass.PropertyPool.any)
+                    prop["name"] = name
                     self.add_property(**prop)
 
             def create_sockets(self):

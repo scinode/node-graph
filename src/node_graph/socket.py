@@ -747,7 +747,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             **kwargs,
         )
         # Add nested sockets
-        for item_data in data.get("sockets", {}).values():
+        for name, item_data in data.get("sockets", {}).items():
+            item_data["name"] = name
             ns._new(**item_data)
         return ns
 

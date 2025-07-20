@@ -7,12 +7,12 @@ nodes:
   - identifier: node_graph.test_float
     name: float1
     properties:
-      - name: value
+      value:
         value: 2.0
   - identifier: node_graph.test_add
     name: add1
     inputs:
-      - name: y
+      y:
         property:
           value: 3.0
 links:

@@ -24,11 +24,18 @@ def get_executor_from_path(path: dict | str) -> Any:
     return executor
 
 
-def list_to_dict(data: List[Dict[str, Any]]) -> Dict[str, Any]:
+def list_to_dict(data: List[str]) -> Dict[str, Any]:
     """Convert list to dict."""
-    if isinstance(data, dict):
+    if data is None:
+        return {}
+    if isinstance(data, list):
+        if not all(isinstance(d, str) for d in data):
+            raise TypeError("All elements in the list must be strings")
+        return {d: {} for d in data}
+    elif isinstance(data, dict):
         return data
-    return {d["name"]: d for d in data}
+    else:
+        raise TypeError(f"Expected list or dict, got {type(data).__name__}")
 
 
 def nodegaph_to_short_json(

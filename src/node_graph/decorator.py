@@ -6,7 +6,6 @@ from node_graph.executor import NodeExecutor
 from node_graph.node import Node
 from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
 from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
-from node_graph.utils import list_to_dict
 
 
 def set_node_arguments(call_args, call_kwargs, node):
@@ -84,8 +83,8 @@ def inspect_function(
 
 def generate_input_sockets(
     func: Callable[..., Any],
-    inputs: Optional[List[Dict[str, Any]]] = None,
-    properties: Optional[List[Dict[str, Any]]] = None,
+    inputs: Optional[Dict[str, Any]] = None,
+    properties: Optional[Dict[str, Any]] = None,
     type_mapping: Optional[Dict[type, str]] = None,
 ) -> List[Dict[str, Union[str, Dict[str, Union[str, Any]]]]]:
     """Generate input sockets from a function.
@@ -94,33 +93,25 @@ def generate_input_sockets(
 
     if type_mapping is None:
         type_mapping = node_graph_type_mapping
-    if inputs is None:
-        inputs = []
-    if properties is None:
-        properties = []
+    inputs = inputs if inputs is not None else {}
+    properties = properties if properties is not None else {}
     args, kwargs, var_args, var_kwargs = inspect_function(func)
-    user_defined_input_names = [input["name"] for input in inputs] + [
-        property["name"] for property in properties
-    ]
+    user_defined_input_names = list(inputs.keys()) + list(properties.keys())
     for arg in args:
         if arg[0] not in user_defined_input_names:
-            inputs.append(
-                {
-                    "identifier": type_mapping.get(arg[1], type_mapping["default"]),
-                    "name": arg[0],
-                    "metadata": {
-                        "arg_type": "args",
-                        "required": True,
-                        "function_socket": True,
-                    },
-                }
-            )
+            inputs[arg[0]] = {
+                "identifier": type_mapping.get(arg[1], type_mapping["default"]),
+                "metadata": {
+                    "arg_type": "args",
+                    "required": True,
+                    "function_socket": True,
+                },
+            }
     for name, kwarg in kwargs.items():
         if name not in user_defined_input_names:
             identifier = type_mapping.get(kwarg["type"], type_mapping["default"])
             input = {
                 "identifier": identifier,
-                "name": name,
                 "metadata": {
                     "arg_type": "kwargs",
                     "required": True,
@@ -131,12 +122,12 @@ def generate_input_sockets(
             if kwarg.get("has_default", False):
                 input["property"]["default"] = kwarg["default"]
                 input["metadata"]["required"] = False
-            inputs.append(input)
+            inputs[name] = input
     # if var_args in input_names, set the link_limit to 1e6 and the identifier to namespace
     if var_args is not None:
         has_var_args = False
-        for input in inputs:
-            if input["name"] == var_args:
+        for name, input in inputs.items():
+            if name == var_args:
                 input.setdefault("link_limit", 1e6)
                 if (
                     input.get("identifier", type_mapping["namespace"])
@@ -150,18 +141,15 @@ def generate_input_sockets(
                 input["metadata"]["arg_type"] = "var_args"
                 has_var_args = True
         if not has_var_args:
-            inputs.append(
-                {
-                    "identifier": type_mapping["namespace"],
-                    "name": var_args,
-                    "metadata": {"arg_type": "var_args", "function_socket": True},
-                    "link_limit": 1e6,
-                }
-            )
+            inputs[var_args] = {
+                "identifier": type_mapping["namespace"],
+                "metadata": {"arg_type": "var_args", "function_socket": True},
+                "link_limit": 1e6,
+            }
     if var_kwargs is not None:
         has_var_kwargs = False
-        for input in inputs:
-            if input["name"] == var_kwargs:
+        for name, input in inputs.items():
+            if name == var_kwargs:
                 input.setdefault("link_limit", 1e6)
                 if (
                     input.get("identifier", type_mapping["namespace"])
@@ -175,22 +163,19 @@ def generate_input_sockets(
                 input["metadata"].update({"arg_type": "var_kwargs", "dynamic": True})
                 has_var_kwargs = True
         if not has_var_kwargs:
-            inputs.append(
-                {
-                    "identifier": type_mapping["namespace"],
-                    "name": var_kwargs,
-                    "metadata": {
-                        "arg_type": "var_kwargs",
-                        "dynamic": True,
-                        "function_socket": True,
-                    },
-                    "link_limit": 1e6,
-                }
-            )
+            inputs[var_kwargs] = {
+                "identifier": type_mapping["namespace"],
+                "metadata": {
+                    "arg_type": "var_kwargs",
+                    "dynamic": True,
+                    "function_socket": True,
+                },
+                "link_limit": 1e6,
+            }
     final_inputs = {
         "name": "inputs",
         "identifier": "node_graph.namespace",
-        "sockets": list_to_dict(inputs),
+        "sockets": inputs,
         "metadata": {"dynamic": var_kwargs is not None},
     }
     return final_inputs
@@ -258,9 +243,9 @@ def _make_wrapper(NodeCls, original_callable):
 def decorator_node(
     identifier: Optional[str] = None,
     node_type: str = "Normal",
-    properties: Optional[List[Dict[str, Any]]] = None,
-    inputs: Optional[List[Dict[str, Any]]] = None,
-    outputs: Optional[List[Dict[str, Any]]] = None,
+    properties: Optional[Dict[str, Any]] = None,
+    inputs: Optional[Dict[str, Any]] = None,
+    outputs: Optional[Dict[str, Any]] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
@@ -271,13 +256,13 @@ def decorator_node(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        properties (list): node properties
-        inputs (list): node inputs
-        outputs (list): node outputs
+        properties (dict): node properties
+        inputs (dict): node inputs
+        outputs (dict): node outputs
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        node_outputs = outputs or [{"identifier": "node_graph.any", "name": "result"}]
+        node_outputs = outputs or {"result": {"identifier": "node_graph.any"}}
         NodeCls = DecoratedFunctionNodeFactory.from_function(
             func=func,
             identifier=identifier,
@@ -295,9 +280,9 @@ def decorator_node(
 
 def decorator_graph_builder(
     identifier: Optional[str] = None,
-    properties: Optional[List[Dict[str, Any]]] = None,
-    inputs: Optional[List[Dict[str, Any]]] = None,
-    outputs: Optional[List[Dict[str, Any]]] = None,
+    properties: Optional[Dict[str, Any]] = None,
+    inputs: Optional[Dict[str, Any]] = None,
+    outputs: Optional[Dict[str, Any]] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a graph_builder node.
@@ -305,25 +290,21 @@ def decorator_graph_builder(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        properties (list): node properties
-        inputs (list): node inputs
-        outputs (list): node outputs
+        properties (dict): node properties
+        inputs (dict): node inputs
+        outputs (dict): node outputs
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         from node_graph.nodes.builtins import GraphBuilderNode
 
-        node_outputs = [
-            {"identifier": "node_graph.any", "name": output["name"]}
-            for output in outputs or []
-        ]
         NodeCls = DecoratedFunctionNodeFactory.from_function(
             func=func,
             identifier=identifier,
             node_type="node_group",
             properties=properties,
             inputs=inputs,
-            outputs=node_outputs,
+            outputs=outputs,
             catalog=catalog,
             node_class=GraphBuilderNode,
         )
