@@ -98,7 +98,7 @@ class NodeGraph:
         if "graph_ctx" not in self.nodes:
             ctx = self.nodes._new("graph_ctx", name="graph_ctx")
             ctx.inputs._metadata.dynamic = True
-            ctx.inputs._default_link_limit = 1e6
+            ctx.inputs._default_link_limit = 1000000
         return self.nodes["graph_ctx"]
 
     @property

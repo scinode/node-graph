@@ -24,8 +24,11 @@ def get_executor_from_path(path: dict | str) -> Any:
     return executor
 
 
-def list_to_dict(data: List[str]) -> Dict[str, Any]:
-    """Convert list to dict."""
+def validate_socket_data(data: List[str]) -> Dict[str, Any]:
+    """Validate socket data and convert it to a dictionary.
+    If data is None, return an empty dictionary.
+    If data is a list, convert it to a dictionary with empty dictionaries as values.
+    """
     if data is None:
         return {}
     if isinstance(data, list):
@@ -93,14 +96,14 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata["nodes"] = {}
     for node in nodes:
         node.setdefault("metadata", {})
-        node["properties"] = list_to_dict(node.get("properties", {}))
+        node["properties"] = validate_socket_data(node.get("properties", {}))
         node["inputs"] = {
             "name": "inputs",
-            "sockets": list_to_dict(node.get("inputs", {})),
+            "sockets": validate_socket_data(node.get("inputs", {})),
         }
         node["outputs"] = {
             "name": "outputs",
-            "sockets": list_to_dict(node.get("outputs", {})),
+            "sockets": validate_socket_data(node.get("outputs", {})),
         }
         ntdata["nodes"][node["name"]] = node
     return ntdata

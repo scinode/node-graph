@@ -101,7 +101,7 @@ def test_decorator_parameters() -> None:
         return {"sum": a + b, "product": a * b}
 
     test1 = test._NodeCls()
-    assert test1.inputs["kwargs"]._link_limit == 1e6
+    assert test1.inputs["kwargs"]._link_limit == 1000000
     assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
     assert "c" in test1.get_input_names()

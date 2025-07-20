@@ -528,7 +528,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         name: str,
         node: Optional["Node"] = None,
         parent: Optional["NodeSocket"] = None,
-        link_limit: int = 1e6,
+        link_limit: int = 1000000,
         metadata: Union[SocketMetadata, Dict[str, Any], None] = None,
         sockets: Optional[Dict[str, object]] = None,
         pool: Optional[object] = None,
@@ -560,7 +560,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             self._SocketPool = SocketPool
 
         if self._metadata.dynamic:
-            self._link_limit = 1e6
+            self._link_limit = 1000000
         if sockets is not None:
             for key, socket in sockets.items():
                 kwargs = {}

@@ -123,12 +123,12 @@ def generate_input_sockets(
                 input["property"]["default"] = kwarg["default"]
                 input["metadata"]["required"] = False
             inputs[name] = input
-    # if var_args in input_names, set the link_limit to 1e6 and the identifier to namespace
+    # if var_args in input_names, set the link_limit to 1000000 and the identifier to namespace
     if var_args is not None:
         has_var_args = False
         for name, input in inputs.items():
             if name == var_args:
-                input.setdefault("link_limit", 1e6)
+                input.setdefault("link_limit", 1000000)
                 if (
                     input.get("identifier", type_mapping["namespace"])
                     != type_mapping["namespace"]
@@ -144,13 +144,13 @@ def generate_input_sockets(
             inputs[var_args] = {
                 "identifier": type_mapping["namespace"],
                 "metadata": {"arg_type": "var_args", "function_socket": True},
-                "link_limit": 1e6,
+                "link_limit": 1000000,
             }
     if var_kwargs is not None:
         has_var_kwargs = False
         for name, input in inputs.items():
             if name == var_kwargs:
-                input.setdefault("link_limit", 1e6)
+                input.setdefault("link_limit", 1000000)
                 if (
                     input.get("identifier", type_mapping["namespace"])
                     != type_mapping["namespace"]
@@ -170,7 +170,7 @@ def generate_input_sockets(
                     "dynamic": True,
                     "function_socket": True,
                 },
-                "link_limit": 1e6,
+                "link_limit": 1000000,
             }
     final_inputs = {
         "name": "inputs",

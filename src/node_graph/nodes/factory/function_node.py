@@ -2,7 +2,7 @@ from node_graph.orm.mapping import type_mapping
 from typing import Any, Callable, Dict, List, Optional
 from node_graph.config import builtin_inputs, builtin_outputs
 from node_graph.executor import NodeExecutor
-from node_graph.utils import list_to_dict
+from node_graph.utils import validate_socket_data
 from .base import BaseNodeFactory
 
 
@@ -32,9 +32,9 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         node_class = node_class or cls.default_base_class
 
         identifier = identifier or func.__name__
-        inputs = list_to_dict(inputs) or {}
-        properties = list_to_dict(properties) or {}
-        outputs = list_to_dict(outputs) or {}
+        inputs = validate_socket_data(inputs) or {}
+        properties = validate_socket_data(properties) or {}
+        outputs = validate_socket_data(outputs) or {}
         error_handlers = error_handlers or []
         node_inputs = generate_input_sockets(
             func, inputs, properties, type_mapping=type_mapping
