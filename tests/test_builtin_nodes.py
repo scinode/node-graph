@@ -11,7 +11,7 @@ def test_builtin_nodes() -> None:
     assert ng.inputs._metadata.dynamic is True
     assert ng.outputs._metadata.dynamic is True
     assert ng.ctx._metadata.dynamic is True
-    assert ng.ctx._default_link_limit == 1e6
+    assert ng.ctx._default_link_limit == 1000000
     assert len(ng.inputs) == 2
     assert len(ng.outputs) == 1
 

@@ -1,8 +1,8 @@
 from node_graph.orm.mapping import type_mapping
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional
 from node_graph.config import builtin_inputs, builtin_outputs
 from node_graph.executor import NodeExecutor
-from node_graph.utils import list_to_dict
+from node_graph.utils import validate_socket_data
 from .base import BaseNodeFactory
 
 
@@ -15,9 +15,9 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         func: Callable,
         identifier: Optional[str] = None,
         node_type: str = "Normal",
-        properties: Optional[List[Tuple[str, str]]] = None,
-        inputs: Optional[List[Union[str, dict]]] = None,
-        outputs: Optional[List[Union[str, dict]]] = None,
+        properties: Optional[Dict[str, Any]] = None,
+        inputs: Optional[Dict[str, Any]] = None,
+        outputs: Optional[Dict[str, Any]] = None,
         error_handlers: Optional[List[Dict[str, Any]]] = None,
         catalog: str = "Others",
         additional_data: Optional[Dict[str, Any]] = None,
@@ -32,9 +32,9 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         node_class = node_class or cls.default_base_class
 
         identifier = identifier or func.__name__
-        inputs = inputs or []
-        properties = properties or []
-        outputs = outputs or []
+        inputs = validate_socket_data(inputs) or {}
+        properties = validate_socket_data(properties) or {}
+        outputs = validate_socket_data(outputs) or {}
         error_handlers = error_handlers or []
         node_inputs = generate_input_sockets(
             func, inputs, properties, type_mapping=type_mapping
@@ -43,7 +43,7 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         node_outputs = {
             "name": "outputs",
             "identifier": node_class.SocketPool.any,
-            "sockets": list_to_dict(outputs),
+            "sockets": outputs,
         }
         for out in node_outputs["sockets"].values():
             out.setdefault("metadata", {})

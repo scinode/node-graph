@@ -81,20 +81,20 @@ def test_get_items(ng):
 
 def test_load_graph():
     @node(
-        inputs=[
-            {"name": "nested", "identifier": "node_graph.namespace"},
-            {"name": "nested.d"},
-            {"name": "nested.f", "identifier": "node_graph.namespace"},
-            {"name": "nested.f.g"},
-            {"name": "nested.f.h"},
-        ],
-        outputs=[
-            {"name": "sum"},
-            {"name": "product"},
-            {"name": "nested", "identifier": "node_graph.namespace"},
-            {"name": "nested.sum"},
-            {"name": "nested.product"},
-        ],
+        inputs={
+            "nested": {"identifier": "node_graph.namespace"},
+            "nested.d": {},
+            "nested.f": {"identifier": "node_graph.namespace"},
+            "nested.f.g": {},
+            "nested.f.h": {},
+        },
+        outputs={
+            "sum": {},
+            "product": {},
+            "nested": {"identifier": "node_graph.namespace"},
+            "nested.sum": {},
+            "nested.product": {},
+        },
     )
     def test(a, b=1, nested={}):
         return {

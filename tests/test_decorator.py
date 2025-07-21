@@ -37,7 +37,7 @@ def test_create_node():
     """Build node on-the-fly."""
     ndata = {
         "identifier": "add",
-        "properties": [{"identifier": "node_graph.float", "name": "x", "default": 3}],
+        "properties": {"x": {"identifier": "node_graph.float", "default": 3}},
         "inputs": {
             "name": "inputs",
             "identifier": "node_graph.namespace",
@@ -93,15 +93,15 @@ def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
     @node(
-        inputs=[{"name": "c"}, {"name": "kwargs"}],
-        properties=[{"name": "d", "default": 3}],
-        outputs=[{"name": "sum"}, {"name": "product"}],
+        inputs={"c": {}, "kwargs": {}},
+        properties={"d": {"default": 3}},
+        outputs={"sum": {}, "product": {}},
     )
     def test(*x, a, b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
     test1 = test._NodeCls()
-    assert test1.inputs["kwargs"]._link_limit == 1e6
+    assert test1.inputs["kwargs"]._link_limit == 1000000
     assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
     assert "c" in test1.get_input_names()
@@ -117,7 +117,7 @@ def test_decorator_parameters() -> None:
 
 
 def test_socket():
-    @node(outputs=[{"name": "sum"}, {"name": "product"}])
+    @node(outputs={"sum": {}, "product": {}})
     def func(x: int, y: int = 1):
         return {"sum": x + y, "product": x * y}
 
@@ -126,6 +126,8 @@ def test_socket():
     assert "product" in outputs
     assert outputs._node.inputs.x._identifier == "node_graph.int"
     assert outputs._node.inputs.y.property.default == 1
+    # test socket order
+    assert outputs[0]._name == "sum"
 
 
 def create_test_node_group():
