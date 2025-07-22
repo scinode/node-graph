@@ -4,7 +4,7 @@ from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
 from node_graph.sockets import SocketPool
 from node_graph.nodes import NodePool
-from typing import Dict, Any, List, Optional, Tuple, Union, Callable
+from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.node import Node
 from node_graph.socket import NodeSocket
@@ -107,7 +107,7 @@ class NodeGraph:
         return self.graph_inputs.inputs
 
     @inputs.setter
-    def inputs(self, value: Dict[str, Any] | List[str] | Tuple[str]) -> None:
+    def inputs(self, value: Dict[str, Any]) -> None:
         """Set group inputs node."""
         self.graph_inputs.inputs._clear()
         self.graph_inputs.inputs._set_socket_value(value)
