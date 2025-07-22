@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union
 from node_graph.collection import get_item_class, EntryPointPool
 from dataclasses import dataclass, field, asdict
 
@@ -674,13 +674,20 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
 
-    def _set_socket_value(self, value: Dict[str, Any] | NodeSocket, **kwargs) -> None:
+    def _set_socket_value(
+        self,
+        value: Dict[str, Any] | List[str] | Tuple[str] | NodeSocket,
+        **kwargs,
+    ) -> None:
         """Set the value of the socket.
         In the kwargs, one can specify the pool, link_limit, metadata etc"""
         if value is None:
             return
         if isinstance(value, BaseSocket):
             self._node.graph.add_link(value, self)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                self._new(self._SocketPool["any"], item, **kwargs)
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:
