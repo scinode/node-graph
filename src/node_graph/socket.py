@@ -686,8 +686,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         if isinstance(value, BaseSocket):
             self._node.graph.add_link(value, self)
         elif isinstance(value, (list, tuple)):
-            for item in value:
-                self._new(self._SocketPool["any"], item, **kwargs)
+            self._set_socket_value(dict.fromkeys(value), **kwargs)
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:
