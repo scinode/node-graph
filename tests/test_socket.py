@@ -338,11 +338,19 @@ def test_unpacking():
     assert b.value == 2
 
 
-def test_set_socket_value():
+@pytest.mark.parametrize(
+    "value, expected_value",
+    [
+        ({"a": 1, "b": 2}, {"a": 1, "b": 2}),
+        (("a", "b"), {}),
+        (["a", "b"], {}),
+    ],
+)
+def test_set_socket_value(value, expected_value):
     s = NodeSocketNamespace("test", metadata={"dynamic": True})
-    value = {"a": 1, "b": 2}
     s._set_socket_value(value, link_limit=100000)
-    assert s._value == value
+    assert s._value == expected_value
+    assert all(key in s for key in value)
     assert s.a._link_limit == 100000
 
 
