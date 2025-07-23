@@ -5,7 +5,7 @@ from .executor import NodeExecutor
 from .nodes import NodePool
 from .collection import group
 
-__version__ = "0.2.18"
+__version__ = "0.2.19"
 
 
 __all__ = [
