@@ -361,6 +361,30 @@ def test_set_namespace_attr():
     assert len(s.y._links) == 1
 
 
+def test_set_namespace_item():
+    ng = NodeGraph()
+    n = Node(graph=ng)
+    s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+
+    # auto create a sub-socket "x"
+    s["x"] = 1
+    assert s.x.value == 1
+    assert s["x"].value == 1
+
+    s1 = NodeSocket("b", node=n, graph=ng)
+
+    s["x"] = s1
+    assert len(s.x._links) == 1
+    assert s["x"]._links == s.x._links
+
+    s["y"] = s1
+    assert s.y.value is None
+    assert s["y"].value is None
+
+    assert len(s.y._links) == 1
+    assert s["y"]._links == s.y._links
+
+
 def test_socket_waiting_on():
     """Test socket waiting_on."""
 

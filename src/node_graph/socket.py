@@ -602,6 +602,14 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
         self._set_socket_value({name: value}, link_limit=self._default_link_limit)
 
+    def __setitem__(self, key: str, value: Any) -> None:
+        """
+        Override __setitem__ so that doing `namespace_socket[key] = x`
+        either sets the property or links to another socket, rather than
+        replacing the entire sub-socket object.
+        """
+        self.__setattr__(key, value)
+
     def __dir__(self) -> list[str]:
         """
         Make tab-completion more friendly:
