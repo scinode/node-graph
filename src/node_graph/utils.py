@@ -179,3 +179,27 @@ def valid_name_string(s: str) -> bool:
         raise ValueError(
             f"Invalid name: {s!r}. Only letters, digits and underscores are allowed"
         )
+
+
+def socket_value_id_mapping(socket):
+    """Create a mapping of value IDs to sockets in a NodeSocketNamespace."""
+    from node_graph.socket import NodeSocketNamespace
+
+    mapping = {}
+    for sub_socket in socket._sockets.values():
+        if isinstance(sub_socket, NodeSocketNamespace):
+            sub_mapping = socket_value_id_mapping(sub_socket)
+            for value_id, socket_list in sub_mapping.items():
+                if value_id in mapping:
+                    mapping[value_id].extend(socket_list)
+                else:
+                    mapping[value_id] = socket_list
+        else:
+            value_id = sub_socket.property._value_id
+            if sub_socket.property.value is None:
+                continue
+            if value_id in mapping:
+                mapping[value_id].append(sub_socket)
+            else:
+                mapping[value_id] = [sub_socket]
+    return mapping

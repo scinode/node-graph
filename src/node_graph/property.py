@@ -36,6 +36,7 @@ class NodeProperty:
         self.update = update
         self.arg_type = arg_type
         self._value = default
+        self._value_id = None
         if value is not None:
             self.value = value
 
@@ -90,6 +91,8 @@ class NodeProperty:
         """Set the value and invoke the update callback if present."""
         self.validate(value)
         self._value = value
+        # Store the ID of the value to track link
+        self._value_id = id(value)
         if self.update:
             self.update()
 
