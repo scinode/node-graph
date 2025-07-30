@@ -439,3 +439,28 @@ def test_socket_group_waiting_on():
     assert len(n3.inputs._wait._links) == 2
     assert n3.inputs._wait._links[0].from_node.name == n1.name
     assert n3.inputs._wait._links[1].from_node.name == n2.name
+
+
+def test_value_id_mapping():
+    """Test socket value id mapping."""
+    from node_graph.utils import socket_value_id_mapping
+
+    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    # single value
+    a = 1
+    # nested socket
+    b = {"sub_b": 2}
+    # list value
+    c = [3, 4]
+    s._value = {
+        "a": a,
+        "b": b,
+        "c": c,
+        "another_a": a,  # the same input are passed to different sockets
+    }
+    mapping = socket_value_id_mapping(s)
+    assert mapping == {
+        id(a): [s.a, s.another_a],
+        id(b["sub_b"]): [s.b.sub_b],
+        id(c): [s.c],
+    }
