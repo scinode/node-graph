@@ -82,6 +82,11 @@ class NodeGraph:
         if "graph_inputs" not in self.nodes:
             graph_inputs = self.nodes._new("graph_inputs", name="graph_inputs")
             graph_inputs.inputs._metadata.dynamic = True
+            # Because the the graph_inputs socket can be linked to multiple tasks
+            # A temporary fix to allow more multiple links
+            # But we should distinguish between the input and output links
+            # and allow only one link per input socket by default
+            graph_inputs.inputs._default_link_limit = 1000000
         return self.nodes["graph_inputs"]
 
     @property

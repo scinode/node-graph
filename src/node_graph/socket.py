@@ -802,9 +802,10 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 if len(keys) > 1:
                     return item[keys[1]]
                 return item
+            parent = self._parent or self._node
             raise AttributeError(
                 f""""{key}" is not in the {self.__class__.__name__}.
-Acceptable names are {self._get_keys()}. This collection belongs to {self._parent}."""
+Acceptable names are {self._get_keys()}. This collection belongs to {parent}."""
             )
 
     def __contains__(self, name: str) -> bool:
