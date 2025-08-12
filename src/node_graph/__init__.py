@@ -4,6 +4,7 @@ from .decorator import node
 from .executor import NodeExecutor
 from .nodes import NodePool
 from .collection import group
+from . import spec
 
 __version__ = "0.2.21"
 
@@ -15,4 +16,5 @@ __all__ = [
     "NodeExecutor",
     "NodePool",
     "group",
+    "spec",
 ]
