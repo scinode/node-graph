@@ -5,6 +5,7 @@ from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
 from dataclasses import dataclass, field, asdict
+import wrapt
 
 if TYPE_CHECKING:
     from node_graph.node import Node
@@ -273,6 +274,50 @@ class SocketMetadata:
         )
 
 
+class TaggedValue(wrapt.ObjectProxy):
+    def __init__(self, wrapped, socket=None):
+        super().__init__(wrapped)
+
+        self._self_socket = socket
+
+    # Provide clean access via `proxy._socket` instead of `proxy._self_socket`
+    @property
+    def _socket(self):
+        return self._self_socket
+
+    @_socket.setter
+    def _socket(self, value):
+        self._self_socket = value
+
+    def __copy__(self):
+        # shallow-copy the wrapped value, preserve the tag
+        from copy import copy as _copy
+
+        w = _copy(self.__wrapped__)
+        return type(self)(w, socket=self._socket)
+
+    def __deepcopy__(self, memo):
+        from copy import deepcopy as _deepcopy
+
+        # required by wrapt.ObjectProxy
+        oid = id(self)
+        if oid in memo:
+            return memo[oid]
+        w = _deepcopy(self.__wrapped__, memo)
+        clone = type(self)(w, socket=self._socket)
+        memo[oid] = clone
+        return clone
+
+    def __reduce_ex__(self, protocol):
+        """
+        This is the magic method for serialization.
+
+        Instead of returning instructions to rebuild the TaggedValue proxy,
+        only the underlying value (self.__wrapped__) gets saved.
+        """
+        return self.__wrapped__.__reduce_ex__(protocol)
+
+
 class BaseSocket:
     """Socket object for input and output sockets of a Node.
 
@@ -433,6 +478,8 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
             self._node.graph.add_link(value, self)
+        elif isinstance(value, TaggedValue):
+            self._node.graph.add_link(value._socket, self)
         elif self.property:
             self.property.value = value
         else:

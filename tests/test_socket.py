@@ -441,11 +441,14 @@ def test_socket_group_waiting_on():
     assert n3.inputs._wait._links[1].from_node.name == n2.name
 
 
-def test_value_id_mapping():
-    """Test socket value id mapping."""
-    from node_graph.utils import socket_value_id_mapping
+def test_tagged_value():
+    """Test tagged value in socket."""
+    from node_graph.utils import tag_socket_value
+    from node_graph.socket import NodeSocketNamespace, TaggedValue
 
-    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    ng = NodeGraph(name="test_base_socket_type")
+    n = ng.add_node(Node, "test")
+    s = NodeSocketNamespace("inputs", node=n, graph=ng, metadata={"dynamic": True})
     # single value
     a = 1
     # nested socket
@@ -458,9 +461,15 @@ def test_value_id_mapping():
         "c": c,
         "another_a": a,  # the same input are passed to different sockets
     }
-    mapping = socket_value_id_mapping(s)
-    assert mapping == {
-        id(a): [s.a, s.another_a],
-        id(b["sub_b"]): [s.b.sub_b],
-        id(c): [s.c],
-    }
+    tag_socket_value(s)
+    assert isinstance(s.a.value, TaggedValue)
+    assert s.a.value._socket._name == "a"
+    for link in ng.links:
+        print(link.name)
+    # assign the value to another socket
+    n1 = ng.add_node(Node, "test1")
+    s1 = NodeSocketNamespace("inputs", node=n1, graph=ng, metadata={"dynamic": True})
+    s1._set_socket_value(s._value)
+    # this will add link between the two sockets, instead of copying the value
+    assert len(ng.links) == 4
+    assert "test.a -> test1.a" in ng.links

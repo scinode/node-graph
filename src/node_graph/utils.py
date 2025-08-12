@@ -203,3 +203,20 @@ def socket_value_id_mapping(socket):
             else:
                 mapping[value_id] = [sub_socket]
     return mapping
+
+
+def tag_socket_value(socket: "NodeSocket") -> "NodeSocket":
+    """Use a tagged object for the socket's property value."""
+    from node_graph.socket import NodeSocketNamespace, TaggedValue
+
+    if isinstance(socket, NodeSocketNamespace):
+        for sub_socket in socket._sockets.values():
+            tag_socket_value(sub_socket)
+    else:
+        # replace the socket's property value directly with a TaggedValue
+        # this avoids triggering the value setter
+        if socket.property:
+            if socket.property.value is not None:
+                socket.property.value = TaggedValue(
+                    socket.property.value, socket=socket
+                )
