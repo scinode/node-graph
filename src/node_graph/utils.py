@@ -205,15 +205,16 @@ def socket_value_id_mapping(socket):
     return mapping
 
 
-def use_proxy(socket: "NodeSocket") -> "NodeSocket":
-    """Use a proxy object for the socket's property value."""
+def tag_socket_value(socket: "NodeSocket") -> "NodeSocket":
+    """Use a tagged object for the socket's property value."""
     from node_graph.socket import NodeSocketNamespace, TaggedValue
 
     if isinstance(socket, NodeSocketNamespace):
         for sub_socket in socket._sockets.values():
-            use_proxy(sub_socket)
+            tag_socket_value(sub_socket)
     else:
         # replace the socket's property value directly with a TaggedValue
+        # this avoids triggering the value setter
         if socket.property:
             if socket.property.value is not None:
                 socket.property.value = TaggedValue(
