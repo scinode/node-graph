@@ -67,13 +67,18 @@ def _get_socketmeta(metas: List[Any]):
 
 def _map_identifier(tp: Any, type_mapping: Dict[type, str]) -> str:
     """Map a Python type to an identifier via type_mapping."""
-    # Namespace types are handled elsewhere; anything else is a leaf
     if tp in type_mapping:
         return type_mapping[tp]
     origin = get_origin(tp)
     if origin in (list, tuple, set):
         return type_mapping.get(list, type_mapping["default"])
     return type_mapping.get("default", "node_graph.any")
+
+
+def _unwrap_spec_field_type(tp: Any) -> tuple[Any, Optional[spec.SocketMeta]]:
+    """Unwrap Annotated inside spec.namespace/spec.dynamic field types."""
+    base, metas = _unwrap_annotated(tp)
+    return base, _get_socketmeta(metas)
 
 
 def _build_namespace_from_spec_type(
@@ -98,18 +103,23 @@ def _build_namespace_from_spec_type(
         ns["metadata"]["dynamic"] = True
         item_tp = getattr(ns_type, "__ng_item_type__", None)
         if item_tp is not None:
-            ns["metadata"]["item_identifier"] = _map_identifier(item_tp, type_mapping)
+            base_item_tp, _meta_unused = _unwrap_spec_field_type(item_tp)
+            ns["metadata"]["item_identifier"] = _map_identifier(
+                base_item_tp, type_mapping
+            )
 
     fields: Dict[str, Any] = getattr(ns_type, "__ng_fields__", {}) or {}
     defaults: Dict[str, Any] = getattr(ns_type, "__ng_defaults__", {}) or {}
     dv = default_values or {}
 
     for name, f_type in fields.items():
+        base_type, fmeta = _unwrap_spec_field_type(f_type)
+
         # Nested namespace
-        if _is_namespace_type(f_type):
+        if _is_namespace_type(base_type):
             child_defaults = dv.get(name) if isinstance(dv, dict) else None
             child = _build_namespace_from_spec_type(
-                f_type,
+                base_type,
                 type_mapping=type_mapping,
                 arg_type=arg_type,
                 default_values=child_defaults,
@@ -119,21 +129,28 @@ def _build_namespace_from_spec_type(
             continue
 
         # Leaf socket
-        identifier = _map_identifier(f_type, type_mapping)
+        identifier = _map_identifier(base_type, type_mapping)
 
         # precedence: parameter defaults (dict) > spec defaults
         has_param_default = isinstance(dv, dict) and name in dv
         has_spec_default = name in defaults
+        required = not (has_param_default or has_spec_default)
+        if fmeta is not None and fmeta.required is not None:
+            required = bool(fmeta.required)
+
         s: Dict[str, Any] = {
             "identifier": identifier,
             "metadata": {
                 "arg_type": arg_type,
-                "required": not (has_param_default or has_spec_default),
+                "required": required,
             },
             "property": {"identifier": identifier},
         }
         if mark_function_socket:
             s["metadata"]["function_socket"] = True
+        if fmeta is not None and fmeta.help:
+            s["metadata"]["help"] = fmeta.help
+
         if has_param_default:
             s["property"]["default"] = dv[name]
         elif has_spec_default:
@@ -146,19 +163,43 @@ def _build_namespace_from_spec_type(
 
 def generate_input_sockets(
     func: Callable[..., Any],
-    inputs: Optional[Dict[str, Any]] = None,
+    inputs: Optional[type] = None,  # <— now a spec type; dicts unsupported
     properties: Optional[Dict[str, Any]] = None,
     type_mapping: Optional[Dict[type, str]] = None,
 ) -> Dict[str, Any]:
-    """Generate input sockets strictly from spec.* (namespace/dynamic/socket)."""
+    """
+    Build the inputs container.
+
+    Policy:
+      - If `inputs` is provided, it MUST be a spec type (namespace/dynamic) and is used exclusively.
+      - Otherwise, infer from the function signature/annotations (supports spec.socket metadata).
+      - Dict-based inputs are not supported anymore.
+    """
     if type_mapping is None:
         from node_graph.orm.mapping import type_mapping as _default_tm
 
         type_mapping = _default_tm
 
-    inputs = inputs or {}
-    properties = properties or {}
+    # explicit spec provided -> authoritative; no mixing
+    if inputs:
+        if not _is_namespace_type(inputs):
+            raise TypeError("`inputs` must be a spec.namespace/spec.dynamic type.")
+        ns = _build_namespace_from_spec_type(
+            inputs,
+            type_mapping=type_mapping,
+            arg_type="explicit",
+            default_values=None,
+            mark_function_socket=True,
+        )
+        node_inputs = {
+            "name": "inputs",
+            "identifier": "node_graph.namespace",
+            "sockets": ns["sockets"],
+            "metadata": {"dynamic": bool(getattr(inputs, "__ng_dynamic__", False))},
+        }
+        return node_inputs
 
+    # inferred from function signature
     args, kwargs, var_args, var_kwargs = inspect_function(func)
 
     try:
@@ -166,12 +207,10 @@ def generate_input_sockets(
     except TypeError:
         ann = get_type_hints(func)
 
-    user_names = set(list(inputs.keys()) + list(properties.keys()))
+    sockets: Dict[str, Any] = {}
 
     # Positional
     for name, raw_type in args:
-        if name in user_names:
-            continue
         annotated_type, metas = _unwrap_annotated(ann.get(name, raw_type))
         meta = _get_socketmeta(metas)
 
@@ -182,8 +221,10 @@ def generate_input_sockets(
                 arg_type="args",
                 default_values=None,
             )
-            ns["metadata"]["required"] = True
-            inputs[name] = ns
+            ns["metadata"]["required"] = (
+                True if (meta is None or meta.required is None) else bool(meta.required)
+            )
+            sockets[name] = ns
         else:
             ident = _map_identifier(annotated_type, type_mapping)
             required = (
@@ -197,19 +238,18 @@ def generate_input_sockets(
                     "function_socket": True,
                 },
             }
-            inputs[name] = s
+            if meta is not None and meta.help:
+                s["metadata"]["help"] = meta.help
+            sockets[name] = s
 
     # Keyword / defaults
     for name, kw in kwargs.items():
-        if name in user_names:
-            continue
         annotated_type, metas = _unwrap_annotated(ann.get(name, kw.get("type")))
         meta = _get_socketmeta(metas)
         has_default = kw.get("has_default", False)
         default_val = kw.get("default", None)
 
         if _is_namespace_type(annotated_type):
-            # If parameter default is a dict, use it to override field defaults
             default_values = (
                 default_val if (has_default and isinstance(default_val, dict)) else None
             )
@@ -219,12 +259,11 @@ def generate_input_sockets(
                 arg_type="kwargs",
                 default_values=default_values,
             )
-            # required rule: explicit meta.required beats presence of default
             if meta is not None and meta.required is not None:
                 ns.setdefault("metadata", {})["required"] = bool(meta.required)
             else:
                 ns.setdefault("metadata", {})["required"] = not has_default
-            inputs[name] = ns
+            sockets[name] = ns
         else:
             ident = _map_identifier(annotated_type, type_mapping)
             required = not has_default
@@ -239,51 +278,41 @@ def generate_input_sockets(
                 },
                 "property": {"identifier": ident},
             }
+            if meta is not None and meta.help:
+                s["metadata"]["help"] = meta.help
             if has_default:
                 s["property"]["default"] = default_val
-            inputs[name] = s
+            sockets[name] = s
 
     # *args -> namespace
     if var_args is not None:
-        if var_args not in inputs:
-            inputs[var_args] = {
-                "identifier": type_mapping["namespace"],
-                "metadata": {"arg_type": "var_args", "function_socket": True},
-                "link_limit": 1_000_000,
-            }
-        else:
-            s = inputs[var_args]
-            s.setdefault("link_limit", 1_000_000)
-            s["identifier"] = type_mapping["namespace"]
-            s.setdefault("metadata", {})["arg_type"] = "var_args"
+        sockets[var_args] = {
+            "identifier": type_mapping["namespace"],
+            "metadata": {"arg_type": "var_args", "function_socket": True},
+            "link_limit": 1_000_000,
+        }
 
     # **kwargs -> dynamic namespace
+    is_dynamic = False
     if var_kwargs is not None:
-        if var_kwargs not in inputs:
-            inputs[var_kwargs] = {
-                "identifier": type_mapping["namespace"],
-                "metadata": {
-                    "arg_type": "var_kwargs",
-                    "dynamic": True,
-                    "function_socket": True,
-                },
-                "link_limit": 1_000_000,
-            }
-        else:
-            s = inputs[var_kwargs]
-            s.setdefault("link_limit", 1_000_000)
-            s["identifier"] = type_mapping["namespace"]
-            s.setdefault("metadata", {}).update(
-                {"arg_type": "var_kwargs", "dynamic": True}
-            )
+        sockets[var_kwargs] = {
+            "identifier": type_mapping["namespace"],
+            "metadata": {
+                "arg_type": "var_kwargs",
+                "dynamic": True,
+                "function_socket": True,
+            },
+            "link_limit": 1_000_000,
+        }
+        is_dynamic = True
 
-    final_inputs = {
+    node_inputs = {
         "name": "inputs",
         "identifier": "node_graph.namespace",
-        "sockets": inputs,
-        "metadata": {"dynamic": var_kwargs is not None},
+        "sockets": sockets,
+        "metadata": {"dynamic": is_dynamic},
     }
-    return final_inputs
+    return node_inputs
 
 
 def _build_output_from_spec_type(
@@ -305,17 +334,14 @@ def _build_output_from_spec_type(
 
 def generate_output_sockets(
     func: Callable[..., Any],
-    outputs: Optional[Dict[str, Any]] = None,
+    outputs: Optional[type] = None,
     type_mapping: Optional[Dict[type, str]] = None,
 ) -> Dict[str, Any]:
     """Build outputs strictly from spec.*; everything else is a single leaf 'result'."""
-    is_dynamic = False
     if type_mapping is None:
         from node_graph.orm.mapping import type_mapping as _default_tm
 
         type_mapping = _default_tm
-
-    outputs = outputs or {}
 
     try:
         ann = get_type_hints(func, include_extras=True)
@@ -323,38 +349,38 @@ def generate_output_sockets(
         ann = get_type_hints(func)
 
     ret = ann.get("return", None)
-    auto: Dict[str, Any] = {}
 
+    is_dynamic = False
+    # Use user-defined outputs if any, otherwise build from function return type
+    ret = outputs or ret
+    sockets = {}
     if ret is None:
-        if not outputs:
-            auto["result"] = {
-                "identifier": type_mapping.get("default", "node_graph.any")
-            }
+        sockets["result"] = {
+            "identifier": type_mapping.get("default", "node_graph.any")
+        }
     elif _is_namespace_type(ret):
         ns = _build_output_from_spec_type(ret, type_mapping=type_mapping)
 
-        # If return is a *static* namespace, flatten its fixed fields to top-level outputs
+        # If return is a *static* namespace, flatten its fixed fields to top-level sockets
         if not getattr(ret, "__ng_dynamic__", False):
             for name, sock in ns.get("sockets", {}).items():
-                auto[name] = sock
+                sockets[name] = sock
         else:
             # Dynamic namespace (possibly with fixed fields) lives under 'result'
-            auto = ns["sockets"]
+            sockets = ns["sockets"]
             is_dynamic = True
     else:
         # Everything else is a single leaf
-        auto["result"] = _build_output_from_spec_type(ret, type_mapping=type_mapping)
+        sockets["result"] = _build_output_from_spec_type(ret, type_mapping=type_mapping)
 
-    merged = {**auto, **outputs}
-
-    for s in merged.values():
+    for s in sockets.values():
         s.setdefault("metadata", {})["function_socket"] = True
 
     node_outputs = {
         "name": "outputs",
         "identifier": type_mapping["namespace"],
         "metadata": {"dynamic": is_dynamic},
-        "sockets": merged,
+        "sockets": sockets,
     }
 
     return node_outputs

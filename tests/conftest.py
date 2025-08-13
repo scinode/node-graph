@@ -1,6 +1,5 @@
 import pytest
-from node_graph.decorator import node
-from node_graph import NodeGraph, Node, NodePool
+from node_graph import NodeGraph, Node, NodePool, node, spec
 
 
 @pytest.fixture
@@ -22,22 +21,13 @@ def node_with_namespace_socket():
 @pytest.fixture
 def func_with_namespace_socket():
     @node(
-        inputs={
-            "nested": {"identifier": "node_graph.namespace"},
-            "nested.d": {},
-            "nested.f": {"identifier": "node_graph.namespace"},
-            "nested.f.g": {},
-            "nested.f.h": {},
-        },
-        outputs={
-            "sum": {},
-            "product": {},
-            "nested": {"identifier": "node_graph.namespace"},
-            "nested.sum": {},
-            "nested.product": {},
-        },
+        outputs=spec.namespace(
+            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
+        ),
     )
-    def func(a, b=1, nested={}):
+    def func(
+        a, b=1, nested: spec.namespace(d=any, f=spec.namespace(g=any, h=any)) = {}
+    ):
         return {
             "sum": a + b,
             "product": a * b,
@@ -155,7 +145,7 @@ def decorated_myadd_group(decorated_myadd):
     """Generate a decorated node group for test."""
     myadd = decorated_myadd
 
-    @node.graph_builder(outputs={"result": {"identifier": "node_graph.any"}})
+    @node.graph_builder()
     def myaddgroup(x, y):
         ng = NodeGraph()
         add1 = ng.add_node(myadd, "add1")
@@ -178,11 +168,6 @@ def node_with_decorated_node(decorated_myadd):
 
     @node(
         identifier="node_with_decorated_node",
-        inputs={
-            "x": {"identifier": "node_graph.float"},
-            "y": {"identifier": "node_graph.float"},
-        },
-        outputs={"result": {"identifier": "node_graph.any"}},
     )
     def node_with_decorated_node(x, y):
         ng = NodeGraph("node_in_decorated_node")

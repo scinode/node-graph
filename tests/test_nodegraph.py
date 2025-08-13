@@ -1,4 +1,4 @@
-from node_graph import NodeGraph, node, NodePool
+from node_graph import NodeGraph, node, NodePool, spec
 import pytest
 
 
@@ -81,22 +81,13 @@ def test_get_items(ng):
 
 def test_load_graph():
     @node(
-        inputs={
-            "nested": {"identifier": "node_graph.namespace"},
-            "nested.d": {},
-            "nested.f": {"identifier": "node_graph.namespace"},
-            "nested.f.g": {},
-            "nested.f.h": {},
-        },
-        outputs={
-            "sum": {},
-            "product": {},
-            "nested": {"identifier": "node_graph.namespace"},
-            "nested.sum": {},
-            "nested.product": {},
-        },
+        outputs=spec.namespace(
+            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
+        ),
     )
-    def test(a, b=1, nested={}):
+    def test(
+        a, b=1, nested: spec.namespace(d=any, f=spec.namespace(g=any, h=any)) = {}
+    ):
         return {
             "sum": a + b,
             "product": a * b,

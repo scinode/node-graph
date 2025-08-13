@@ -29,16 +29,18 @@ def validate_socket_data(data: List[str]) -> Dict[str, Any]:
     If data is None, return an empty dictionary.
     If data is a list, convert it to a dictionary with empty dictionaries as values.
     """
+    from node_graph import spec
+
     if data is None:
         return {}
     if isinstance(data, list):
         if not all(isinstance(d, str) for d in data):
             raise TypeError("All elements in the list must be strings")
-        return {d: {} for d in data}
-    elif isinstance(data, dict):
+        return spec.namespace(**{d: any for d in data})
+    elif spec.is_namespace_type(data):
         return data
     else:
-        raise TypeError(f"Expected list or dict, got {type(data).__name__}")
+        raise TypeError(f"Expected list or namespace type, got {type(data).__name__}")
 
 
 def nodegaph_to_short_json(
@@ -96,14 +98,14 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata["nodes"] = {}
     for node in nodes:
         node.setdefault("metadata", {})
-        node["properties"] = validate_socket_data(node.get("properties", {}))
+        node["properties"] = node.get("properties", {})
         node["inputs"] = {
             "name": "inputs",
-            "sockets": validate_socket_data(node.get("inputs", {})),
+            "sockets": node.get("inputs", {}),
         }
         node["outputs"] = {
             "name": "outputs",
-            "sockets": validate_socket_data(node.get("outputs", {})),
+            "sockets": node.get("outputs", {}),
         }
         ntdata["nodes"][node["name"]] = node
     return ntdata

@@ -26,6 +26,10 @@ def socket(T: Any, **meta) -> Any:
     return Annotated[T, SocketMeta(**meta)]
 
 
+class _NamespaceSpecBase:  # marker base for subclass checks
+    pass
+
+
 _counter = itertools.count(1)
 
 
@@ -37,16 +41,17 @@ def _make_namespace_type(
     dynamic: bool,
     item_type: Any | None,
 ):
-    """Create a lightweight 'type' that carries namespace spec metadata."""
+    """Create a lightweight *class* that carries namespace spec metadata."""
     attrs = {
-        "__ng_namespace__": True,  # marker: this is a namespace spec
+        "__ng_namespace__": True,  # marker on the class (still useful for introspection)
         "__ng_dynamic__": dynamic,  # True if namespace accepts arbitrary key->item_type
         "__ng_item_type__": item_type,  # the item type for dynamic keys
         "__ng_fields__": fields,  # fixed fields: name -> type (or nested spec)
         "__ng_defaults__": defaults,  # field defaults: name -> value
         "__module__": __name__,
     }
-    return type(name, (object,), attrs)
+    # NOTE: inherit from the base so we can use issubclass(...)
+    return type(name, (_NamespaceSpecBase,), attrs)
 
 
 def namespace(_name: str | None = None, /, **fields: Any):
@@ -73,10 +78,9 @@ def namespace(_name: str | None = None, /, **fields: Any):
 def dynamic(item_type: Any, /, **fixed: Any):
     """
     Define a *dynamic* SocketNamespace (keys are str -> item_type).
-    You can also add fixed named sockets alongside the dynamic catch-all:
-        dynamic(int)                       # pure dynamic
-        dynamic(int, total=int)            # dynamic + fixed field(s)
-        dynamic(namespace(...))            # dynamic of a namespace
+      dynamic(int)                       # pure dynamic
+      dynamic(int, total=int)            # dynamic + fixed field(s)
+      dynamic(namespace(...))            # dynamic of a namespace
     Defaults: dynamic(int, a=(int, 1))
     """
     name = f"DYN_{next(_counter)}"
@@ -94,5 +98,5 @@ def dynamic(item_type: Any, /, **fixed: Any):
 
 
 def is_namespace_type(tp: Any) -> bool:
-    """Return True if 'tp' is a type produced by spec.namespace/spec.dynamic."""
-    return isinstance(tp, type) and getattr(tp, "__ng_namespace__", False) is True
+    """True if 'tp' is a class produced by spec.namespace/spec.dynamic."""
+    return isinstance(tp, type) and issubclass(tp, _NamespaceSpecBase)

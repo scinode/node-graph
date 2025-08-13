@@ -3,6 +3,34 @@ from node_graph import NodeGraph, node, spec
 from node_graph.socket import NodeSocketNamespace
 
 
+def test_nested_inputs():
+    @node()
+    def add_and_subtract(x: int, y: int, nested: spec.namespace(a=int, b=int)):
+        return {"sum": x + y, "difference": nested["a"] - nested["b"]}
+
+    ng = NodeGraph()
+    n = ng.add_node(add_and_subtract, x=5, y=3, nested={"a": 2, "b": 1})
+    # static namespace is flattened to top-level outputs
+    assert "x" in n.inputs
+    assert "y" in n.inputs
+    assert "a" in n.inputs.nested
+    assert "b" in n.inputs.nested
+
+
+def test_dynamic_inputs():
+    @node()
+    def generate_squares(n: int, dynamic_inputs: spec.dynamic(int)):
+        return {f"n_{i}": i * i for i in range(n)}
+
+    ng = NodeGraph()
+    n = ng.add_node(
+        generate_squares, n=5, dynamic_inputs={f"input_{i}": i for i in range(5)}
+    )
+    # dynamic inputs are accessible as a dictionary
+    assert "dynamic_inputs" in n.inputs
+    assert n.inputs.dynamic_inputs._metadata.dynamic is True
+
+
 def test_multiple_outputs():
     @node()
     def add_and_subtract(x: int, y: int) -> spec.namespace(sum=int, difference=int):
