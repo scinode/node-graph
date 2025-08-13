@@ -31,14 +31,12 @@ def validate_socket_data(data: List[str]) -> Dict[str, Any]:
     """
     from node_graph import spec
 
-    if data is None:
-        return {}
-    if isinstance(data, list):
+    if data is None or spec.is_namespace_type(data):
+        return data
+    elif isinstance(data, list):
         if not all(isinstance(d, str) for d in data):
             raise TypeError("All elements in the list must be strings")
         return spec.namespace(**{d: any for d in data})
-    elif spec.is_namespace_type(data):
-        return data
     else:
         raise TypeError(f"Expected list or namespace type, got {type(data).__name__}")
 

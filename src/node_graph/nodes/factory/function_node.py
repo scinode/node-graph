@@ -18,7 +18,6 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         func: Callable,
         identifier: Optional[str] = None,
         node_type: str = "Normal",
-        properties: Optional[Dict[str, Any]] = None,
         inputs: Optional[Dict[str, Any]] = None,
         outputs: Optional[Dict[str, Any]] = None,
         error_handlers: Optional[List[Dict[str, Any]]] = None,
@@ -30,14 +29,11 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
         node_class = node_class or cls.default_base_class
         identifier = identifier or func.__name__
 
-        inputs = validate_socket_data(inputs) or {}
-        properties = validate_socket_data(properties) or {}
-        outputs = validate_socket_data(outputs) or {}
+        inputs = validate_socket_data(inputs)
+        outputs = validate_socket_data(outputs)
         error_handlers = error_handlers or []
 
-        node_inputs = generate_input_sockets(
-            func, inputs, properties, type_mapping=type_mapping
-        )
+        node_inputs = generate_input_sockets(func, inputs, type_mapping=type_mapping)
 
         node_outputs = generate_output_sockets(func, outputs, type_mapping=type_mapping)
         # add built-ins without clobbering
@@ -52,7 +48,7 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
                 "node_type": node_type,
                 "catalog": catalog,
             },
-            "properties": properties,
+            "properties": {},
             "inputs": node_inputs,
             "outputs": node_outputs,
         }

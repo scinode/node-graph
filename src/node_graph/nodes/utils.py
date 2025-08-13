@@ -163,8 +163,7 @@ def _build_namespace_from_spec_type(
 
 def generate_input_sockets(
     func: Callable[..., Any],
-    inputs: Optional[type] = None,  # <— now a spec type; dicts unsupported
-    properties: Optional[Dict[str, Any]] = None,
+    inputs: Optional[type] = None,
     type_mapping: Optional[Dict[type, str]] = None,
 ) -> Dict[str, Any]:
     """

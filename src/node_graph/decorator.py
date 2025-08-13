@@ -1,6 +1,6 @@
 from __future__ import annotations
 import functools
-from typing import Any, List, Dict, Optional, Callable
+from typing import Any, List, Optional, Callable
 import inspect
 from node_graph.executor import NodeExecutor
 from node_graph.node import Node
@@ -89,9 +89,8 @@ def _make_wrapper(NodeCls, original_callable):
 def decorator_node(
     identifier: Optional[str] = None,
     node_type: str = "Normal",
-    properties: Optional[Dict[str, Any]] = None,
-    inputs: Optional[Dict[str, Any]] = None,
-    outputs: Optional[Dict[str, Any]] = None,
+    inputs: Optional[type | list] = None,
+    outputs: Optional[type | list] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
@@ -102,7 +101,6 @@ def decorator_node(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        properties (dict): node properties
         inputs (dict): node inputs
         outputs (dict): node outputs
     """
@@ -112,7 +110,6 @@ def decorator_node(
             func=func,
             identifier=identifier,
             node_type=node_type,
-            properties=properties,
             inputs=inputs,
             outputs=outputs,
             catalog=catalog,
@@ -125,9 +122,8 @@ def decorator_node(
 
 def decorator_graph_builder(
     identifier: Optional[str] = None,
-    properties: Optional[Dict[str, Any]] = None,
-    inputs: Optional[Dict[str, Any]] = None,
-    outputs: Optional[Dict[str, Any]] = None,
+    inputs: Optional[type | list] = None,
+    outputs: Optional[type | list] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a graph_builder node.
@@ -135,7 +131,6 @@ def decorator_graph_builder(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        properties (dict): node properties
         inputs (dict): node inputs
         outputs (dict): node outputs
     """
@@ -147,7 +142,6 @@ def decorator_graph_builder(
             func=func,
             identifier=identifier,
             node_type="node_group",
-            properties=properties,
             inputs=inputs,
             outputs=outputs,
             catalog=catalog,
