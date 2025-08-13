@@ -27,7 +27,7 @@ def test_dynamic_output_named_inside_namespace():
     assert isinstance(n.outputs.squares, NodeSocketNamespace)
 
 
-def test_top_level_dynamic_output_under_result():
+def test_top_level_dynamic_output():
     @node()
     def generate_squares(n: int) -> spec.dynamic(int):
         return {f"n_{i}": i * i for i in range(n)}
@@ -35,8 +35,7 @@ def test_top_level_dynamic_output_under_result():
     ng = NodeGraph()
     n = ng.add_node(generate_squares, n=4)
     # unnamed dynamic is exposed under 'result'
-    assert "result" in n.outputs
-    assert isinstance(n.outputs.result, NodeSocketNamespace)
+    assert n.outputs._metadata.dynamic is True
 
 
 def test_dynamic_of_namespace_rows():
@@ -49,8 +48,7 @@ def test_dynamic_of_namespace_rows():
     ng = NodeGraph()
     n = ng.add_node(rows, n=3)
     # dynamic where each entry is a small namespace
-    assert "result" in n.outputs
-    assert isinstance(n.outputs.result, NodeSocketNamespace)
+    assert n.outputs._metadata.dynamic is True
 
 
 def test_dynamic_with_fixed_fields_in_same_namespace():
@@ -63,8 +61,8 @@ def test_dynamic_with_fixed_fields_in_same_namespace():
 
     ng = NodeGraph()
     n = ng.add_node(both, n=3)
-    # dynamic entries + fixed siblings inside 'result'
-    assert "result" in n.outputs
-    assert isinstance(n.outputs.result, NodeSocketNamespace)
-    assert "total" in n.outputs.result
-    assert "meta" in n.outputs.result
+    # dynamic entries + fixed siblings
+    assert "total" in n.outputs
+    assert "meta" in n.outputs
+    assert "alpha" in n.outputs.meta
+    assert n.outputs._metadata.dynamic is True

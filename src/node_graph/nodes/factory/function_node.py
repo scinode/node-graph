@@ -39,15 +39,7 @@ class DecoratedFunctionNodeFactory(BaseNodeFactory):
             func, inputs, properties, type_mapping=type_mapping
         )
 
-        generated_outputs = generate_output_sockets(
-            func, outputs, type_mapping=type_mapping
-        )
-        node_outputs = {
-            "name": "outputs",
-            "identifier": node_class.SocketPool.any,
-            "sockets": generated_outputs,
-        }
-
+        node_outputs = generate_output_sockets(func, outputs, type_mapping=type_mapping)
         # add built-ins without clobbering
         for inp in builtin_inputs:
             node_inputs["sockets"].setdefault(inp["name"], inp.copy())

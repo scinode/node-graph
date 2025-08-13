@@ -309,6 +309,7 @@ def generate_output_sockets(
     type_mapping: Optional[Dict[type, str]] = None,
 ) -> Dict[str, Any]:
     """Build outputs strictly from spec.*; everything else is a single leaf 'result'."""
+    is_dynamic = False
     if type_mapping is None:
         from node_graph.orm.mapping import type_mapping as _default_tm
 
@@ -338,7 +339,8 @@ def generate_output_sockets(
                 auto[name] = sock
         else:
             # Dynamic namespace (possibly with fixed fields) lives under 'result'
-            auto["result"] = ns
+            auto = ns["sockets"]
+            is_dynamic = True
     else:
         # Everything else is a single leaf
         auto["result"] = _build_output_from_spec_type(ret, type_mapping=type_mapping)
@@ -348,4 +350,11 @@ def generate_output_sockets(
     for s in merged.values():
         s.setdefault("metadata", {})["function_socket"] = True
 
-    return merged
+    node_outputs = {
+        "name": "outputs",
+        "identifier": type_mapping["namespace"],
+        "metadata": {"dynamic": is_dynamic},
+        "sockets": merged,
+    }
+
+    return node_outputs
