@@ -1,7 +1,6 @@
 from node_graph.decorator import build_node_from_callable
-from node_graph.decorator import node
 from node_graph.manager import get_current_graph, set_current_graph
-from node_graph import NodeGraph, NodePool
+from node_graph import NodeGraph, NodePool, node, spec
 from node_graph.nodes.factory.base import BaseNodeFactory
 
 
@@ -93,21 +92,19 @@ def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
     @node(
-        inputs={"c": {}, "kwargs": {}},
-        properties={"d": {"default": 3}},
-        outputs={"sum": {}, "product": {}},
+        outputs=spec.namespace(sum=any, product=any),
     )
-    def test(*x, a, b=1, **kwargs):
+    def test(*x, a, b=1, c: spec.namespace(c1=any, c2=any), **kwargs):
         return {"sum": a + b, "product": a * b}
 
     test1 = test._NodeCls()
     assert test1.inputs["kwargs"]._link_limit == 1000000
     assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
-    assert "c" in test1.get_input_names()
-    assert "d" in test1.get_property_names()
+    assert "c" in test1.inputs
+    assert "c1" in test1.inputs.c
     assert set(test1.args_data["args"]) == set([])
-    assert set(test1.args_data["kwargs"]) == set(["a", "b", "c", "d"])
+    assert set(test1.args_data["kwargs"]) == set(["a", "b", "c"])
     assert test1.args_data["var_args"] == "x"
     assert "sum" in test1.get_output_names()
     assert "product" in test1.get_output_names()
@@ -117,7 +114,7 @@ def test_decorator_parameters() -> None:
 
 
 def test_socket():
-    @node(outputs={"sum": {}, "product": {}})
+    @node(outputs=spec.namespace(sum=any, product=any))
     def func(x: int, y: int = 1):
         return {"sum": x + y, "product": x * y}
 
