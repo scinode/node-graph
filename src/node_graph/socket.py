@@ -4,7 +4,7 @@ from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 import wrapt
 
 if TYPE_CHECKING:
@@ -236,7 +236,18 @@ class SocketMetadata:
     def to_dict(self) -> Dict[str, Any]:
         """Return a *plain* dict suitable for JSON serialisation."""
 
-        data = asdict(self)
+        data = {
+            "dynamic": self.dynamic,
+            "required": self.required,
+            "builtin_socket": self.builtin_socket,
+            "function_socket": self.function_socket,
+            "socket_type": self.socket_type,
+            "arg_type": self.arg_type,
+        }
+        if self.extras:
+            # Make sure extras are a dict
+            data["extras"] = dict(self.extras)
+
         # Do not bloat output with empty *extras*
         if not data.get("extras"):
             data.pop("extras", None)
