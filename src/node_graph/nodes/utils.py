@@ -104,9 +104,22 @@ def _build_namespace_from_spec_type(
         item_tp = getattr(ns_type, "__ng_item_type__", None)
         if item_tp is not None:
             base_item_tp, _meta_unused = _unwrap_spec_field_type(item_tp)
+            # Always expose a simple identifier (back-compat)
             ns["metadata"]["item_identifier"] = _map_identifier(
                 base_item_tp, type_mapping
             )
+            # If the item is itself a namespace, expose a full nested namespace schema
+            if _is_namespace_type(base_item_tp):
+                item_ns = _build_namespace_from_spec_type(
+                    base_item_tp,
+                    type_mapping=type_mapping,
+                    arg_type=arg_type,
+                    default_values=None,
+                    # Do NOT mark as function socket to avoid confusing UI on “template” items
+                    mark_function_socket=False,
+                )
+                # Keep this under metadata to avoid clashing with fixed fields in `sockets`
+                ns["metadata"]["item"] = item_ns
 
     fields: Dict[str, Any] = getattr(ns_type, "__ng_fields__", {}) or {}
     defaults: Dict[str, Any] = getattr(ns_type, "__ng_defaults__", {}) or {}
@@ -350,6 +363,7 @@ def generate_output_sockets(
     ret = ann.get("return", None)
 
     is_dynamic = False
+    extra_output_meta: Dict[str, Any] = {}
     # Use user-defined outputs if any, otherwise build from function return type
     ret = outputs or ret
     sockets = {}
@@ -368,6 +382,11 @@ def generate_output_sockets(
             # Dynamic namespace (possibly with fixed fields) lives under 'result'
             sockets = ns["sockets"]
             is_dynamic = True
+            # carry item metadata (including nested item namespace) up to the outputs container
+            md = ns.get("metadata", {}) or {}
+            for k in ("item_identifier", "item"):
+                if k in md:
+                    extra_output_meta[k] = md[k]
     else:
         # Everything else is a single leaf
         sockets["result"] = _build_output_from_spec_type(ret, type_mapping=type_mapping)
@@ -378,7 +397,10 @@ def generate_output_sockets(
     node_outputs = {
         "name": "outputs",
         "identifier": type_mapping["namespace"],
-        "metadata": {"dynamic": is_dynamic},
+        "metadata": {
+            "dynamic": is_dynamic,
+            **(extra_output_meta if is_dynamic else {}),
+        },
         "sockets": sockets,
     }
 
