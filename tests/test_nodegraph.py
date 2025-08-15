@@ -108,3 +108,19 @@ def test_load_graph():
     ng1 = NodeGraph.from_dict(ngdata)
     assert "sum" in ng1.nodes.test1.outputs.nested
     assert ng1.nodes.test1.inputs._value == ng.nodes.test1.inputs._value
+
+
+def test_build_graph_inputs_outputs(ng):
+    """Test build graph inputs and outputs."""
+    ng = NodeGraph(
+        name="test_graph_inputs_outputs",
+        inputs=spec.namespace(a=any, b=any, c=spec.namespace(x=any, y=any)),
+        outputs=spec.namespace(
+            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
+        ),
+    )
+    assert "a" in ng.inputs
+    assert "x" in ng.inputs.c
+    assert "sum" in ng.outputs
+    assert "sum" in ng.outputs.nested
+    assert ng.inputs._metadata.sub_socket_default_link_limit == 1000000
