@@ -226,6 +226,7 @@ class SocketMetadata:
     """
 
     dynamic: bool = False
+    sub_socket_default_link_limit: int = 1
     required: bool = False
     builtin_socket: bool = False
     function_socket: bool = False
@@ -272,6 +273,7 @@ class SocketMetadata:
                 "socket_type",
                 "arg_type",
                 "required",
+                "sub_socket_default_link_limit",
                 "extras",
             }
             known = {k: v for k, v in raw.items() if k in known_keys}
@@ -567,7 +569,6 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
-    _default_link_limit = 1
 
     _RESERVED_NAMES = {
         "_RESERVED_NAMES",
@@ -658,7 +659,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             object.__setattr__(self, name, value)
             return
 
-        self._set_socket_value({name: value}, link_limit=self._default_link_limit)
+        self._set_socket_value(
+            {name: value}, link_limit=self._metadata.sub_socket_default_link_limit
+        )
 
     def __setitem__(self, key: str, value: Any) -> None:
         """
@@ -679,7 +682,6 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         self,
         identifier: Union[str, type] = None,
         name: Optional[str] = None,
-        link_limit: int = 1,
         metadata: Optional[dict] = None,
         **kwargs: Any,
     ) -> object:
@@ -696,7 +698,10 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     self._new(
                         self._SocketPool["namespace"],
                         namespace,
-                        metadata={"dynamic": True},
+                        metadata={
+                            "dynamic": True,
+                            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+                        },
                     )
                 else:
                     raise ValueError(
@@ -705,17 +710,20 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             return self[namespace]._new(
                 identifier,
                 _names[1],
+                link_limit=self._metadata.sub_socket_default_link_limit,
                 metadata=metadata,
             )
         else:
             ItemClass = get_item_class(identifier, self._SocketPool, BaseSocket)
             kwargs.pop("graph", None)
+            kwargs.setdefault(
+                "link_limit", self._metadata.sub_socket_default_link_limit
+            )
             item = ItemClass(
                 name,
                 node=self._node,
                 parent=self,
                 graph=self._graph,
-                link_limit=link_limit,
                 metadata=metadata,
                 pool=self._SocketPool,
                 **kwargs,

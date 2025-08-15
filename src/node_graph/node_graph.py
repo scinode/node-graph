@@ -11,7 +11,8 @@ from node_graph.socket import NodeSocket
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
-
+from node_graph.nodes.utils import generate_input_sockets, generate_output_sockets
+from node_graph.orm.mapping import type_mapping
 
 BUILTIN_NODES = ["graph_ctx", "graph_inputs", "graph_outputs"]
 
@@ -46,10 +47,13 @@ class NodeGraph:
     NodePool: Dict[str, Any] = NodePool
     SocketPool = SocketPool
     platform: str = "node_graph"
+    type_mapping: dict = type_mapping
 
     def __init__(
         self,
         name: str = "NodeGraph",
+        inputs: Optional[type | List[str]] = None,
+        outputs: Optional[type | List[str]] = None,
         uuid: Optional[str] = None,
         graph_type: str = "NORMAL",
         state: str = "CREATED",
@@ -75,6 +79,38 @@ class NodeGraph:
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
+        self._build_graph_inputs_outputs(inputs, outputs)
+
+    def _build_graph_inputs_outputs(
+        self,
+        inputs: Optional[type | List[str]] = None,
+        outputs: Optional[type | List[str]] = None,
+    ) -> None:
+        if inputs is not None:
+            inputs_data = generate_input_sockets(
+                lambda **_: None, inputs, type_mapping=self.type_mapping
+            )
+            inputs_data["metadata"]["sub_socket_default_link_limit"] = 1000000
+            self.graph_inputs.inputs = (
+                self.graph_inputs.InputCollectionClass._from_dict(
+                    inputs_data,
+                    node=self.graph_inputs,
+                    pool=self.graph_inputs.SocketPool,
+                    graph=self,
+                )
+            )
+        if outputs is not None:
+            outputs_data = generate_output_sockets(
+                lambda **_: None, outputs, type_mapping=self.type_mapping
+            )
+            self.graph_outputs.inputs = (
+                self.graph_outputs.OutputCollectionClass._from_dict(
+                    outputs_data,
+                    node=self.graph_outputs,
+                    pool=self.graph_outputs.SocketPool,
+                    graph=self,
+                )
+            )
 
     @property
     def graph_inputs(self) -> Node:
@@ -86,7 +122,7 @@ class NodeGraph:
             # A temporary fix to allow more multiple links
             # But we should distinguish between the input and output links
             # and allow only one link per input socket by default
-            graph_inputs.inputs._default_link_limit = 1000000
+            graph_inputs.inputs._metadata.sub_socket_default_link_limit = 1000000
         return self.nodes["graph_inputs"]
 
     @property
@@ -103,7 +139,7 @@ class NodeGraph:
         if "graph_ctx" not in self.nodes:
             ctx = self.nodes._new("graph_ctx", name="graph_ctx")
             ctx.inputs._metadata.dynamic = True
-            ctx.inputs._default_link_limit = 1000000
+            ctx.inputs._metadata.sub_socket_default_link_limit = 1000000
         return self.nodes["graph_ctx"]
 
     @property
@@ -114,7 +150,6 @@ class NodeGraph:
     @inputs.setter
     def inputs(self, value: Dict[str, Any]) -> None:
         """Set group inputs node."""
-        self.graph_inputs.inputs._clear()
         self.graph_inputs.inputs._set_socket_value(value)
 
     @property
@@ -125,7 +160,6 @@ class NodeGraph:
     @outputs.setter
     def outputs(self, value: Dict[str, Any]) -> None:
         """Set group outputs node."""
-        self.graph_outputs.inputs._clear()
         self.graph_outputs.inputs._set_socket_value(value)
 
     @property
