@@ -139,11 +139,13 @@ class NodeGraph:
         self.graph_ctx.inputs._clear()
         self.graph_ctx.inputs._set_socket_value(value, link_limit=100000)
 
-    def generate_inputs(self) -> None:
+    def generate_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""
         self.inputs._clear()
         for node in self.nodes:
             if node.name in BUILTIN_NODES:
+                continue
+            if names is not None and node.name not in names:
                 continue
             # skip linked sockets
             socket = node.inputs._copy(
@@ -163,11 +165,13 @@ class NodeGraph:
                 # add link from group inputs to node inputs
                 self.add_link(self.inputs[new_key], node.inputs[key])
 
-    def generate_outputs(self) -> None:
+    def generate_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from nodes."""
         self.outputs._clear()
         for node in self.nodes:
             if node.name in BUILTIN_NODES:
+                continue
+            if names is not None and node.name not in names:
                 continue
             socket = node.outputs._copy(
                 node=self.graph_outputs,

@@ -117,3 +117,35 @@ def test_load_graph():
     ng1 = NodeGraph.from_dict(ngdata)
     assert "sum" in ng1.nodes.test1.outputs.nested
     assert ng1.nodes.test1.inputs._value == ng.nodes.test1.inputs._value
+
+
+def test_generate_inputs(ng):
+    """Test generation of inputs from nodes"""
+    ng.generate_inputs()
+    assert ng.inputs.float1._value == ng.nodes["float1"].inputs._value
+    assert ng.inputs.add1._value == ng.nodes["add1"].inputs._value
+    assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
+
+
+def test_generate_inputs_names(ng):
+    """Test generation of inputs from named nodes"""
+    ng.generate_inputs(names=["float1", "add2"])
+    assert ng.inputs.float1._value == ng.nodes["float1"].inputs._value
+    assert "add1" not in ng.inputs
+    assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
+
+
+def test_generate_outputs(ng):
+    """Test generation of outputs from nodes"""
+    ng.generate_outputs()
+    assert ng.outputs.float1._value == ng.nodes["float1"].outputs._value
+    assert ng.outputs.add1._value == ng.nodes["add1"].outputs._value
+    assert ng.outputs.add2._value == ng.nodes["add2"].outputs._value
+
+
+def test_generate_outputs_names(ng):
+    """Test generation of outputs from named nodes"""
+    ng.generate_outputs(names=["add1"])
+    assert "float1" not in ng.outputs
+    assert ng.outputs.add1._value == ng.nodes["add1"].outputs._value
+    assert "add2" not in ng.outputs
