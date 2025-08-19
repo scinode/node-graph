@@ -142,11 +142,15 @@ class NodeGraph:
     def generate_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""
         self.inputs._clear()
+        if names is not None:
+            unused_names = names.copy()
         for node in self.nodes:
             if node.name in BUILTIN_NODES:
                 continue
-            if names is not None and node.name not in names:
-                continue
+            if names is not None:
+                if node.name not in names:
+                    continue
+                unused_names.remove(node.name)
             # skip linked sockets
             socket = node.inputs._copy(
                 node=self.graph_inputs,
@@ -164,15 +168,25 @@ class NodeGraph:
                     continue
                 # add link from group inputs to node inputs
                 self.add_link(self.inputs[new_key], node.inputs[key])
+        if names is not None:
+            # Check there are no unused names left
+            if unused_names:
+                raise ValueError(
+                    f"The following named nodes do not exist: {unused_names}"
+                )
 
     def generate_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from nodes."""
         self.outputs._clear()
+        if names is not None:
+            unused_names = names.copy()
         for node in self.nodes:
             if node.name in BUILTIN_NODES:
                 continue
-            if names is not None and node.name not in names:
-                continue
+            if names is not None:
+                if node.name not in names:
+                    continue
+                unused_names.remove(node.name)
             socket = node.outputs._copy(
                 node=self.graph_outputs,
                 parent=self.outputs,
@@ -188,6 +202,12 @@ class NodeGraph:
                     continue
                 # add link from node outputs to group outputs
                 self.add_link(node.outputs[key], self.outputs[new_key])
+        if names is not None:
+            # Check there are no unused names left
+            if unused_names:
+                raise ValueError(
+                    f"The following named nodes do not exist: {unused_names}"
+                )
 
     @property
     def platform_version(self) -> str:

@@ -135,6 +135,12 @@ def test_generate_inputs_names(ng):
     assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
 
 
+@pytest.mark.xfail(raises=ValueError)
+def test_generate_inputs_names_invalid(ng):
+    """Test that input generation fails for invalid name"""
+    ng.generate_inputs(names=["missing"])
+
+
 def test_generate_outputs(ng):
     """Test generation of outputs from nodes"""
     ng.generate_outputs()
@@ -149,3 +155,9 @@ def test_generate_outputs_names(ng):
     assert "float1" not in ng.outputs
     assert ng.outputs.add1._value == ng.nodes["add1"].outputs._value
     assert "add2" not in ng.outputs
+
+
+@pytest.mark.xfail(raises=ValueError)
+def test_generate_outputs_names_invalid(ng):
+    """Test that output generation fails for invalid name"""
+    ng.generate_outputs(names=["missing"])
