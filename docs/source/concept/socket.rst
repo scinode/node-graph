@@ -36,7 +36,7 @@ Socket has a property, which is used to store the data. The data can be used whe
 
 .. code:: Python
 
-   def create_sockets(self):
+   def update_sockets(self):
       # create a Any type socket.
       inp = self.add_input("node_graph.any", "symbols")
       # add a string property to the socket with default value "H".

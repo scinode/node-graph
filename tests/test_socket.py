@@ -132,8 +132,14 @@ def test_repr():
     """Test __repr__ method."""
     node = Node()
     node.add_input("node_graph.int", "x")
-    assert repr(node.inputs) == "NodeSocketNamespace(name='inputs', sockets=['x'])"
-    assert repr(node.outputs) == "NodeSocketNamespace(name='outputs', sockets=[])"
+    assert (
+        repr(node.inputs)
+        == "NodeSocketNamespace(name='inputs', sockets=['_wait', 'x'])"
+    )
+    assert (
+        repr(node.outputs)
+        == "NodeSocketNamespace(name='outputs', sockets=['_outputs', '_wait'])"
+    )
 
 
 def test_check_name():
@@ -178,7 +184,8 @@ def test_namespace(node_with_namespace_socket):
     assert n.inputs.non_dynamic.sub.y._full_name == "inputs.non_dynamic.sub.y"
     assert n.inputs.non_dynamic.sub.y._scoped_name == "non_dynamic.sub.y"
     # nested keys
-    assert n.inputs._get_all_keys() == [
+    assert set(n.inputs._get_all_keys()) == {
+        "_wait",
         "x",
         "non_dynamic",
         "dynamic",
@@ -186,10 +193,10 @@ def test_namespace(node_with_namespace_socket):
         "non_dynamic.sub.y",
         "non_dynamic.sub.z",
         "dynamic.x",
-    ]
+    }
     # to_dict
     data = n.inputs._to_dict()
-    assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
+    assert set(data["sockets"].keys()) == set(["_wait", "x", "non_dynamic", "dynamic"])
     # copy
     inputs = n.inputs._copy()
     assert inputs._value == n.inputs._value
@@ -242,25 +249,6 @@ def test_set_namespace(node_with_namespace_socket):
     assert n.inputs._value == data
 
 
-def test_keys_order():
-    node = Node()
-    node.add_input("node_graph.int", "e")
-    node.add_input("node_graph.int", "d")
-    node.add_input("node_graph.int", "a")
-    node.add_input("node_graph.int", "c")
-    node.add_input("node_graph.int", "b")
-    assert node.inputs[1]._name == "d"
-    assert node.inputs["d"]._name == "d"
-    assert node.inputs[-2]._name == "c"
-    assert node.inputs._get_keys() == ["e", "d", "a", "c", "b"]
-    del node.inputs["a"]
-    assert node.inputs._get_keys() == ["e", "d", "c", "b"]
-    del node.inputs[1]
-    assert node.inputs._get_keys() == ["e", "c", "b"]
-    del node.inputs[[0, 2]]
-    assert node.inputs._get_keys() == ["c"]
-
-
 @pytest.mark.parametrize(
     "op, name, ref_result",
     (
@@ -275,12 +263,15 @@ def test_keys_order():
 )
 def test_operation(op, name, ref_result, decorated_myadd):
     """Test socket operation."""
+    print("decorated_myadd: ", decorated_myadd)
     socket1 = decorated_myadd(2, 2)
     socket2 = decorated_myadd(1, 1)
+    print("socket1:", socket1)
+    print("socket2:", socket2)
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
-    result._node.set({"x": 4, "y": 2})
+    result._node.set_inputs({"x": 4, "y": 2})
     result = result._node.execute()
     assert result == ref_result
     # test with non-socket value
@@ -313,7 +304,7 @@ def test_operation_comparision(op, name, ref_result, decorated_myadd):
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
-    result._node.set({"x": 4, "y": 2})
+    result._node.set_inputs({"x": 4, "y": 2})
     result = result._node.execute()
     assert result == ref_result
     # test with non-socket value

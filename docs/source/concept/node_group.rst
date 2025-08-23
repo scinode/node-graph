@@ -38,9 +38,9 @@ One can define a node group using the `node.graph_builder` decorator. In the def
         from node_graph import NodeGraph
         ng = NodeGraph(name="NodeGroup")
         sqrt1 = ng.add_node("TestSqrt", "sqrt1")
-        sqrt1.set({"t":2, "x": x})
+        sqrt1.set_inputs({"t":2, "x": x})
         sqrt2 = ng.add_node("TestSqrt", "sqrt2")
-        sqrt2.set({"x": y})
+        sqrt2.set_inputs({"x": y})
         add1 = ng.add_node("node_graph.test_add", "add1")
         ng.add_link(sqrt1.outputs[0], add1.inputs[0])
         ng.add_link(sqrt2.outputs[0], add1.inputs[1])

@@ -7,6 +7,7 @@ Note pitfalls:
     - etc.
 """
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 
 class CurrentGraphManager:
@@ -21,6 +22,10 @@ class CurrentGraphManager:
             cls._instance = super().__new__(cls)
             cls._instance._graph = None  # Storage for the active graph
         return cls._instance
+
+    def peek_current_graph(self):
+        """Return the active graph or None (do NOT auto-create)."""
+        return self._graph
 
     def get_current_graph(self):
         """
@@ -54,29 +59,33 @@ class CurrentGraphManager:
 
 # Create a global manager instance
 _manager = CurrentGraphManager()
+_current_graph: ContextVar["NodeGraph | None"] = ContextVar(
+    "current_graph", default=None
+)
+
+
+def peek_current_graph():
+    return _current_graph.get()
 
 
 def get_current_graph():
-    """
-    Helper function to retrieve the graph
-    through the global manager instance.
-    """
-    return _manager.get_current_graph()
+    from node_graph.node_graph import NodeGraph
+
+    g = _current_graph.get()
+    if g is None:
+        g = NodeGraph()  # fallback to a default core graph
+        _current_graph.set(g)
+    return g
 
 
 def set_current_graph(graph):
-    """
-    Helper function to set the graph through the
-    global manager instance.
-    """
-    _manager.set_current_graph(graph)
+    _current_graph.set(graph)
 
 
 @contextmanager
 def active_graph(graph):
-    """
-    Top-level context manager that defers to
-    the manager's `active_graph` method.
-    """
-    with _manager.active_graph(graph) as g:
-        yield g
+    token = _current_graph.set(graph)
+    try:
+        yield graph
+    finally:
+        _current_graph.reset(token)

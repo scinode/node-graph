@@ -1,11 +1,12 @@
 # tests/test_sockets_spec.py
-from node_graph import NodeGraph, node, spec
+from node_graph import NodeGraph, node
 from node_graph.socket import NodeSocketNamespace
+from node_graph.socket_spec import namespace, dynamic
 
 
 def test_nested_inputs():
     @node()
-    def add_and_subtract(x: int, y: int, nested: spec.namespace(a=int, b=int)):
+    def add_and_subtract(x: int, y: int, nested: namespace(a=int, b=int)):
         return {"sum": x + y, "difference": nested["a"] - nested["b"]}
 
     ng = NodeGraph()
@@ -19,7 +20,7 @@ def test_nested_inputs():
 
 def test_dynamic_inputs():
     @node()
-    def generate_squares(n: int, dynamic_inputs: spec.dynamic(int)):
+    def generate_squares(n: int, dynamic_inputs: dynamic(int)):
         return {f"n_{i}": i * i for i in range(n)}
 
     ng = NodeGraph()
@@ -33,7 +34,7 @@ def test_dynamic_inputs():
 
 def test_multiple_outputs():
     @node()
-    def add_and_subtract(x: int, y: int) -> spec.namespace(sum=int, difference=int):
+    def add_and_subtract(x: int, y: int) -> namespace(sum=int, difference=int):
         return {"sum": x + y, "difference": x - y}
 
     ng = NodeGraph()
@@ -45,7 +46,7 @@ def test_multiple_outputs():
 
 def test_dynamic_output_named_inside_namespace():
     @node()
-    def generate_squares(n: int) -> spec.namespace(squares=spec.dynamic(int)):
+    def generate_squares(n: int) -> namespace(squares=dynamic(int)):
         return {"squares": {f"n_{i}": i * i for i in range(n)}}
 
     ng = NodeGraph()
@@ -57,7 +58,7 @@ def test_dynamic_output_named_inside_namespace():
 
 def test_top_level_dynamic_output():
     @node()
-    def generate_squares(n: int) -> spec.dynamic(int):
+    def generate_squares(n: int) -> dynamic(int):
         return {f"n_{i}": i * i for i in range(n)}
 
     ng = NodeGraph()
@@ -67,21 +68,22 @@ def test_top_level_dynamic_output():
 
 
 def test_dynamic_of_namespace_rows():
-    Row = spec.namespace(val=int, squared=int)
+    Row = namespace(val=int, squared=int)
 
     @node()
-    def rows(n: int) -> spec.dynamic(Row):
+    def rows(n: int) -> dynamic(Row):
         return {str(i): {"val": i, "squared": i * i} for i in range(n)}
 
     ng = NodeGraph()
     n = ng.add_node(rows, n=3)
     # dynamic where each entry is a small namespace
     assert n.outputs._metadata.dynamic is True
+    print(n.outputs._metadata)
     assert "val" in n.outputs._metadata.extras["item"]["sockets"]
 
 
 def test_dynamic_with_fixed_fields_in_same_namespace():
-    Out = spec.dynamic(int, total=int, meta=spec.namespace(alpha=float))
+    Out = dynamic(int, total=int, meta=namespace(alpha=float))
 
     @node()
     def both(n: int) -> Out:

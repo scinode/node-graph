@@ -1,7 +1,8 @@
 from node_graph.decorator import build_node_from_callable
 from node_graph.manager import get_current_graph, set_current_graph
-from node_graph import NodeGraph, NodePool, node, spec
-from node_graph.nodes.factory.base import BaseNodeFactory
+from node_graph import NodeGraph, NodePool, node
+from node_graph.socket_spec import namespace
+import pytest
 
 
 def test_build_node():
@@ -13,8 +14,8 @@ def test_build_node():
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
     assert task1.to_dict()["executor"]["mode"] == "module"
-    assert len(ng.nodes) == 1
-    "x" in ng.nodes[0].get_input_names()
+    assert len(ng.nodes) == 4
+    "x" in ng.nodes[-1].inputs
 
 
 def test_get_current_graph():
@@ -32,39 +33,6 @@ def test_set_current_graph(decorated_myadd):
     assert get_current_graph() == g2
 
 
-def test_create_node():
-    """Build node on-the-fly."""
-    ndata = {
-        "identifier": "add",
-        "properties": {"x": {"identifier": "node_graph.float", "default": 3}},
-        "inputs": {
-            "name": "inputs",
-            "identifier": "node_graph.namespace",
-            "sockets": {
-                "y": {
-                    "identifier": "node_graph.float",
-                    "name": "y",
-                    "property": {"identifier": "node_graph.float", "default": 10},
-                }
-            },
-        },
-        "outputs": {
-            "name": "outputs",
-            "identifier": "node_graph.namespace",
-            "sockets": {
-                "result": {"identifier": "node_graph.any", "name": "result"},
-            },
-        },
-        "executor": {"module_path": "numpy.add"},
-    }
-    NodeCls = BaseNodeFactory(ndata)
-    ng = NodeGraph(name="test_create_node")
-    ng.add_node(NodeCls, "add1")
-    assert len(ng.nodes) == 1
-    assert ng.nodes[0].properties[0].default == 3
-    assert ng.nodes[0].inputs[0].property.default == 10
-
-
 def test_decorator_args() -> None:
     """Test passing parameters to decorators."""
     from node_graph.socket import NodeSocketNamespace
@@ -73,14 +41,14 @@ def test_decorator_args() -> None:
     def test(a, /, b, *, c, d=1, **e):
         return 1
 
-    task1 = test._NodeCls()
-    assert task1.get_executor()["mode"] == "pickled_callable"
-    assert task1.inputs["e"]._link_limit > 1
-    assert task1.inputs["e"]._identifier == "node_graph.namespace"
-    assert task1.inputs["c"]._metadata.required is True
-    assert task1.inputs["d"]._metadata.required is False
-    assert task1.inputs["d"]._metadata.function_socket is True
-    assert task1.inputs["d"].property.default == 1
+    task1 = test()._node
+    assert task1.get_executor().mode == "pickled_callable"
+    assert task1.inputs.e._link_limit > 1
+    assert task1.inputs.e._identifier == "node_graph.namespace"
+    assert task1.inputs.c._metadata.required is True
+    assert task1.inputs.d._metadata.required is False
+    assert task1.inputs.d._metadata.function_socket is True
+    assert task1.inputs.d.property.default == 1
     assert set(task1.args_data["args"]) == set(["a"])
     assert set(task1.args_data["kwargs"]) == set(["b", "c", "d"])
     assert task1.args_data["var_kwargs"] == "e"
@@ -88,16 +56,27 @@ def test_decorator_args() -> None:
     assert task1.inputs.e._metadata.dynamic is True
 
 
+def test_decorator_var_positional() -> None:
+    """Test passing parameters to decorators."""
+
+    @node()
+    def test(*x):
+        pass
+
+    with pytest.raises(ValueError, match="VAR_POSITIONAL is not supported."):
+        test()._node
+
+
 def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
     @node(
-        outputs=spec.namespace(sum=any, product=any),
+        outputs=namespace(sum=any, product=any),
     )
-    def test(*x, a, b=1, c: spec.namespace(c1=any, c2=any), **kwargs):
+    def test(a, c: namespace(c1=any, c2=any), b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
-    test1 = test._NodeCls()
+    test1 = test()._node
     assert test1.inputs["kwargs"]._link_limit == 1000000
     assert test1.inputs["kwargs"]._identifier == "node_graph.namespace"
     # user defined the c input manually
@@ -105,16 +84,15 @@ def test_decorator_parameters() -> None:
     assert "c1" in test1.inputs.c
     assert set(test1.args_data["args"]) == set([])
     assert set(test1.args_data["kwargs"]) == set(["a", "b", "c"])
-    assert test1.args_data["var_args"] == "x"
     assert "sum" in test1.get_output_names()
     assert "product" in test1.get_output_names()
     # create another node
-    test2 = test._NodeCls()
+    test2 = test()._node
     assert test2.inputs.b.value == test1.inputs.b.value
 
 
 def test_socket():
-    @node(outputs=spec.namespace(sum=any, product=any))
+    @node(outputs=namespace(sum=any, product=any))
     def func(x: int, y: int = 1):
         return {"sum": x + y, "product": x * y}
 
@@ -144,7 +122,7 @@ def test_decorator_node(ng_decorator):
 
     ng = ng_decorator
     ng.name = "test_decorator_node"
-    assert len(ng.nodes) == 4
+    assert len(ng.nodes) == 7
     assert len(ng.links) == 3
 
 
@@ -153,7 +131,7 @@ def test_decorator_node_group(decorated_myadd, decorated_myadd_group):
     addgroup1 = ng.add_node(decorated_myadd_group, "addgroup1", y=9)
     add1 = ng.add_node(decorated_myadd, "add1", x=8)
     ng.add_link(add1.outputs["result"], addgroup1.inputs[0])
-    assert len(ng.nodes) == 2
+    assert len(ng.nodes) == 5
 
 
 def test_decorator_node_in_decorator_node(decorated_myadd, node_with_decorated_node):
@@ -162,4 +140,18 @@ def test_decorator_node_in_decorator_node(decorated_myadd, node_with_decorated_n
     add1 = ng.add_node(decorated_myadd, "add1", x=8)
     add2 = ng.add_node(node_with_decorated_node, y=9)
     ng.add_link(add1.outputs["result"], add2.inputs[0])
-    assert len(ng.nodes) == 2
+    assert len(ng.nodes) == 5
+
+
+def test_use_socket_view():
+    @node(outputs=namespace(sum=any, product=any))
+    def test(a, b):
+        return {"sum": a + b, "product": a * b}
+
+    @node.graph(outputs=test.outputs)
+    def test_graph(a, b):
+        return test(a, b)
+
+    graph = test_graph.build_graph(a=1, b=2)
+    assert "sum" in graph.outputs
+    assert "product" in graph.outputs
