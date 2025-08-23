@@ -41,8 +41,12 @@ class NodeProperty:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the property to a dictionary for database storage."""
+        from node_graph.socket import TaggedValue
+
         data = {
-            "value": self.value,
+            "value": self.value.__wrapped__
+            if isinstance(self.value, TaggedValue)
+            else self.value,
             "name": self.name,
             "identifier": self.identifier,
             "default": self.default,

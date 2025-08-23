@@ -1,3 +1,4 @@
+# node_graph/socket.py
 from __future__ import annotations
 
 from node_graph.collection import DependencyCollection
@@ -5,6 +6,7 @@ from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class, EntryPointPool
 from dataclasses import dataclass, field
+from node_graph.orm.mapping import type_mapping
 import wrapt
 
 if TYPE_CHECKING:
@@ -84,7 +86,7 @@ class OperatorSocketMixin:
             raise ValueError("Socket does not belong to a WorkGraph.")
 
         new_node = graph.nodes._new(
-            self._decorator()(op_func)._NodeCls,
+            self._decorator()(op_func),
             x=x,
             y=y,
         )
@@ -490,6 +492,12 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
 
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
+            if (
+                isinstance(value, NodeSocketNamespace)
+                and value._parent is None
+                and "_outputs" in value
+            ):
+                value = value._outputs
             self._node.graph.add_link(value, self)
         elif isinstance(value, TaggedValue):
             self._node.graph.add_link(value._socket, self)
@@ -569,6 +577,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
+    _type_mapping: dict = type_mapping
 
     _RESERVED_NAMES = {
         "_RESERVED_NAMES",
@@ -772,7 +781,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                             self._new(self._SocketPool["any"], key, **kwargs)
                     else:
                         raise ValueError(
-                            f"Socket: {key} does not exist in the namespace socket: {self._name}."
+                            f"Socket: {key} does not exist in a non-dynamic namespace socket: {self._name}. "
+                            f"This namespace belongs to: {self._node.name}"
                         )
                 if isinstance(self[key], NodeSocketNamespace):
                     self[key]._set_socket_value(val, **kwargs)
@@ -826,6 +836,119 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             ns._new(**item_data)
         return ns
 
+    @classmethod
+    def _from_spec(
+        cls,
+        name: str,
+        spec: "SocketSpec",
+        *,
+        node: Optional["Node"],
+        graph: Optional["NodeGraph"],
+        parent: Optional["NodeSocket"] = None,
+        pool: Optional[object] = None,
+        role: str = "input",
+    ) -> "NodeSocketNamespace":
+        """
+        Materialize a runtime namespace (and children) from a SocketSpec.
+        If *spec* is a leaf (non-namespace), a single leaf socket named 'result' is created.
+        """
+        from node_graph.materialize import runtime_meta_from_spec
+
+        ns_meta = runtime_meta_from_spec(spec, role=role, function_generated=True)
+        ns = cls(
+            name=name,
+            node=node,
+            parent=parent,
+            graph=graph,
+            metadata=ns_meta,
+            pool=pool or (node.SocketPool if node else None),
+        )
+
+        # Leaf-at-top: expose as single 'result'
+        if spec.identifier != cls._type_mapping["namespace"]:
+            leaf_meta = runtime_meta_from_spec(spec, role=role, function_generated=True)
+            ItemClass = get_item_class(spec.identifier, ns._SocketPool, BaseSocket)
+            sock = ItemClass(
+                name="result",
+                node=node,
+                parent=ns,
+                graph=graph,
+                metadata=leaf_meta,
+                property={"identifier": spec.identifier},
+            )
+            ns._append(sock)
+            return ns
+
+        # Namespace
+        parent_defaults = dict(getattr(spec, "defaults", {}) or {})
+        for fname, f_spec in (spec.fields or {}).items():
+            cls._append_from_spec(
+                ns, fname, f_spec, parent_defaults, node=node, graph=graph, role=role
+            )
+        return ns
+
+    @classmethod
+    def _append_from_spec(
+        cls,
+        parent_ns: "NodeSocketNamespace",
+        name: str,
+        spec: "SocketSpec",
+        parent_defaults: dict,
+        *,
+        node,
+        graph,
+        role: str,
+    ) -> None:
+        from node_graph.materialize import runtime_meta_from_spec
+
+        if spec.identifier == cls._type_mapping["namespace"]:
+            child_meta = runtime_meta_from_spec(
+                spec, role=role, function_generated=True
+            )
+            child = cls(
+                name=name,
+                node=node,
+                parent=parent_ns,
+                graph=graph,
+                metadata=child_meta,
+                pool=parent_ns._SocketPool,
+            )
+            parent_ns._append(child)
+            # cascade defaults into nested namespace if provided as dict
+            child_defaults = (
+                parent_defaults.get(name)
+                if isinstance(parent_defaults.get(name), dict)
+                else {}
+            )
+            for fname, f_spec in (spec.fields or {}).items():
+                cls._append_from_spec(
+                    child,
+                    fname,
+                    f_spec,
+                    child_defaults,
+                    node=node,
+                    graph=graph,
+                    role=role,
+                )
+        else:
+            # leaf
+            leaf_meta = runtime_meta_from_spec(spec, role=role, function_generated=True)
+            prop = {"identifier": spec.identifier}
+            if name in parent_defaults:
+                prop["default"] = parent_defaults[name]
+            ItemClass = get_item_class(
+                spec.identifier, parent_ns._SocketPool, BaseSocket
+            )
+            sock = ItemClass(
+                name=name,
+                node=node,
+                parent=parent_ns,
+                graph=graph,
+                metadata=leaf_meta,
+                property=prop,
+            )
+            parent_ns._append(sock)
+
     def _copy(
         self,
         node: Optional[Node] = None,
@@ -868,10 +991,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 if len(keys) > 1:
                     return item[keys[1]]
                 return item
-            parent = self._parent or self._node
+            parent_name = (
+                self._parent._name if self._parent is not None else self._node.name
+            )
             raise AttributeError(
-                f""""{key}" is not in the {self.__class__.__name__}.
-Acceptable names are {self._get_keys()}. This collection belongs to {parent}."""
+                f""""{key}" is not in this namespace. Acceptable names are {self._get_keys()}."""
+                f"""This namespace belongs to {parent_name}."""
             )
 
     def __contains__(self, name: str) -> bool:

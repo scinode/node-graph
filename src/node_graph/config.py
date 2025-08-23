@@ -1,4 +1,3 @@
-builtin_inputs = [
-    {"name": "_wait", "link_limit": 1000000, "metadata": {"arg_type": "none"}}
-]
-builtin_outputs = [{"name": "_wait"}, {"name": "_outputs"}]
+WAIT_SOCKET_NAME = "_wait"
+OUTPUT_SOCKET_NAME = "_outputs"
+MAX_LINK_LIMIT = 1000000
