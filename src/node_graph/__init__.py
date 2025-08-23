@@ -4,7 +4,7 @@ from .decorator import node
 from .executor import NodeExecutor
 from .nodes import NodePool
 from .collection import group
-from . import spec
+from .socket_spec import namespace, dynamic
 
 __version__ = "0.2.23"
 
@@ -16,5 +16,6 @@ __all__ = [
     "NodeExecutor",
     "NodePool",
     "group",
-    "spec",
+    "namespace",
+    "dynamic",
 ]

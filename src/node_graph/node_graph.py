@@ -1,9 +1,10 @@
+# node_graph/node_graph.py
 from __future__ import annotations
-
+from node_graph.registry import RegistryHub, registry_hub
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
-from node_graph.sockets import SocketPool
-from node_graph.nodes import NodePool
+from node_graph.node_spec import NodeSpec
+from node_graph.socket_spec import SocketSpec, BaseSocketSpecAPI
 from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.node import Node
@@ -11,8 +12,6 @@ from node_graph.socket import NodeSocket
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
-from node_graph.nodes.utils import generate_input_sockets, generate_output_sockets
-from node_graph.orm.mapping import type_mapping
 
 BUILTIN_NODES = ["graph_ctx", "graph_inputs", "graph_outputs"]
 
@@ -44,22 +43,24 @@ class NodeGraph:
         >>> ng.to_dict()
     """
 
-    NodePool: Dict[str, Any] = NodePool
-    SocketPool = SocketPool
+    registry: Optional[RegistryHub] = registry_hub
     platform: str = "node_graph"
-    type_mapping: dict = type_mapping
+    _socket_spec = BaseSocketSpecAPI
 
     def __init__(
         self,
         name: str = "NodeGraph",
-        inputs: Optional[type | List[str]] = None,
-        outputs: Optional[type | List[str]] = None,
+        inputs: Optional[SocketSpec | List[str]] = None,
+        outputs: Optional[SocketSpec | List[str]] = None,
         uuid: Optional[str] = None,
         graph_type: str = "NORMAL",
+        graph: Optional[NodeGraph] = None,
+        parent: Optional[Node] = None,
         state: str = "CREATED",
         action: str = "NONE",
         description: str = "",
         interactive_widget: bool = False,
+        init_graph_level_nodes: bool = True,
     ) -> None:
         """Initializes a new instance of the NodeGraph class.
 
@@ -68,10 +69,17 @@ class NodeGraph:
             uuid (str, optional): The UUID of the node graph. Defaults to None.
             graph_type (str, optional): The type of the node graph. Defaults to "NORMAL".
         """
+
         self.name = name
         self.uuid = uuid or str(uuid1())
         self.graph_type = graph_type
-        self.nodes = NodeCollection(self, pool=self.NodePool)
+        self.graph = graph
+        self.parent = parent
+        self.NodePool = self.registry.node_pool
+        self.SocketPool = self.registry.socket_pool
+        self.PropertyPool = self.registry.property_pool
+        self.type_mapping = dict(self.registry.type_mapping)
+        self.nodes = NodeCollection(graph=self, pool=self.NodePool)
         self.links = LinkCollection(self)
         self.state = state
         self.action = action
@@ -79,67 +87,57 @@ class NodeGraph:
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
-        self._build_graph_inputs_outputs(inputs, outputs)
+        if init_graph_level_nodes:
+            self._init_graph_level_nodes(inputs, outputs)
 
-    def _build_graph_inputs_outputs(
-        self,
-        inputs: Optional[type | List[str]] = None,
-        outputs: Optional[type | List[str]] = None,
-    ) -> None:
-        if inputs is not None:
-            inputs_data = generate_input_sockets(
-                lambda **_: None, inputs, type_mapping=self.type_mapping
-            )
-            inputs_data["metadata"]["sub_socket_default_link_limit"] = 1000000
-            self.graph_inputs.inputs = (
-                self.graph_inputs.InputCollectionClass._from_dict(
-                    inputs_data,
-                    node=self.graph_inputs,
-                    pool=self.graph_inputs.SocketPool,
-                    graph=self,
-                )
-            )
-        if outputs is not None:
-            outputs_data = generate_output_sockets(
-                lambda **_: None, outputs, type_mapping=self.type_mapping
-            )
-            self.graph_outputs.inputs = (
-                self.graph_outputs.OutputCollectionClass._from_dict(
-                    outputs_data,
-                    node=self.graph_outputs,
-                    pool=self.graph_outputs.SocketPool,
-                    graph=self,
-                )
-            )
+    def _init_graph_level_nodes(self, inputs, outputs, ctx=None):
+
+        inputs = self._socket_spec.validate_socket_data(inputs)
+        outputs = self._socket_spec.validate_socket_data(outputs)
+        ctx = self._socket_spec.validate_socket_data(ctx)
+
+        base_class = self.NodePool["graph_level"].load()
+
+        # graph inputs
+        inputs = self._socket_spec.dynamic(Any) if inputs is None else inputs
+        self.graph_inputs_spec = NodeSpec(
+            identifier="graph_inputs",
+            inputs=inputs,
+            base_class=base_class,
+        )
+        graph_inputs = self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
+        graph_inputs.inputs._metadata.sub_socket_default_link_limit = 1000000
+        # graph outputs
+        outputs = self._socket_spec.dynamic(Any) if outputs is None else outputs
+        self.graph_outputs_spec = NodeSpec(
+            identifier="graph_outputs",
+            inputs=outputs,
+            base_class=base_class,
+        )
+        self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
+        # graph context
+        ctx = self._socket_spec.dynamic(Any) if ctx is None else ctx
+        self.graph_ctx_spec = NodeSpec(
+            identifier="graph_ctx",
+            inputs=ctx,
+            base_class=base_class,
+        )
+        graph_ctx = self.nodes._new(self.graph_ctx_spec, name="graph_ctx")
+        graph_ctx.inputs._metadata.sub_socket_default_link_limit = 1000000
 
     @property
     def graph_inputs(self) -> Node:
         """Group inputs node."""
-        if "graph_inputs" not in self.nodes:
-            graph_inputs = self.nodes._new("graph_inputs", name="graph_inputs")
-            graph_inputs.inputs._metadata.dynamic = True
-            # Because the the graph_inputs socket can be linked to multiple tasks
-            # A temporary fix to allow more multiple links
-            # But we should distinguish between the input and output links
-            # and allow only one link per input socket by default
-            graph_inputs.inputs._metadata.sub_socket_default_link_limit = 1000000
         return self.nodes["graph_inputs"]
 
     @property
     def graph_outputs(self) -> Node:
         """Group outputs node."""
-        if "graph_outputs" not in self.nodes:
-            graph_outputs = self.nodes._new("graph_outputs", name="graph_outputs")
-            graph_outputs.inputs._metadata.dynamic = True
         return self.nodes["graph_outputs"]
 
     @property
     def graph_ctx(self) -> Node:
         """Context variable node."""
-        if "graph_ctx" not in self.nodes:
-            ctx = self.nodes._new("graph_ctx", name="graph_ctx")
-            ctx.inputs._metadata.dynamic = True
-            ctx.inputs._metadata.sub_socket_default_link_limit = 1000000
         return self.nodes["graph_ctx"]
 
     @property
@@ -246,19 +244,21 @@ class NodeGraph:
         """Adds a node to the node graph."""
 
         from node_graph.decorator import build_node_from_callable
-        from node_graph.nodes.factory.nodegraph_node import NodeGraphNodeFactory
+        from node_graph.node_spec import NodeHandle
+        from node_graph.nodes.subgraph_node import SubGraphNode
 
         if name in BUILTIN_NODES and not include_builtins:
             raise ValueError(f"Name {name} can not be used, it is reserved.")
 
         if isinstance(identifier, NodeGraph):
-            identifier = NodeGraphNodeFactory.create_node(identifier)
+            identifier = SubGraphNode(
+                subgraph=identifier, name=name or identifier.name, graph=self, **kwargs
+            )
         # build the task on the fly if the identifier is a callable
-        elif callable(identifier):
-            if hasattr(identifier, "_NodeCls"):
-                identifier = identifier._NodeCls
-            else:
-                identifier = build_node_from_callable(identifier)
+        elif callable(identifier) and not isinstance(
+            identifier, (NodeSpec, NodeHandle)
+        ):
+            identifier = build_node_from_callable(identifier)
         node = self.nodes._new(identifier, name, **kwargs)
         self._version += 1
         return node
@@ -337,17 +337,22 @@ class NodeGraph:
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Converts the metadata to a dictionary.
-
-        Returns:
-            Dict[str, Any]: The metadata.
+        """Export graph metadata including *live* graph-level IO specs.
+        We snapshot current shapes of graph inputs/outputs/ctx using `SocketSpec.from_namespace`.
         """
-        metadata: Dict[str, Any] = {
+        meta: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            # "inputs": self.inputs,
-            # "outputs": self.outputs,
+            "inputs_spec": SocketSpec.from_namespace(
+                self.graph_inputs.inputs, type_mapping=self.type_mapping
+            ).to_dict(),
+            "outputs_spec": SocketSpec.from_namespace(
+                self.graph_outputs.inputs, type_mapping=self.type_mapping
+            ).to_dict(),
+            "ctx_spec": SocketSpec.from_namespace(
+                self.graph_ctx.inputs, type_mapping=self.type_mapping
+            ).to_dict(),
         }
-        return metadata
+        return meta
 
     def export_nodes_to_dict(
         self, short: bool = False, should_serialize: bool = False
@@ -360,6 +365,7 @@ class NodeGraph:
         Returns:
             Dict[str, Any]: The nodes data.
         """
+        # generate spec for graph-level nodes
         nodes = {}
         for node in self.nodes:
             nodes[node.name] = node.to_dict(
@@ -408,9 +414,7 @@ class NodeGraph:
             )
 
     @classmethod
-    def from_dict(
-        cls, ngdata: Dict[str, Any], class_factory: Callable = None
-    ) -> "NodeGraph":
+    def from_dict(cls, ngdata: Dict[str, Any]) -> "NodeGraph":
         """Rebuilds a node graph from a dictionary.
 
         Args:
@@ -419,10 +423,9 @@ class NodeGraph:
         Returns:
             NodeGraph: The rebuilt node graph.
         """
-        if class_factory is None:
-            from node_graph.nodes.factory.base import BaseNodeFactory
 
-            class_factory = BaseNodeFactory
+        md = ngdata.get("metadata", {}) or {}
+
         ng: "NodeGraph" = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
@@ -430,23 +433,73 @@ class NodeGraph:
             state=ngdata.get("state", "CREATED"),
             action=ngdata.get("action", "NONE"),
             description=ngdata.get("description", ""),
+            init_graph_level_nodes=False,
         )
-        for name, ndata in ngdata["nodes"].items():
-            if ndata.get("metadata", {}).get("is_dynamic", False):
-                identifier = class_factory(ndata)
-            else:
-                identifier = ndata["identifier"]
-            node = ng.add_node(
-                identifier,
-                name=name,
-                uuid=ndata.pop("uuid", None),
-                _metadata=ndata.get("metadata", None),
-                _executor=ndata.get("executor", None),
-                include_builtins=ndata["name"] in BUILTIN_NODES,
-            )
-            node.update_from_dict(ndata)
+        # built-in graph level nodes
+        inputs_spec = (
+            SocketSpec.from_dict(md["inputs_spec"], type_mapping=ng.type_mapping)
+            if "inputs_spec" in md
+            else None
+        )
+        outputs_spec = (
+            SocketSpec.from_dict(md["outputs_spec"], type_mapping=ng.type_mapping)
+            if "outputs_spec" in md
+            else None
+        )
+        ctx_spec = (
+            SocketSpec.from_dict(md["ctx_spec"], type_mapping=ng.type_mapping)
+            if "ctx_spec" in md
+            else None
+        )
+        ng._init_graph_level_nodes(inputs_spec, outputs_spec, ctx_spec)
+
+        for ndata in ngdata["nodes"].values():
+            ng.add_node_from_dict(ndata)
+
         ng.links_from_dict(ngdata.get("links", []))
         return ng
+
+    def add_node_from_dict(self, ndata: Dict[str, Any]) -> Node:
+        """Adds a node to the node graph from a dictionary.
+
+        Args:
+            ndata (Dict[str, Any]): The data of the node.
+
+        Returns:
+            Node: The added node.
+        """
+        import importlib
+        from node_graph.nodes.subgraph_node import SubGraphNode
+
+        md = ndata.get("metadata", {}) or {}
+        name = ndata["name"]
+        if name in BUILTIN_NODES:
+            self.nodes[name].update_from_dict(ndata)
+            return self.nodes[name]
+        else:
+            if md.get("is_dynamic", False):
+                node_class = ndata.get("metadata", {}).get("node_class", None)
+                node_class = getattr(
+                    importlib.import_module(node_class["module_path"]),
+                    node_class["callable_name"],
+                )
+                node = node_class.from_dict(ndata, graph=self)
+                self.nodes._append(node)
+            elif "embedded_graph" in md:
+                node = SubGraphNode.from_dict(ndata, graph=self)
+                self.nodes._append(node)
+            else:
+                identifier = ndata["identifier"]
+                node = self.add_node(
+                    identifier,
+                    name=name,
+                    uuid=ndata.pop("uuid", None),
+                    _metadata=ndata.get("metadata", None),
+                    _executor=ndata.get("executor", None),
+                    include_builtins=ndata["name"] in BUILTIN_NODES,
+                )
+                node.update_from_dict(ndata)
+        return node
 
     @classmethod
     def from_yaml(
@@ -561,7 +614,11 @@ class NodeGraph:
         Returns:
             NodeGraph: The combined node graph.
         """
-        self.nodes._extend(other.nodes._copy(graph=self))
+        nodes = other.nodes._copy(graph=self)
+        for node in nodes:
+            # skip built-in nodes
+            if node.name not in BUILTIN_NODES:
+                self.nodes._append(node)
         for link in other.links:
             self.add_link(
                 self.nodes[link.from_node.name].outputs[link.from_socket._name],
@@ -623,3 +680,13 @@ class NodeGraph:
         """Write a standalone html file to visualize the graph."""
         self.widget.value = self.to_widget_value()
         return self.widget.to_html(output=output, **kwargs)
+
+    def __enter__(self):
+        from node_graph.manager import active_graph as _active_graph
+
+        self.___ctx = _active_graph(self)
+        self.___ctx.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self.___ctx.__exit__(exc_type, exc, tb)

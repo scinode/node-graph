@@ -24,23 +24,6 @@ def get_executor_from_path(path: dict | str) -> Any:
     return executor
 
 
-def validate_socket_data(data: List[str]) -> Dict[str, Any]:
-    """Validate socket data and convert it to a dictionary.
-    If data is None, return an empty dictionary.
-    If data is a list, convert it to a dictionary with empty dictionaries as values.
-    """
-    from node_graph import spec
-
-    if data is None or spec.is_namespace_type(data):
-        return data
-    elif isinstance(data, list):
-        if not all(isinstance(d, str) for d in data):
-            raise TypeError("All elements in the list must be strings")
-        return spec.namespace(**{d: any for d in data})
-    else:
-        raise TypeError(f"Expected list or namespace type, got {type(data).__name__}")
-
-
 def nodegaph_to_short_json(
     ngdata: Dict[str, Union[str, List, Dict]]
 ) -> Dict[str, Union[str, Dict]]:
@@ -138,18 +121,21 @@ def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
         args_data["var_kwargs"] = name
 
 
-def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]:
+def collect_values_inside_namespace(
+    namespace: Dict[str, Any], include_none: bool = True
+) -> Dict[str, Any]:
     """Collect values inside the namespace."""
     values = {}
-    for key, socket in namespace["sockets"].items():
+    for key, socket in namespace.get("sockets", {}).items():
         if "sockets" in socket:
-            data = collect_values_inside_namespace(socket)
+            data = collect_values_inside_namespace(socket, include_none=include_none)
             if data:
                 values[key] = data
         if "property" in socket:
             value = socket.get("property", {}).get("value")
-            if value is not None:
-                values[key] = value
+            if value is None and not include_none:
+                continue
+            values[key] = value
     return values
 
 

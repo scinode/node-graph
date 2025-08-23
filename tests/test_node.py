@@ -1,5 +1,6 @@
 from node_graph import NodeGraph, NodePool
 from node_graph.node import Node
+from node_graph.socket_spec import namespace
 import pytest
 
 
@@ -82,6 +83,7 @@ def test_copy():
 
     ng = NodeGraph(name="test_copy")
     math = ng.add_node(NodePool.node_graph.test_add, "Math", t=5, x=2)
+    assert len(ng.nodes) == 4
     math1 = math.copy()
     assert math1.properties["t"].value == 5
     assert math1.inputs["x"].property.value == 2
@@ -89,7 +91,7 @@ def test_copy():
     assert math1.name == f"{math.name}_copy"
     #
     ng.append_node(math1)
-    assert len(ng.nodes) == 2
+    assert len(ng.nodes) == 5
 
 
 def test_check_name():
@@ -125,50 +127,49 @@ def test_repr():
     """Test __repr__ method."""
     ng = NodeGraph(name="test_repr")
     ng.add_node(NodePool.node_graph.test_add, "add1")
-    assert repr(ng.nodes) == 'NodeCollection(parent = "test_repr", nodes = ["add1"])'
+    assert (
+        repr(ng.nodes)
+        == 'NodeCollection(parent = "test_repr", nodes = ["graph_inputs", "graph_outputs", "graph_ctx", "add1"])'
+    )
 
 
 def test_nodegraph_node():
     ng = NodeGraph(name="test_nodegraph_node")
-    sub_ng = NodeGraph(name="sub_nodegraph")
+    sub_ng = NodeGraph(
+        name="sub_nodegraph",
+        inputs=namespace(x=int, y=int),
+        outputs=namespace(result=int),
+    )
     sub_ng.add_node(NodePool.node_graph.test_add, "add1")
     sub_ng.add_node(
         NodePool.node_graph.test_add, "add2", x=sub_ng.nodes.add1.outputs.result
     )
     ng.add_node(sub_ng, "sub_ng")
-    assert len(ng.nodes) == 1
-    assert len(ng.nodes.sub_ng.nodes) == 2
+    assert len(ng.nodes) == 4
+    assert len(ng.nodes.sub_ng.nodes) == 5
     assert len(ng.nodes.sub_ng.links) == 1
     assert "add1" in ng.nodes.sub_ng.nodes
-    # check intpus
-    assert "add1" in ng.nodes.sub_ng.inputs
-    assert "add1.x" in ng.nodes.sub_ng.inputs
-    assert "add1.result" in ng.nodes.sub_ng.outputs
+    # check inputs
+    assert "x" in ng.nodes.sub_ng.inputs
+    assert "result" in ng.nodes.sub_ng.outputs
     assert set(ng.nodes.sub_ng.inputs._get_all_keys()) == {
-        "add1",
-        "add2",
+        "x",
+        "y",
         "_wait",
-        "add1.x",
-        "add1.y",
-        "add1._wait",
-        "add2.x",
-        "add2.y",
-        "add2._wait",
     }
     assert set(ng.nodes.sub_ng.outputs._get_all_keys()) == {
-        "add1",
-        "add2",
+        "result",
         "_outputs",
         "_wait",
-        "add1._outputs",
-        "add1.result",
-        "add1._wait",
-        "add2._outputs",
-        "add2.result",
-        "add2._wait",
     }
 
 
 def test_execute(decorated_myadd):
     result = decorated_myadd(1, 2)
     result = result._node.execute()
+
+
+def test_add_inputs():
+    node = Node()
+    node.add_input("node_graph.int", "e")
+    assert "e" in node.inputs
