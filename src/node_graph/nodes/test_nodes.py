@@ -145,6 +145,7 @@ class TestEnumUpdate(Node):
             self.add_input("node_graph.float", "x")
         self.add_output("node_graph.any", "result")
         self.add_output("node_graph.any", "_outputs")
+        self._ensure_builtins()
 
     def get_executor(self):
         return {

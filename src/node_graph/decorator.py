@@ -1,10 +1,12 @@
+# node_graph/decorator.py
 from __future__ import annotations
-import functools
 from typing import Any, List, Optional, Callable
 import inspect
 from node_graph.executor import NodeExecutor
 from node_graph.node import Node
-from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
+from node_graph.node_spec import NodeSpec, hash_spec, NodeHandle
+from node_graph.utils.function import infer_specs_from_callable
+from node_graph.orm.mapping import type_mapping
 
 
 def set_node_arguments(call_args, call_kwargs, node):
@@ -37,7 +39,6 @@ def build_node_from_callable(
     If not, check if it is a function or a class.
     If it is a function, build task from function.
     """
-    from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
 
     # if it already has Node class, return it
     if (
@@ -51,47 +52,17 @@ def build_node_from_callable(
     if isinstance(executor, str):
         executor = NodeExecutor(module_path=executor).executor
     if callable(executor):
-        return DecoratedFunctionNodeFactory.from_function(
-            executor, inputs=inputs, outputs=outputs
-        )
+        return node(inputs=inputs, outputs=outputs)(executor)
 
     raise ValueError(f"The executor {executor} is not supported.")
 
 
-def _make_wrapper(NodeCls, original_callable):
-    """
-    Common wrapper that, when called, adds a node to the current graph
-    and returns the outputs.
-    """
-
-    @functools.wraps(original_callable)
-    def wrapper(*call_args, **call_kwargs):
-        from node_graph.manager import get_current_graph
-
-        graph = get_current_graph()
-        if graph is None:
-            raise RuntimeError(
-                f"No active Graph available for {original_callable.__name__}."
-            )
-        node = graph.add_node(NodeCls)
-        active_zone = getattr(graph, "_active_zone", None)
-        if active_zone:
-            active_zone.children.add(node)
-        outputs = set_node_arguments(call_args, call_kwargs, node)
-        return outputs
-
-    # Expose the NodeCls on the wrapper if you want
-    wrapper._NodeCls = NodeCls
-    wrapper._func = original_callable
-    return wrapper
-
-
 def decorator_node(
     identifier: Optional[str] = None,
-    node_type: str = "Normal",
     inputs: Optional[type | list] = None,
     outputs: Optional[type | list] = None,
     catalog: str = "Others",
+    base_class: type | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
     After decoration, calling that function `func(x, y, ...)`
@@ -105,28 +76,35 @@ def decorator_node(
         outputs (dict): node outputs
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        NodeCls = DecoratedFunctionNodeFactory.from_function(
-            func=func,
-            identifier=identifier,
-            node_type=node_type,
-            inputs=inputs,
-            outputs=outputs,
-            catalog=catalog,
+    def wrap(func):
+        ident = identifier or func.__name__
+        in_spec, out_spec = infer_specs_from_callable(
+            func, inputs, outputs, type_mapping=type_mapping
         )
+        spec = NodeSpec(
+            identifier=ident,
+            catalog=catalog,
+            inputs=in_spec,
+            outputs=out_spec,
+            executor=NodeExecutor.from_callable(func),
+            base_class_path=f"{base_class.__module__}.{base_class.__name__}"
+            if base_class
+            else None,
+            metadata={"node_type": "Normal", "is_dynamic": True},
+            version=hash_spec(ident, in_spec, out_spec, extra="callable"),
+        )
+        return NodeHandle(spec)
 
-        return _make_wrapper(NodeCls, func)
-
-    return decorator
+    return wrap
 
 
-def decorator_graph_builder(
+def decorator_graph(
     identifier: Optional[str] = None,
     inputs: Optional[type | list] = None,
     outputs: Optional[type | list] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Generate a decorator that register a function as a graph_builder node.
+    """Generate a decorator that register a function as a graph node.
 
     Attributes:
         indentifier (str): node identifier
@@ -135,29 +113,35 @@ def decorator_graph_builder(
         outputs (dict): node outputs
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        from node_graph.nodes.builtins import GraphBuilderNode
+    def wrap(func):
+        ident = identifier or func.__name__
 
-        NodeCls = DecoratedFunctionNodeFactory.from_function(
-            func=func,
-            identifier=identifier,
-            node_type="node_group",
-            inputs=inputs,
-            outputs=outputs,
-            catalog=catalog,
-            node_class=GraphBuilderNode,
+        # Build specs using the comprehensive builders
+        in_spec, out_spec = infer_specs_from_callable(
+            func, inputs, outputs, type_mapping=type_mapping
         )
 
-        return _make_wrapper(NodeCls, func)
+        # For graph nodes, we keep the callable as the executor; the engine can
+        # materialize a nested workflow on execute, or users can call .build(...)
+        spec = NodeSpec(
+            identifier=ident,
+            catalog=catalog,
+            inputs=in_spec,
+            outputs=out_spec,
+            executor=NodeExecutor.from_callable(func),
+            metadata={"node_type": "Graph", "is_dynamic": True, "graph_callable": True},
+            version=hash_spec(ident, in_spec, out_spec, extra="graph"),
+        )
+        return NodeHandle(spec)
 
-    return decorator
+    return wrap
 
 
 class NodeDecoratorCollection:
     """Collection of node decorators."""
 
     node: Callable[..., Any] = staticmethod(decorator_node)
-    graph_builder: Callable[..., Any] = staticmethod(decorator_graph_builder)
+    graph: Callable[..., Any] = staticmethod(decorator_graph)
 
     # Alias '@node' to '@node.node'.
     def __call__(self, *args, **kwargs):

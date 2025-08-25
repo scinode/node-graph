@@ -1,3 +1,4 @@
+# node_graph/node.py
 from __future__ import annotations
 
 from uuid import uuid1
@@ -12,6 +13,15 @@ from node_graph.collection import (
     PropertyCollection,
 )
 from node_graph.executor import NodeExecutor
+from dataclasses import dataclass
+from node_graph.config import WAIT_SOCKET_NAME, OUTPUT_SOCKET_NAME, MAX_LINK_LIMIT
+
+
+@dataclass(frozen=True)
+class BuiltinPolicy:
+    input_wait: bool = True
+    output_wait: bool = True
+    default_output: bool = True
 
 
 class Node:
@@ -38,16 +48,15 @@ class Node:
     # This is the entry point for the socket and property pool
     SocketPool = SocketPool
     PropertyPool = PropertyPool
-    InputCollectionClass = NodeSocketNamespace
-    OutputCollectionClass = NodeSocketNamespace
-    PropertyCollectionClass = PropertyCollection
+    _SocketNamespaceClass = NodeSocketNamespace
+    _PropertyClass = PropertyCollection
 
     identifier: str = "node_graph.node"
     default_name: str = None
     node_type: str = "Normal"
     graph_uuid: str = ""
     catalog: str = "Node"
-    is_dynamic: bool = False
+    Builtins: BuiltinPolicy = BuiltinPolicy()
 
     def __init__(
         self,
@@ -71,11 +80,11 @@ class Node:
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.properties = self.PropertyCollectionClass(self, pool=self.PropertyPool)
-        self.inputs = self.InputCollectionClass(
+        self.properties = self._PropertyClass(self, pool=self.PropertyPool)
+        self.inputs = self._SocketNamespaceClass(
             "inputs", node=self, pool=self.SocketPool, graph=self.graph
         )
-        self.outputs = self.OutputCollectionClass(
+        self.outputs = self._SocketNamespaceClass(
             "outputs", node=self, pool=self.SocketPool, graph=self.graph
         )
         self.state = "CREATED"
@@ -88,6 +97,33 @@ class Node:
         self._args_data = None
         self._widget = None
         self._waiting_on = WaitingOn(node=self, graph=self.graph)
+        self._ensure_builtins()
+
+    def _ensure_builtins(self) -> None:
+        """Create framework built-in sockets if policy says so (idempotent)."""
+        # add input _wait
+        if self.Builtins.input_wait and WAIT_SOCKET_NAME not in self.inputs:
+            self.add_input(
+                self.SocketPool.any,
+                WAIT_SOCKET_NAME,
+                link_limit=MAX_LINK_LIMIT,
+                metadata={"arg_type": "none", "builtin_socket": True},
+            )
+        # add outputs _outputs
+        if self.Builtins.default_output and OUTPUT_SOCKET_NAME not in self.outputs:
+            self.add_output(
+                self.SocketPool.any,
+                OUTPUT_SOCKET_NAME,
+                metadata={"builtin_socket": True},
+            )
+        # add output _wait
+        if self.Builtins.output_wait and WAIT_SOCKET_NAME not in self.outputs:
+            self.add_output(
+                self.SocketPool.any,
+                WAIT_SOCKET_NAME,
+                link_limit=MAX_LINK_LIMIT,
+                metadata={"arg_type": "none", "builtin_socket": True},
+            )
 
     @property
     def widget(self) -> NodeGraphWidget:
@@ -197,13 +233,12 @@ class Node:
                 "node_type": self.node_type,
                 "catalog": self.catalog,
                 "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
-                "is_dynamic": self.is_dynamic,
             }
         )
         # also save the parent class information
         metadata["node_class"] = {
-            "callable_name": super().__class__.__name__,
-            "module_path": super().__class__.__module__,
+            "callable_name": self.__class__.__name__,
+            "module_path": self.__class__.__module__,
         }
         return metadata
 
@@ -257,23 +292,10 @@ class Node:
         return executor.to_dict()
 
     @classmethod
-    def from_dict(
-        cls, data: Dict[str, Any], NodePool: Optional[Dict[str, Any]] = None
-    ) -> Any:
+    def from_dict(cls, data: Dict[str, Any], graph: "NodeGraph" = None) -> Any:
         """Rebuild Node from dict data."""
-        from node_graph.utils import get_executor_from_path
 
-        if NodePool is None:
-            from node_graph.nodes import NodePool
-
-        # first create the node instance
-        if data.get("metadata", {}).get("is_dynamic", False):
-            FactoryClass = get_executor_from_path(data["metadata"]["factory_class"])
-            node_class = FactoryClass(data)
-        else:
-            node_class = NodePool[data["identifier"].lower()].load()
-
-        node = node_class(name=data["name"], uuid=data["uuid"])
+        node = cls(name=data["name"], uuid=data["uuid"], graph=graph)
         # then load the properties
         node.update_from_dict(data)
         return node
@@ -327,6 +349,10 @@ class Node:
         node = ItemClass(name=name, metadata=metadata, executor=executor)
         return node
 
+    def _new_for_copy(self, name: Optional[str], graph: Optional[Any]):
+        """Factory hook used by copy(); subclasses can override to supply ctor args."""
+        return self.__class__(name=name, uuid=None, graph=graph)
+
     def copy(
         self,
         name: Optional[str] = None,
@@ -352,7 +378,7 @@ class Node:
             # copy node inside the same graph, change the name
             graph = self.graph
             name = f"{self.name}_copy" if name is None else name
-        node = self.__class__(name=name, uuid=None, graph=graph)
+        node = self._new_for_copy(name=name, graph=graph)
         # becareful when copy the properties, the value should be copied
         # it will update the sockets, so we copy the properties first
         # then overwrite the sockets
@@ -368,7 +394,7 @@ class Node:
 
     def execute(self):
         """Execute the node."""
-        executor = NodeExecutor(**self.get_executor()).executor
+        executor = self.get_executor().executor
         # the imported executor could be a wrapped function
         if hasattr(executor, "_NodeCls") and hasattr(executor, "_func"):
             executor = getattr(executor, "_func")

@@ -1,3 +1,4 @@
+# node_graph/collection.py
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Union, Optional, Callable, Dict, Type
 import difflib
@@ -7,7 +8,6 @@ import logging
 
 if TYPE_CHECKING:
     from node_graph.node import Node
-    from node_graph.nodes.factory.base import BaseNodeFactory
     from node_graph.socket import BaseSocket
 
 logger = logging.getLogger(__name__)
@@ -30,19 +30,15 @@ def get_entries(entry_point_name: str) -> Dict[str, EntryPoint]:
 
 
 def get_item_class(
-    identifier: EntryPoint | Node | BaseNodeFactory,
+    identifier: EntryPoint | Node,
     pool: Dict[str, EntryPoint],
     base_class: Type[Node] = None,
-    factory_class: Type[BaseNodeFactory] = None,
-    inputs: Optional[Dict] = None,
 ) -> Node:
     """Get the item class from the identifier."""
 
     from node_graph.node import Node
-    from node_graph.nodes.factory.base import BaseNodeFactory
 
     base_class = base_class or Node
-    factory_class = factory_class or BaseNodeFactory
 
     if isinstance(identifier, str):
         identifier = pool[identifier.lower()].load()
@@ -52,8 +48,6 @@ def get_item_class(
     if isinstance(identifier, type):
         if issubclass(identifier, base_class):
             ItemClass = identifier
-        elif issubclass(identifier, factory_class):
-            ItemClass = identifier.create_class(inputs)
         else:
             raise Exception(
                 f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
@@ -268,14 +262,19 @@ class Collection:
         """
         return name in self._items
 
-    def _generate_item_name(self, item_class) -> int:
+    def _generate_item_name(self, item_class=None, identifier: str = None) -> str:
         """Generate a new name for the item based on the given name and
         the number of items in the collection.
         """
-        if item_class.default_name is None:
-            name = item_class.identifier.split(".")[-1]
+        if item_class is not None:
+            if item_class.default_name is None:
+                name = item_class.identifier.split(".")[-1]
+            else:
+                name = item_class.default_name
+        elif identifier is not None:
+            name = identifier
         else:
-            name = item_class.default_name
+            name = f"item_{len(self._items) + 1}"
         if name not in self._items:
             return name
         index = 1
@@ -486,19 +485,27 @@ class NodeCollection(Collection):
         **kwargs,
     ) -> Node:
         from node_graph.node import Node
-        from node_graph.nodes.factory.base import BaseNodeFactory
+        from node_graph.node_spec import NodeSpec, NodeHandle
 
-        ItemClass = get_item_class(
-            identifier, self.pool, Node, BaseNodeFactory, inputs=kwargs
-        )
-        name = name or self._generate_item_name(ItemClass)
-        node = ItemClass(
-            name=name,
-            uuid=uuid,
-            graph=self.parent,
-            metadata=_metadata,
-            executor=_executor,
-        )
+        if isinstance(identifier, Node):
+            node = identifier
+            node.name = self._generate_item_name(identifier=name)
+        elif isinstance(identifier, NodeSpec):
+            name = name or self._generate_item_name(identifier=name)
+            node = identifier.to_node(name=name, graph=self)
+        elif isinstance(identifier, NodeHandle):
+            name = name or self._generate_item_name(identifier=identifier.identifier)
+            node = identifier._spec.to_node(name=name, graph=self)
+        else:
+            ItemClass = get_item_class(identifier, self.pool, Node)
+            name = name or self._generate_item_name(ItemClass)
+            node = ItemClass(
+                name=name,
+                uuid=uuid,
+                graph=self.parent,
+                metadata=_metadata,
+                executor=_executor,
+            )
         self._append(node)
         node.set(kwargs)
         logger.debug(f"Created new node '{node.name}' with identifier={identifier}.")

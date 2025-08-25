@@ -1,4 +1,5 @@
-from node_graph import NodeGraph, node, NodePool, spec
+from node_graph import NodeGraph, node, NodePool
+from node_graph.socket_spec import namespace
 import pytest
 
 
@@ -19,7 +20,7 @@ def test_new_node(ng):
     n2 = ng.add_node(NodePool.node_graph.test_add)
     assert n1.name == "test_add"
     assert n2.name == "test_add1"
-    assert len(ng.nodes) == 2
+    assert len(ng.nodes) == 5
     # add builtin node is not allowed
     name = "graph_inputs"
     with pytest.raises(
@@ -66,7 +67,7 @@ def test_add(ng):
 def test_copy_subset(ng):
     """Test copy subset of nodes."""
     ng1 = ng.copy_subset(["add1", "add2"])
-    assert len(ng1.nodes) == 3
+    assert len(ng1.nodes) == 6
     assert len(ng1.links) == 2
     assert "float1" in ng1.get_node_names()
 
@@ -74,20 +75,16 @@ def test_copy_subset(ng):
 def test_get_items(ng):
     """Test get items."""
     ng1 = ng[["add1", "add2"]]
-    assert len(ng1.nodes) == 3
+    assert len(ng1.nodes) == 6
     assert len(ng1.links) == 2
     assert "float1" in ng1.get_node_names()
 
 
 def test_load_graph():
     @node(
-        outputs=spec.namespace(
-            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
-        ),
+        outputs=namespace(sum=any, product=any, nested=namespace(sum=any, product=any)),
     )
-    def test(
-        a, b=1, nested: spec.namespace(d=any, f=spec.namespace(g=any, h=any)) = {}
-    ):
+    def test(a, b=1, nested: namespace(d=any, f=namespace(g=any, h=any)) = {}):
         return {
             "sum": a + b,
             "product": a * b,
@@ -114,10 +111,8 @@ def test_build_graph_inputs_outputs(ng):
     """Test build graph inputs and outputs."""
     ng = NodeGraph(
         name="test_graph_inputs_outputs",
-        inputs=spec.namespace(a=any, b=any, c=spec.namespace(x=any, y=any)),
-        outputs=spec.namespace(
-            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
-        ),
+        inputs=namespace(a=any, b=any, c=namespace(x=any, y=any)),
+        outputs=namespace(sum=any, product=any, nested=namespace(sum=any, product=any)),
     )
     assert "a" in ng.inputs
     assert "x" in ng.inputs.c

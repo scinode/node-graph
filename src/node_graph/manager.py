@@ -22,6 +22,10 @@ class CurrentGraphManager:
             cls._instance._graph = None  # Storage for the active graph
         return cls._instance
 
+    def peek_current_graph(self):
+        """Return the active graph or None (do NOT auto-create)."""
+        return self._graph
+
     def get_current_graph(self):
         """
         Retrieve the current graph, or create a new one if none is set.
@@ -62,6 +66,10 @@ def get_current_graph():
     through the global manager instance.
     """
     return _manager.get_current_graph()
+
+
+def peek_current_graph():
+    return _manager.peek_current_graph()
 
 
 def set_current_graph(graph):
