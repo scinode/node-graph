@@ -15,6 +15,7 @@ from typing import (
 )
 import inspect
 from copy import deepcopy
+from .socket import NodeSocketNamespace
 
 # Project-wide default mapping (source of truth)
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
@@ -282,6 +283,7 @@ class BaseSocketSpecAPI:
     SocketSpec = SocketSpec
     SocketSpecMeta = SocketSpecMeta
     SocketView = SocketView
+    SocketNamespace = NodeSocketNamespace
 
     # ----- authoring helpers -----
 

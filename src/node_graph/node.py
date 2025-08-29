@@ -6,25 +6,18 @@ from node_graph.registry import RegistryHub, registry_hub
 from node_graph.collection import DependencyCollection
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
-from .socket import BaseSocket, NodeSocket, NodeSocketNamespace, WaitingOn
+from .socket import BaseSocket, NodeSocket, WaitingOn
 from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
 )
 from .executor import NodeExecutor
 from .error_handler import ErrorHandlerSpec
-from dataclasses import dataclass
-from node_graph.config import WAIT_SOCKET_NAME, OUTPUT_SOCKET_NAME, MAX_LINK_LIMIT
+from node_graph.socket_spec import SocketSpec
+from .graph_io_base import GraphIOBase
 
 
-@dataclass(frozen=True)
-class BuiltinPolicy:
-    input_wait: bool = True
-    output_wait: bool = True
-    default_output: bool = True
-
-
-class Node:
+class Node(GraphIOBase):
     """Base class for Node.
 
     Attributes:
@@ -47,7 +40,6 @@ class Node:
 
     # This is the entry point for the socket and property pool
     registry: Optional[RegistryHub] = registry_hub
-    _SocketNamespaceClass = NodeSocketNamespace
     _PropertyClass = PropertyCollection
 
     identifier: str = "node_graph.node"
@@ -55,7 +47,6 @@ class Node:
     node_type: str = "Normal"
     graph_uuid: str = ""
     catalog: str = "Node"
-    Builtins: BuiltinPolicy = BuiltinPolicy()
 
     def __init__(
         self,
@@ -64,6 +55,8 @@ class Node:
         graph: Optional["NodeGraph"] = None,
         parent: Optional[Node] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        inputs: Optional[SocketSpec | List[str]] = None,
+        outputs: Optional[SocketSpec | List[str]] = None,
         executor: Optional[NodeExecutor] = None,
         error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
     ) -> None:
@@ -85,46 +78,18 @@ class Node:
         self._executor = executor
         self.error_handlers = error_handlers or {}
         self.properties = self._PropertyClass(self, pool=self.PropertyPool)
-        self.inputs = self._SocketNamespaceClass(
-            "inputs", node=self, pool=self.SocketPool, graph=self.graph
-        )
-        self.outputs = self._SocketNamespaceClass(
-            "outputs", node=self, pool=self.SocketPool, graph=self.graph
-        )
+
         self.state = "CREATED"
         self.action = "NONE"
         self.position = [30, 30]
         self.description = ""
         self.log = ""
         self.create_properties()
-        self.create_sockets()
         self._args_data = None
         self._widget = None
         self._waiting_on = WaitingOn(node=self, graph=self.graph)
-        self._ensure_builtins()
-
-    def _ensure_builtins(self) -> None:
-        """Create built-in sockets based on policy."""
-        if self.Builtins.input_wait and WAIT_SOCKET_NAME not in self.inputs:
-            self.add_input(
-                self.SocketPool.any,
-                WAIT_SOCKET_NAME,
-                link_limit=MAX_LINK_LIMIT,
-                metadata={"arg_type": "none", "builtin_socket": True},
-            )
-        if self.Builtins.default_output and OUTPUT_SOCKET_NAME not in self.outputs:
-            self.add_output(
-                self.SocketPool.any,
-                OUTPUT_SOCKET_NAME,
-                metadata={"builtin_socket": True},
-            )
-        if self.Builtins.output_wait and WAIT_SOCKET_NAME not in self.outputs:
-            self.add_output(
-                self.SocketPool.any,
-                WAIT_SOCKET_NAME,
-                link_limit=MAX_LINK_LIMIT,
-                metadata={"arg_type": "none", "builtin_socket": True},
-            )
+        self._init_socket_namespaces(inputs=inputs, outputs=outputs)
+        self.update_sockets()
 
     @property
     def widget(self) -> NodeGraphWidget:
@@ -166,10 +131,9 @@ class Node:
         """Create properties for this node."""
         self.properties._clear()
 
-    def create_sockets(self) -> None:
+    def update_sockets(self) -> None:
         """Create input and output sockets for this node."""
-        self.inputs._clear()
-        self.outputs._clear()
+        pass
 
     def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
@@ -393,8 +357,8 @@ class Node:
         # then overwrite the sockets
         for i in range(len(self.properties)):
             node.properties[i].value = self.properties[i].value
-        node.inputs = self.inputs._copy(node=node)
-        node.outputs = self.outputs._copy(node=node)
+        node._inputs = self.inputs._copy(node=node)
+        node._outputs = self.outputs._copy(node=node)
         return node
 
     def get_executor(self) -> Optional[NodeExecutor]:
@@ -440,12 +404,8 @@ class Node:
             f"outputs=[{', '.join(repr(k) for k in self.get_output_names())}])"
         )
 
-    def set(self, data: Dict[str, Any]) -> None:
-        """Set properties by a dict.
-
-        Args:
-            data (dict): _description_
-        """
+    def set_inputs(self, data: Dict[str, Any]) -> None:
+        """Set the inputs (both properties and inputs) of this node."""
 
         data = deep_copy_only_dicts(data)
         for key, value in data.items():

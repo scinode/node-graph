@@ -82,7 +82,7 @@ class OperatorSocketMixin:
         Return the output socket from that new Node.
         """
 
-        graph = self._node.graph
+        graph = self._graph
         if not graph:
             raise ValueError("Socket does not belong to a WorkGraph.")
 
@@ -499,9 +499,9 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
                 and "_outputs" in value
             ):
                 value = value._outputs
-            self._node.graph.add_link(value, self)
+            self._graph.add_link(value, self)
         elif isinstance(value, TaggedValue):
-            self._node.graph.add_link(value._socket, self)
+            self._graph.add_link(value._socket, self)
         elif self.property:
             self.property.value = value
         else:
@@ -770,7 +770,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         if value is None:
             return
         if isinstance(value, BaseSocket):
-            self._node.graph.add_link(value, self)
+            self._graph.add_link(value, self)
         elif isinstance(value, dict):
             for key, val in value.items():
                 if key not in self:

@@ -23,8 +23,8 @@ class _GraphIOSharedMixin:
         self.outputs = self.inputs
 
     # ensure the alias is kept
-    def create_sockets(self) -> None:
-        super().create_sockets()
+    def update_sockets(self) -> None:
+        super().update_sockets()
         self._unify_io()
 
     # make sure copying preserves the alias

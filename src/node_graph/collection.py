@@ -332,6 +332,8 @@ class NodeCollection(Collection):
     ) -> Node:
         from node_graph.node import Node
         from node_graph.node_spec import NodeSpec, BaseHandle
+        from node_graph.node_graph import NodeGraph
+        from node_graph.graph_io_base import BuiltinPolicy
 
         if isinstance(identifier, Node):
             node = identifier
@@ -342,6 +344,11 @@ class NodeCollection(Collection):
         elif isinstance(identifier, BaseHandle):
             name = name or self._generate_item_name(identifier=identifier.identifier)
             node = identifier._spec.to_node(name=name, graph=self.graph)
+        elif isinstance(identifier, NodeGraph):
+            node = identifier
+            node.name = name or identifier.name
+            # ensure built-in sockets: _wait and _outputs
+            node._ensure_builtins(BuiltinPolicy())
         else:
             ItemClass = get_item_class(identifier, self.pool)
             if isinstance(ItemClass, BaseHandle):
@@ -357,7 +364,7 @@ class NodeCollection(Collection):
                     executor=_executor,
                 )
         self._append(node)
-        node.set(kwargs)
+        node.set_inputs(kwargs)
         logger.debug(f"Created new node '{node.name}' with identifier={identifier}.")
         # Execute post creation hooks
         self._execute_post_creation_hooks(node)

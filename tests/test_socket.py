@@ -3,7 +3,7 @@ import numpy as np
 from node_graph import NodeGraph
 from node_graph.collection import group
 from node_graph.node import Node
-from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
+from node_graph.socket import BaseSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool
 import operator as op
 
@@ -117,7 +117,7 @@ def test_socket_match(ng):
     str1 = ng.add_node("node_graph.test_string", "str1", value="abc")
     math1 = ng.add_node(NodePool.node_graph.test_add, "math")
     try:
-        ng.add_link(str1.outputs[0], math1.inputs[1])
+        ng.add_link(str1.outputs.string, math1.inputs[1])
     except Exception as e:
         print(e)
     # the link will fails.
@@ -271,7 +271,7 @@ def test_operation(op, name, ref_result, decorated_myadd):
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
-    result._node.set({"x": 4, "y": 2})
+    result._node.set_inputs({"x": 4, "y": 2})
     result = result._node.execute()
     assert result == ref_result
     # test with non-socket value
@@ -304,7 +304,7 @@ def test_operation_comparision(op, name, ref_result, decorated_myadd):
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
-    result._node.set({"x": 4, "y": 2})
+    result._node.set_inputs({"x": 4, "y": 2})
     result = result._node.execute()
     assert result == ref_result
     # test with non-socket value
@@ -340,40 +340,41 @@ def test_set_socket_value():
 def test_set_namespace_attr():
     ng = NodeGraph()
     n = Node(graph=ng)
-    s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    ns = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    ns2 = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    s1 = ns2._new("node_graph.any", "test")
     # auto create a sub-socket "x"
-    s.x = 1
-    assert s.x.value == 1
-    s1 = NodeSocket("b", node=n, graph=ng)
-    s.x = s1
-    assert len(s.x._links) == 1
-    s.y = s1
-    assert s.y.value is None
-    assert len(s.y._links) == 1
+    ns.x = 1
+    assert ns.x.value == 1
+    ns.x = s1
+    assert len(ns.x._links) == 1
+    ns.y = s1
+    assert ns.y.value is None
+    assert len(ns.y._links) == 1
 
 
 def test_set_namespace_item():
     ng = NodeGraph()
     n = Node(graph=ng)
-    s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    ns = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    ns2 = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    s1 = ns2._new("node_graph.any", "test")
 
     # auto create a sub-socket "x"
-    s["x"] = 1
-    assert s.x.value == 1
-    assert s["x"].value == 1
+    ns["x"] = 1
+    assert ns["x"].value == 1
+    assert ns["x"].value == 1
 
-    s1 = NodeSocket("b", node=n, graph=ng)
+    ns["x"] = s1
+    assert len(ns["x"]._links) == 1
+    assert ns["x"]._links == ns["x"]._links
 
-    s["x"] = s1
-    assert len(s.x._links) == 1
-    assert s["x"]._links == s.x._links
+    ns["y"] = s1
+    assert ns["y"].value is None
+    assert ns["y"].value is None
 
-    s["y"] = s1
-    assert s.y.value is None
-    assert s["y"].value is None
-
-    assert len(s.y._links) == 1
-    assert s["y"]._links == s.y._links
+    assert len(ns["y"]._links) == 1
+    assert ns["y"]._links == ns["y"]._links
 
 
 def test_socket_waiting_on():

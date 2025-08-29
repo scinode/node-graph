@@ -3,10 +3,10 @@ from node_graph import NodeGraph, NodePool
 from node_graph.socket_spec import namespace as ns
 
 
-def test_builtin_nodes() -> None:
-    """Test builtin nodes of a node graph."""
+def test_graph_level_io() -> None:
+    """Test graph level io of a node graph."""
     ng = NodeGraph(inputs=ns(x=int, y=int), outputs=ns(result=int))
-    assert len(ng.nodes) == 3
+    assert len(ng.nodes) == 0
     assert ng.inputs._metadata.dynamic is False
     assert ng.outputs._metadata.dynamic is False
     assert ng.ctx._metadata.dynamic is True
@@ -45,7 +45,7 @@ def test_link() -> None:
         y=node1.outputs.result,
     )
     ng.outputs.sum = ng.nodes.add2.outputs.result
-    assert len(ng.nodes) == 5
+    assert len(ng.nodes) == 2
     assert len(ng.links) == 4
 
 
@@ -71,7 +71,7 @@ def test_from_dict() -> None:
     assert len(ng.links) == 6
     ng.to_dict()
     ng1 = NodeGraph.from_dict(ng.to_dict())
-    assert len(ng1.nodes) == 5
+    assert len(ng1.nodes) == 2
     assert len(ng1.links) == 6
     assert ng1.ctx.y.value == 2.0
     # add non-existing input will raise an error
@@ -99,7 +99,7 @@ def test_from_dict_dynamic_inputs_outputs() -> None:
     assert len(ng.links) == 6
     ng.to_dict()
     ng1 = NodeGraph.from_dict(ng.to_dict())
-    assert len(ng1.nodes) == 5
+    assert len(ng1.nodes) == 2
     assert len(ng1.links) == 6
     assert ng1.ctx.y.value == 2.0
     # add non-existing input will not raise an error
@@ -115,6 +115,8 @@ def test_generate_inputs_outputs() -> None:
     ng.generate_outputs()
     assert len(ng.inputs) == 2
     assert len(ng.outputs) == 2
+    for link in ng.links:
+        print(link)
     assert len(ng.links) == 6
     assert "add1.x" in ng.inputs
     assert "add2.result" in ng.outputs

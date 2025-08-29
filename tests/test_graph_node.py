@@ -4,7 +4,7 @@ from node_graph import NodeGraph
 def test_build_graph(decorated_myadd_group):
     ng = decorated_myadd_group.build_graph(x=1, y=2)
     assert isinstance(ng, NodeGraph)
-    assert len(ng.nodes) == 6
+    assert len(ng.nodes) == 3
     assert len(ng.inputs) == 2
     assert len(ng.outputs) == 1
     assert len(ng.links) == 5

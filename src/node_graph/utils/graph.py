@@ -16,7 +16,7 @@ def _assign_wg_outputs(outputs: Any, wg: NodeGraph) -> None:
         for socket in outputs:
             # skip some built-in outputs from the task, e.g., the exit_code
             if socket._name not in wg.outputs:
-                # Should we raise an warning here?
+                # TODO Should we raise an warning here?
                 continue
             wg.outputs[socket._name] = socket
     elif isinstance(outputs, dict):
@@ -62,7 +62,7 @@ def materialize_graph(
     name = identifier or func.__name__
     with graph_class(name=name, inputs=in_spec, outputs=out_spec) as wg:
         inputs = prepare_function_inputs(func, *args, **merged)
-        wg.graph_inputs.set(inputs)
+        wg.set_inputs(inputs)
         tag_socket_value(wg.inputs)
         inputs = wg.inputs._value
         raw = func(**wg.inputs._value)

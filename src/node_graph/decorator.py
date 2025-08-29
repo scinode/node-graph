@@ -19,7 +19,7 @@ def set_node_arguments(call_args, call_kwargs, node):
             raise TypeError(
                 f"Too many positional arguments. expects {len(input_names)} but you supplied {len(call_args)}."
             )
-    node.set(call_kwargs)
+    node.set_inputs(call_kwargs)
     outputs = [
         output for output in node.outputs if output._name not in ["_wait", "_outputs"]
     ]

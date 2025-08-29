@@ -1,58 +1,70 @@
 from __future__ import annotations
+from typing import Dict
 
 
 class NodeLink:
-    """Link connect two sockets."""
+    """Link connecting two sockets."""
 
     def __init__(self, from_socket: "Socket", to_socket: "Socket") -> None:
-        """init a instance of Link
+        from node_graph import NodeGraph
 
-        Args:
-            from_socket (Socket): The socket where the link originates from.
-            to_socket (Socket): The socket where the link connects to.
-        """
         self.from_socket = from_socket
-        self.from_node = from_socket._node
         self.to_socket = to_socket
+        self.from_node = from_socket._node
+
         self.to_node = to_socket._node
+        self.from_graph = (
+            self.from_node
+            if isinstance(self.from_node, NodeGraph)
+            else self.from_node.graph
+        )
+        self.to_graph = (
+            self.to_node if isinstance(self.to_node, NodeGraph) else self.to_node.graph
+        )
+
         self.check_socket_match()
         self.mount()
 
     @property
+    def from_label(self) -> str:
+        from node_graph import NodeGraph
+
+        if isinstance(self.from_node, NodeGraph):
+            return f"_{self.from_socket._full_name.split('.')[0]}"
+        return self.from_node.name
+
+    @property
+    def to_label(self) -> str:
+        from node_graph import NodeGraph
+
+        if isinstance(self.to_node, NodeGraph):
+            return f"_{self.to_socket._full_name.split('.')[0]}"
+        return self.to_node.name
+
+    @property
     def name(self) -> str:
-        return "{}.{} -> {}.{}".format(
-            self.from_node.name,
-            self.from_socket._scoped_name,
-            self.to_node.name,
-            self.to_socket._scoped_name,
-        )
+        return f"{self.from_label}.{self.from_socket._scoped_name} -> {self.to_label}.{self.to_socket._scoped_name}"
 
     def check_socket_match(self) -> None:
         """Check if the socket type match, and belong to the same node graph."""
-        if self.from_node.graph != self.to_node.graph:
+        if self.from_graph is not self.to_graph:
             raise Exception(
-                "Can not link sockets from different {}. {} and {}".format(
-                    self.from_node.graph.__class__.__name__,
-                    self.from_node.graph,
-                    self.to_node.graph,
+                "Can not link sockets from different graphs. {} and {}".format(
+                    self.from_graph, self.to_graph
                 )
             )
 
-        if (
-            self.from_socket._identifier.lower().split(".")[-1] == "any"
-            or self.to_socket._identifier.lower().split(".")[-1] == "any"
-        ):
+        fid: str = (self.from_socket._identifier or "").lower()
+        tid: str = (self.to_socket._identifier or "").lower()
+        if fid.split(".")[-1] == "any" or tid.split(".")[-1] == "any":
             return
-        if self.from_socket._identifier.lower() != self.to_socket._identifier.lower():
+        if fid != tid:
             raise Exception(
-                "Socket type do not match. Socket {} can not connect to socket {}".format(
-                    self.from_socket._identifier,
-                    self.to_socket._identifier,
-                )
+                f"Socket type do not match. Socket {self.from_socket._identifier} can not connect "
+                "to socket {self.to_socket._identifier}"
             )
 
     def mount(self) -> None:
-        """Create a link trigger the update action for the sockets."""
         self.from_socket._links.append(self)
         if len(self.to_socket._links) < self.to_socket._link_limit:
             self.to_socket._links.append(self)
@@ -67,51 +79,44 @@ class NodeLink:
             )
 
     def unmount(self) -> None:
-        """unmount link from node"""
         i = 0
         for link in self.from_socket._links:
             if (
-                link.from_node.name == self.from_node.name
+                link.from_node is self.from_node
                 and link.from_socket._name == self.from_socket._name
-                and link.to_node.name == self.to_node.name
+                and link.to_node is self.to_node
                 and link.to_socket._name == self.to_socket._name
             ):
                 break
             i += 1
         del self.from_socket._links[i]
-        #
+
         i = 0
         for link in self.to_socket._links:
             if (
-                link.from_node.name == self.from_node.name
+                link.from_node is self.from_node
                 and link.from_socket._name == self.from_socket._name
-                and link.to_node.name == self.to_node.name
+                and link.to_node is self.to_node
                 and link.to_socket._name == self.to_socket._name
             ):
                 break
             i += 1
         del self.to_socket._links[i]
 
-    def to_dict(self) -> dict:
-        """Data to be saved to database"""
-        dbdata = {
+    def to_dict(self) -> Dict[str, str]:
+        return {
             "from_socket": self.from_socket._scoped_name,
-            "from_node": self.from_node.name,
+            "from_node": self.from_label,
             "to_socket": self.to_socket._scoped_name,
-            "to_node": self.to_node.name,
+            "to_node": self.to_label,
         }
-        return dbdata
 
     def copy(self) -> None:
         """We can not simply copy the link, because the link is related to the node."""
         pass
 
     def __repr__(self) -> str:
-        s = ""
-        s += 'NodeLink(from="{}.{}", to="{}.{}")'.format(
-            self.from_node.name,
-            self.from_socket._scoped_name,
-            self.to_node.name,
-            self.to_socket._scoped_name,
+        return (
+            f'NodeLink(from="{self.from_label}.{self.from_socket._scoped_name}", '
+            + 'to="{self.to_label}.{self.to_socket._scoped_name}")'
         )
-        return s

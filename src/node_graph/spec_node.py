@@ -50,16 +50,7 @@ class _SpecBackedMixin:
                     self.add_property(identifier=pdef, name=pname)
 
         # IO from spec
-        if spec.inputs is not None:
-            self.inputs = self._SocketNamespaceClass._from_spec(
-                "inputs", spec.inputs, node=self, graph=self.graph, role="input"
-            )
-        if spec.outputs is not None:
-            self.outputs = self._SocketNamespaceClass._from_spec(
-                "outputs", spec.outputs, node=self, graph=self.graph, role="output"
-            )
-
-        self._ensure_builtins()
+        self._init_socket_namespaces(inputs=spec.inputs, outputs=spec.outputs)
 
     @property
     def spec(self) -> NodeSpec:

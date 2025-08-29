@@ -20,9 +20,9 @@ def test_new_node(ng):
     n2 = ng.add_node(NodePool.node_graph.test_add)
     assert n1.name == "test_add"
     assert n2.name == "test_add1"
-    assert len(ng.nodes) == 5
+    assert len(ng.nodes) == 2
     # add builtin node is not allowed
-    name = "graph_inputs"
+    name = "_graph"
     with pytest.raises(
         ValueError,
         match=f"Name {name} can not be used, it is reserved.",
@@ -66,18 +66,18 @@ def test_add(ng):
 
 def test_copy_subset(ng):
     """Test copy subset of nodes."""
-    ng1 = ng.copy_subset(["add1", "add2"])
-    assert len(ng1.nodes) == 6
-    assert len(ng1.links) == 2
-    assert "float1" in ng1.get_node_names()
-
-
-def test_get_items(ng):
-    """Test get items."""
-    ng1 = ng[["add1", "add2"]]
-    assert len(ng1.nodes) == 6
-    assert len(ng1.links) == 2
-    assert "float1" in ng1.get_node_names()
+    ng = NodeGraph(name="test_nodegraph")
+    ng.add_node("node_graph.test_float", "float1", value=3.0)
+    ng.add_node(NodePool.node_graph.test_add, "add1", x=2)
+    ng.add_node(NodePool.node_graph.test_add, "add2", x=2)
+    ng.add_node(NodePool.node_graph.test_add, "add3", x=2)
+    ng.add_node(NodePool.node_graph.test_add, "add4", x=ng.nodes.float1.outputs.float)
+    ng1 = ng.copy_subset(["add2", "add4"])
+    assert set(ng1.get_node_names()) == set(["add2", "add4", "float1"])
+    print(ng1.links)
+    assert len(ng1.links) == 1
+    ng2 = ng[["add2", "add4"]]
+    assert set(ng2.get_node_names()) == set(["add2", "add4", "float1"])
 
 
 def test_load_graph():
@@ -93,7 +93,7 @@ def test_load_graph():
 
     ng = NodeGraph()
     test1 = ng.add_node(test, "test1")
-    test1.set(
+    test1.set_inputs(
         {
             "a": 1,
             "b": 2,

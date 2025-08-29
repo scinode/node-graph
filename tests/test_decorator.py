@@ -14,7 +14,7 @@ def test_build_node():
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
     assert task1.to_dict()["executor"]["mode"] == "module"
-    assert len(ng.nodes) == 4
+    assert len(ng.nodes) == 1
     "x" in ng.nodes[-1].inputs
 
 
@@ -122,7 +122,7 @@ def test_decorator_node(ng_decorator):
 
     ng = ng_decorator
     ng.name = "test_decorator_node"
-    assert len(ng.nodes) == 7
+    assert len(ng.nodes) == 4
     assert len(ng.links) == 3
 
 
@@ -131,7 +131,7 @@ def test_decorator_node_group(decorated_myadd, decorated_myadd_group):
     addgroup1 = ng.add_node(decorated_myadd_group, "addgroup1", y=9)
     add1 = ng.add_node(decorated_myadd, "add1", x=8)
     ng.add_link(add1.outputs["result"], addgroup1.inputs[0])
-    assert len(ng.nodes) == 5
+    assert len(ng.nodes) == 2
 
 
 def test_decorator_node_in_decorator_node(decorated_myadd, node_with_decorated_node):
@@ -140,4 +140,4 @@ def test_decorator_node_in_decorator_node(decorated_myadd, node_with_decorated_n
     add1 = ng.add_node(decorated_myadd, "add1", x=8)
     add2 = ng.add_node(node_with_decorated_node, y=9)
     ng.add_link(add1.outputs["result"], add2.inputs[0])
-    assert len(ng.nodes) == 5
+    assert len(ng.nodes) == 2

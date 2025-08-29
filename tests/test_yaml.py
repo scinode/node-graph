@@ -7,12 +7,12 @@ def test_export_yaml(ng):
     ng.name = "test_export_yaml"
     s = ng.to_yaml()
     ntdata = yaml.safe_load(s)
-    assert len(ntdata["nodes"]) == 6
+    assert len(ntdata["nodes"]) == 3
 
 
 def test_load_yaml_file():
     """Test yaml"""
     ng = NodeGraph.from_yaml("datas/test_yaml.yaml")
-    assert len(ng.nodes) == 5
+    assert len(ng.nodes) == 2
     assert ng.nodes.float1.properties.value.value == 2.0
     assert ng.nodes.add1.inputs.y.value == 3.0

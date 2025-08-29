@@ -76,7 +76,7 @@ then you can use the node in a nodegraph:
    ng = NodeGraph(name="test_decorator")
    # here we use the myadd
    add1 = ng.add_node(myadd, "add1")
-   add1.set({"x": 8})
+   add1.set_inputs({"x": 8})
    nt.launch()
    time.sleep(5)
    print("add1.result: ", add1.results.result.value)
@@ -108,7 +108,7 @@ One can define a new node by extend the `Node` class.
       def create_properties(self):
          self.add_property("node_graph.int", "t", default=1)
 
-      def create_sockets(self):
+      def update_sockets(self):
          self.inputs._clear()
          self.outputs._clear()
          self.add_input("node_graph.float", "x")
@@ -135,7 +135,7 @@ Create a Node inside a NodeGraph
    # create a node using the Node identifier, e.g. node_graph.test_float
    float1 = ng.add_node("node_graph.test_float")
    # set node properties
-   float1.set({"Float": 8})
+   float1.set_inputs({"Float": 8})
    # copy a node
    float2 = float1.copy()
    # append a node to the nodegraph

@@ -188,7 +188,7 @@ class BaseHandle:
                 )
             prepared_inputs = dict(kwargs)
 
-        node.set(prepared_inputs)
+        node.set_inputs(prepared_inputs)
 
         return node.outputs
 
