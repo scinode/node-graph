@@ -31,8 +31,7 @@ class NodeLink:
         """Check if the socket type match, and belong to the same node graph."""
         if self.from_node.graph != self.to_node.graph:
             raise Exception(
-                "Can not link sockets from different {}. {} and {}".format(
-                    self.from_node.graph.__class__.__name__,
+                "Can not link sockets from different graphs. {} and {}".format(
                     self.from_node.graph,
                     self.to_node.graph,
                 )

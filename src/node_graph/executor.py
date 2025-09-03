@@ -220,7 +220,11 @@ class NodeExecutor:
             if not self.pickled_callable:
                 return None
             pickled_data = base64.b64decode(self.pickled_callable.encode("utf-8"))
-            return cloudpickle.loads(pickled_data)
+            func = cloudpickle.loads(pickled_data)
+            # Ensure recursive calls work by injecting the function into its own globals
+            if hasattr(func, "__globals__"):
+                func.__globals__[func.__name__] = func
+            return func
 
         # If it's a graph or another mode, we do not have a direct executor
         return None

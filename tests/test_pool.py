@@ -7,6 +7,6 @@ def test_node_pool():
     assert isinstance(NodePool.node_graph.test_add.load()(), Node)
     with pytest.raises(
         AttributeError,
-        match="Namespace has no attribute 'test_add1'",
+        match="Namespace node_graph has no attribute 'test_add1'",
     ):
         NodePool.node_graph.test_add1

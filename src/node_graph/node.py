@@ -1,17 +1,18 @@
 from __future__ import annotations
-
 from uuid import uuid1
+from node_graph.registry import RegistryHub, registry_hub
 from node_graph.collection import DependencyCollection
-from node_graph.sockets import SocketPool
-from node_graph.properties import PropertyPool
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
-from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace, WaitingOn
+from .socket import BaseSocket, NodeSocket, WaitingOn
 from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
 )
-from node_graph.executor import NodeExecutor
+from .executor import NodeExecutor
+from .error_handler import ErrorHandlerSpec
+from node_graph.socket_spec import BaseSocketSpecAPI
+from .config import BuiltinPolicy
 
 
 class Node:
@@ -36,27 +37,26 @@ class Node:
     """
 
     # This is the entry point for the socket and property pool
-    SocketPool = SocketPool
-    PropertyPool = PropertyPool
-    InputCollectionClass = NodeSocketNamespace
-    OutputCollectionClass = NodeSocketNamespace
-    PropertyCollectionClass = PropertyCollection
+    registry: Optional[RegistryHub] = registry_hub
+    _PropertyClass = PropertyCollection
+    _socket_spec = BaseSocketSpecAPI
 
     identifier: str = "node_graph.node"
     default_name: str = None
     node_type: str = "Normal"
     graph_uuid: str = ""
     catalog: str = "Node"
-    is_dynamic: bool = False
+    Builtins: BuiltinPolicy = BuiltinPolicy()
 
     def __init__(
         self,
         name: Optional[str] = None,
         uuid: Optional[str] = None,
-        graph: Optional[Any] = None,
-        parent: Optional[Any] = None,
+        graph: Optional["NodeGraph"] = None,
+        parent: Optional[Node] = None,
         metadata: Optional[Dict[str, Any]] = None,
         executor: Optional[NodeExecutor] = None,
+        error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
     ) -> None:
         """Initialize the Node.
 
@@ -66,16 +66,20 @@ class Node:
             graph (Any, optional): The node graph this node belongs to. Defaults to None.
         """
         self.name = name or self.identifier
+        self.SocketPool = self.registry.socket_pool
+        self.PropertyPool = self.registry.property_pool
+
         self.uuid = uuid or str(uuid1())
         self.graph = graph
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.properties = self.PropertyCollectionClass(self, pool=self.PropertyPool)
-        self.inputs = self.InputCollectionClass(
+        self.error_handlers = error_handlers or {}
+        self.properties = self._PropertyClass(self, pool=self.PropertyPool)
+        self.inputs = self._socket_spec.SocketNamespace(
             "inputs", node=self, pool=self.SocketPool, graph=self.graph
         )
-        self.outputs = self.OutputCollectionClass(
+        self.outputs = self._socket_spec.SocketNamespace(
             "outputs", node=self, pool=self.SocketPool, graph=self.graph
         )
         self.state = "CREATED"
@@ -84,10 +88,40 @@ class Node:
         self.description = ""
         self.log = ""
         self.create_properties()
-        self.create_sockets()
+        self.update_sockets()
         self._args_data = None
         self._widget = None
         self._waiting_on = WaitingOn(node=self, graph=self.graph)
+        self._ensure_builtins()
+
+    def _ensure_builtins(self) -> None:
+        """Create built-in sockets based on policy."""
+        from node_graph.config import (
+            WAIT_SOCKET_NAME,
+            OUTPUT_SOCKET_NAME,
+            MAX_LINK_LIMIT,
+        )
+
+        if self.Builtins.input_wait and WAIT_SOCKET_NAME not in self.inputs:
+            self.add_input(
+                self.SocketPool.any,
+                WAIT_SOCKET_NAME,
+                link_limit=MAX_LINK_LIMIT,
+                metadata={"arg_type": "none", "builtin_socket": True},
+            )
+        if self.Builtins.default_output and OUTPUT_SOCKET_NAME not in self.outputs:
+            self.add_output(
+                self.SocketPool.any,
+                OUTPUT_SOCKET_NAME,
+                metadata={"builtin_socket": True},
+            )
+        if self.Builtins.output_wait and WAIT_SOCKET_NAME not in self.outputs:
+            self.add_output(
+                self.SocketPool.any,
+                WAIT_SOCKET_NAME,
+                link_limit=MAX_LINK_LIMIT,
+                metadata={"arg_type": "none", "builtin_socket": True},
+            )
 
     @property
     def widget(self) -> NodeGraphWidget:
@@ -129,10 +163,9 @@ class Node:
         """Create properties for this node."""
         self.properties._clear()
 
-    def create_sockets(self) -> None:
+    def update_sockets(self) -> None:
         """Create input and output sockets for this node."""
-        self.inputs._clear()
-        self.outputs._clear()
+        pass
 
     def reset(self) -> None:
         """Reset this node and all its child nodes to "CREATED"."""
@@ -167,6 +200,9 @@ class Node:
                 "inputs": input_sockets,
                 "outputs": output_sockets,
                 "executor": executor,
+                "error_handlers": {
+                    name: eh.to_dict() for name, eh in self.error_handlers.items()
+                },
                 "position": self.position,
                 "description": self.description,
                 "log": self.log,
@@ -197,13 +233,12 @@ class Node:
                 "node_type": self.node_type,
                 "catalog": self.catalog,
                 "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
-                "is_dynamic": self.is_dynamic,
             }
         )
         # also save the parent class information
         metadata["node_class"] = {
-            "callable_name": super().__class__.__name__,
-            "module_path": super().__class__.__module__,
+            "callable_name": self.__class__.__name__,
+            "module_path": self.__class__.__module__,
         }
         return metadata
 
@@ -257,23 +292,10 @@ class Node:
         return executor.to_dict()
 
     @classmethod
-    def from_dict(
-        cls, data: Dict[str, Any], NodePool: Optional[Dict[str, Any]] = None
-    ) -> Any:
+    def from_dict(cls, data: Dict[str, Any], graph: "NodeGraph" = None) -> Any:
         """Rebuild Node from dict data."""
-        from node_graph.utils import get_executor_from_path
 
-        if NodePool is None:
-            from node_graph.nodes import NodePool
-
-        # first create the node instance
-        if data.get("metadata", {}).get("is_dynamic", False):
-            FactoryClass = get_executor_from_path(data["metadata"]["factory_class"])
-            node_class = FactoryClass(data)
-        else:
-            node_class = NodePool[data["identifier"].lower()].load()
-
-        node = node_class(name=data["name"], uuid=data["uuid"])
+        node = cls(name=data["name"], uuid=data["uuid"], graph=graph)
         # then load the properties
         node.update_from_dict(data)
         return node
@@ -294,6 +316,11 @@ class Node:
         ]:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
+        if "error_handlers" in data:
+            self.error_handlers = {
+                name: ErrorHandlerSpec.from_dict(eh)
+                for name, eh in data["error_handlers"].items()
+            }
         # properties first, because the socket may be dynamic
         for name, prop in data.get("properties", {}).items():
             self.properties[name].value = prop["value"]
@@ -323,9 +350,13 @@ class Node:
         if NodePool is None:
             from node_graph.nodes import NodePool
 
-        ItemClass = get_item_class(identifier, NodePool, Node)
+        ItemClass = get_item_class(identifier, NodePool)
         node = ItemClass(name=name, metadata=metadata, executor=executor)
         return node
+
+    def _new_for_copy(self, name: Optional[str], graph: Optional[Any]):
+        """Factory hook used by copy(); subclasses can override to supply ctor args."""
+        return self.__class__(name=name, uuid=None, graph=graph)
 
     def copy(
         self,
@@ -352,7 +383,7 @@ class Node:
             # copy node inside the same graph, change the name
             graph = self.graph
             name = f"{self.name}_copy" if name is None else name
-        node = self.__class__(name=name, uuid=None, graph=graph)
+        node = self._new_for_copy(name=name, graph=graph)
         # becareful when copy the properties, the value should be copied
         # it will update the sockets, so we copy the properties first
         # then overwrite the sockets
@@ -368,9 +399,11 @@ class Node:
 
     def execute(self):
         """Execute the node."""
-        executor = NodeExecutor(**self.get_executor()).executor
+        from node_graph.node_spec import BaseHandle
+
+        executor = self.get_executor().executor
         # the imported executor could be a wrapped function
-        if hasattr(executor, "_NodeCls") and hasattr(executor, "_func"):
+        if isinstance(executor, BaseHandle) and hasattr(executor, "_func"):
             executor = getattr(executor, "_func")
         inputs = self.inputs._value
         args = [inputs[arg] for arg in self.args_data["args"]]
@@ -403,7 +436,7 @@ class Node:
             f"outputs=[{', '.join(repr(k) for k in self.get_output_names())}])"
         )
 
-    def set(self, data: Dict[str, Any]) -> None:
+    def set_inputs(self, data: Dict[str, Any]) -> None:
         """Set properties by a dict.
 
         Args:

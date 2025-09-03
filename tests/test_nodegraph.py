@@ -1,5 +1,7 @@
-from node_graph import NodeGraph, node, NodePool, spec
+from node_graph import NodeGraph, node, NodePool
+from node_graph.socket_spec import namespace
 import pytest
+from typing import Any
 
 
 def test_from_dict(ng_decorator):
@@ -19,7 +21,7 @@ def test_new_node(ng):
     n2 = ng.add_node(NodePool.node_graph.test_add)
     assert n1.name == "test_add"
     assert n2.name == "test_add1"
-    assert len(ng.nodes) == 2
+    assert len(ng.nodes) == 5
     # add builtin node is not allowed
     name = "graph_inputs"
     with pytest.raises(
@@ -27,6 +29,21 @@ def test_new_node(ng):
         match=f"Name {name} can not be used, it is reserved.",
     ):
         ng.add_node(NodePool.node_graph.test_add, name=name)
+
+
+def test_set_inputs(decorated_myadd):
+    ng = NodeGraph(
+        name="test_nodegraph",
+        inputs=namespace(x=Any, y=Any),
+        outputs=namespace(result=Any),
+    )
+    n1 = ng.add_node(decorated_myadd, x=ng.inputs.x, name="add1")
+    n2 = ng.add_node(decorated_myadd, x=ng.inputs.y, y=n1.outputs.result, name="add2")
+    ng.outputs.result = n2.outputs.result
+    ng.set_inputs({"graph_inputs": {"x": 1, "y": 2}, "add1": {"y": 2}})
+    assert ng.inputs.x.value == 1
+    assert ng.inputs.y.value == 2
+    assert ng.nodes["add1"].inputs.y.value == 2
 
 
 def test_delete_node(ng):
@@ -66,7 +83,7 @@ def test_add(ng):
 def test_copy_subset(ng):
     """Test copy subset of nodes."""
     ng1 = ng.copy_subset(["add1", "add2"])
-    assert len(ng1.nodes) == 3
+    assert len(ng1.nodes) == 6
     assert len(ng1.links) == 2
     assert "float1" in ng1.get_node_names()
 
@@ -74,20 +91,16 @@ def test_copy_subset(ng):
 def test_get_items(ng):
     """Test get items."""
     ng1 = ng[["add1", "add2"]]
-    assert len(ng1.nodes) == 3
+    assert len(ng1.nodes) == 6
     assert len(ng1.links) == 2
     assert "float1" in ng1.get_node_names()
 
 
 def test_load_graph():
     @node(
-        outputs=spec.namespace(
-            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
-        ),
+        outputs=namespace(sum=any, product=any, nested=namespace(sum=any, product=any)),
     )
-    def test(
-        a, b=1, nested: spec.namespace(d=any, f=spec.namespace(g=any, h=any)) = {}
-    ):
+    def test(a, b=1, nested: namespace(d=any, f=namespace(g=any, h=any)) = {}):
         return {
             "sum": a + b,
             "product": a * b,
@@ -96,7 +109,7 @@ def test_load_graph():
 
     ng = NodeGraph()
     test1 = ng.add_node(test, "test1")
-    test1.set(
+    test1.set_inputs(
         {
             "a": 1,
             "b": 2,
@@ -114,10 +127,8 @@ def test_build_graph_inputs_outputs(ng):
     """Test build graph inputs and outputs."""
     ng = NodeGraph(
         name="test_graph_inputs_outputs",
-        inputs=spec.namespace(a=any, b=any, c=spec.namespace(x=any, y=any)),
-        outputs=spec.namespace(
-            sum=any, product=any, nested=spec.namespace(sum=any, product=any)
-        ),
+        inputs=namespace(a=any, b=any, c=namespace(x=any, y=any)),
+        outputs=namespace(sum=any, product=any, nested=namespace(sum=any, product=any)),
     )
     assert "a" in ng.inputs
     assert "x" in ng.inputs.c

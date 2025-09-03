@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Union, Optional, Callable, Dict, Type
+from typing import TYPE_CHECKING, List, Union, Optional, Callable, Dict
 import difflib
 from importlib.metadata import entry_points, EntryPoint
 import sys
@@ -7,7 +7,6 @@ import logging
 
 if TYPE_CHECKING:
     from node_graph.node import Node
-    from node_graph.nodes.factory.base import BaseNodeFactory
     from node_graph.socket import BaseSocket
 
 logger = logging.getLogger(__name__)
@@ -30,198 +29,35 @@ def get_entries(entry_point_name: str) -> Dict[str, EntryPoint]:
 
 
 def get_item_class(
-    identifier: EntryPoint | Node | BaseNodeFactory,
+    identifier: EntryPoint | Node,
     pool: Dict[str, EntryPoint],
-    base_class: Type[Node] = None,
-    factory_class: Type[BaseNodeFactory] = None,
-    inputs: Optional[Dict] = None,
 ) -> Node:
     """Get the item class from the identifier."""
 
-    from node_graph.node import Node
-    from node_graph.nodes.factory.base import BaseNodeFactory
-
-    base_class = base_class or Node
-    factory_class = factory_class or BaseNodeFactory
-
     if isinstance(identifier, str):
+        if identifier.lower() not in pool:
+            items = difflib.get_close_matches(identifier.lower(), pool._keys())
+            if len(items) == 0:
+                msg = f"Identifier: {identifier} is not defined."
+            else:
+                msg = f"Identifier: {identifier} is not defined. Did you mean {', '.join(item.lower() for item in items)}?"
+            raise ValueError(msg)
         identifier = pool[identifier.lower()].load()
     # to support different versions of entry points
     elif identifier.__class__.__name__ == "EntryPoint":
         identifier = identifier.load()
-    if isinstance(identifier, type):
-        if issubclass(identifier, base_class):
-            ItemClass = identifier
-        elif issubclass(identifier, factory_class):
-            ItemClass = identifier.create_class(inputs)
-        else:
-            raise Exception(
-                f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
-            )
-    elif isinstance(getattr(identifier, "_NodeCls", None), type) and issubclass(
-        identifier._NodeCls, base_class
-    ):
-        ItemClass = identifier._NodeCls
-    else:
-        raise Exception(
-            f"Identifier {identifier} is not a valid {base_class.__name__} class or entry point."
-        )
-    return ItemClass
-
-
-class Namespace:
-    """A simple recursive namespace that allows attribute-based access to nested dictionaries, with tab completion."""
-
-    def __init__(self):
-        self._data = {}
-
-    def __getattr__(self, name: str) -> EntryPoint:
-        if name in super().__getattribute__("_data"):
-            return super().__getattribute__("_data")[name]
-        raise AttributeError(f"Namespace has no attribute {name!r}")
-
-    def __setattr__(self, name: str, value: Namespace | EntryPoint) -> None:
-        if name == "_data":
-            super().__setattr__(name, value)
-        else:
-            self._data[name] = value
-
-    def __dir__(self):
-        """Enable tab completion by returning all available attributes."""
-        return list(self._data.keys())
-
-    def __repr__(self):
-        return f"Namespace({self._data})"
-
-    def __contains__(self, key: str) -> bool:
-        """Allow checking if a key exists, including nested keys."""
-        parts = key.split(".")  # Handle nested keys
-        current = self
-        for part in parts:
-            if part in current._data:
-                current = current._data[part]
-            else:
-                return False
-        return True  # If all parts exist, return True
-
-    def __iter__(self):
-        """Allow iteration over stored items."""
-        return iter(self._data.items())
-
-    def __getitem__(self, key: str) -> EntryPoint | Namespace:
-        """Allow dictionary-like access and support nested keys."""
-        parts = key.split(".")  # Handle nested keys
-        current = self
-        for part in parts:
-            if part in current._data:
-                current = current._data[part]
-            else:
-                raise KeyError(f"Key {key!r} not found in Namespace")
-        return current
-
-    def __setitem__(self, key: str, value: EntryPoint | Namespace) -> None:
-        """Allow dictionary-like setting and support nested keys."""
-        parts = key.split(".")  # Handle nested keys
-        current = self
-        for part in parts[:-1]:  # Traverse or create nested structures
-            if part not in current._data:
-                current._data[part] = Namespace()
-            current = current._data[part]
-        current._data[parts[-1]] = value  # Set the final value
-
-    def _keys(self, prefix="") -> list[str]:
-        """Return all keys, including nested keys, using dot notation."""
-        all_keys = []
-        for key, value in self._data.items():
-            full_key = f"{prefix}.{key}" if prefix else key
-            all_keys.append(full_key)
-            if isinstance(value, Namespace):  # Recursively collect nested keys
-                all_keys.extend(value._keys(prefix=full_key))
-        return all_keys
-
-
-class EntryPointPool:
-    """
-    NodePool is a hierarchical namespace that loads nodes from entry points.
-    This version is designed to be used as an instance and supports tab completion.
-    """
-
-    def __init__(self, entry_point_group: str):
-        self._nodes = Namespace()
-        self._is_loaded = False
-        self._load_nodes(entry_point_group)
-
-    def _load_nodes(self, entry_point_group: str) -> None:
-        """Loads nodes into the internal hierarchical dictionary, if not already loaded."""
-        if self._is_loaded:
-            return
-
-        eps = entry_points()
-
-        if sys.version_info >= (3, 10):
-            group = eps.select(group=entry_point_group)
-        else:
-            group = eps.get(entry_point_group, [])
-
-        for ep in group:
-            key_parts = ep.name.lower().split(".")  # Use '.' to define nested levels
-            current_level = self._nodes
-
-            # Create the nested namespace structure
-            for part in key_parts[:-1]:
-                if not hasattr(current_level, part):
-                    setattr(current_level, part, Namespace())
-                current_level = getattr(current_level, part)
-
-            final_key = key_parts[-1]
-            if hasattr(current_level, final_key):
-                raise Exception(f"Duplicate entry point name detected: {ep.name!r}")
-
-            setattr(current_level, final_key, ep)
-
-        self._is_loaded = True
-
-    def __getattr__(self, name: str) -> EntryPoint:
-        """Allow direct access to nodes via instance attributes."""
-        return getattr(super().__getattribute__("_nodes"), name)
-
-    def __dir__(self):
-        """Enable tab completion for the node pool instance."""
-        return dir(self._nodes)
-
-    def __repr__(self):
-        return f"NodePool({self._nodes})"
-
-    def __contains__(self, key: str) -> bool:
-        """Allow checking if a key exists in the node pool."""
-        return key in self._nodes
-
-    def __iter__(self):
-        """Allow iteration over stored items."""
-        return iter(self._nodes)
-
-    def __getitem__(self, key: str) -> EntryPoint:
-        """Allow dictionary-like access to the nodes."""
-        return self._nodes[key]
-
-    def __setitem__(self, key: str, value: EntryPoint | Namespace) -> None:
-        """Allow dictionary-like setting and support nested keys."""
-        self._nodes[key] = value
-
-    def _keys(self) -> list[str]:
-        """Return all keys, including nested keys."""
-        return self._nodes._keys()
+    return identifier
 
 
 class Collection:
     """Collection of instances of a property.
     Like an extended list, with the functions: new, find, delete, clear.
-
     """
 
     def __init__(
         self,
         parent: Optional[object] = None,
+        graph: Optional[object] = None,
         pool: Optional[object] = None,
         entry_point: Optional[str] = None,
         post_creation_hooks: Optional[List[Callable]] = None,
@@ -232,8 +68,9 @@ class Collection:
         Args:
             parent (object, optional): object this collection belongs to.
         """
-        self._items: List[object] = {}
+        self._items: Dict[str, object] = {}
         self.parent = parent
+        self.graph = graph
         # one can specify the pool or entry_point to get the pool
         # if pool is not None, entry_point will be ignored, e.g., Link has no pool
         if pool is not None:
@@ -268,14 +105,19 @@ class Collection:
         """
         return name in self._items
 
-    def _generate_item_name(self, item_class) -> int:
+    def _generate_item_name(self, item_class=None, identifier: str = None) -> str:
         """Generate a new name for the item based on the given name and
         the number of items in the collection.
         """
-        if item_class.default_name is None:
-            name = item_class.identifier.split(".")[-1]
+        if item_class is not None:
+            if item_class.default_name is None:
+                name = item_class.identifier.split(".")[-1]
+            else:
+                name = item_class.default_name
+        elif identifier is not None:
+            name = identifier
         else:
-            name = item_class.default_name
+            name = f"item_{len(self._items) + 1}"
         if name not in self._items:
             return name
         index = 1
@@ -470,6 +312,7 @@ class NodeCollection(Collection):
     ) -> None:
         super().__init__(
             parent=graph,
+            graph=graph,
             pool=pool,
             entry_point=entry_point,
             post_creation_hooks=post_creation_hooks,
@@ -486,21 +329,33 @@ class NodeCollection(Collection):
         **kwargs,
     ) -> Node:
         from node_graph.node import Node
-        from node_graph.nodes.factory.base import BaseNodeFactory
+        from node_graph.node_spec import NodeSpec, BaseHandle
 
-        ItemClass = get_item_class(
-            identifier, self.pool, Node, BaseNodeFactory, inputs=kwargs
-        )
-        name = name or self._generate_item_name(ItemClass)
-        node = ItemClass(
-            name=name,
-            uuid=uuid,
-            graph=self.parent,
-            metadata=_metadata,
-            executor=_executor,
-        )
+        if isinstance(identifier, Node):
+            node = identifier
+            node.name = self._generate_item_name(identifier=name)
+        elif isinstance(identifier, NodeSpec):
+            name = name or self._generate_item_name(identifier=identifier.identifier)
+            node = identifier.to_node(name=name, graph=self.graph)
+        elif isinstance(identifier, BaseHandle):
+            name = name or self._generate_item_name(identifier=identifier.identifier)
+            node = identifier._spec.to_node(name=name, graph=self.graph)
+        else:
+            ItemClass = get_item_class(identifier, self.pool)
+            if isinstance(ItemClass, BaseHandle):
+                name = name or self._generate_item_name(identifier=ItemClass.identifier)
+                node = ItemClass._spec.to_node(name=name, graph=self.graph)
+            else:
+                name = name or self._generate_item_name(ItemClass)
+                node = ItemClass(
+                    name=name,
+                    uuid=uuid,
+                    graph=self.graph,
+                    metadata=_metadata,
+                    executor=_executor,
+                )
         self._append(node)
-        node.set(kwargs)
+        node.set_inputs(kwargs)
         logger.debug(f"Created new node '{node.name}' with identifier={identifier}.")
         # Execute post creation hooks
         self._execute_post_creation_hooks(node)
@@ -509,7 +364,9 @@ class NodeCollection(Collection):
     def _append(self, item: object) -> None:
         """Append item into this collection."""
         super()._append(item)
-        setattr(item, "graph", self.parent)
+        if item.graph is not None and item.graph is not self.graph:
+            raise Exception(f"This item is already part of a graph: {item.graph}")
+        item.graph = self.graph
 
     def _copy(self, graph: Optional[object] = None) -> object:
         coll = self.__class__(graph=graph)
@@ -541,9 +398,8 @@ class PropertyCollection(Collection):
     def _new(
         self, identifier: Union[str, type], name: Optional[str] = None, **kwargs
     ) -> object:
-        from node_graph.property import NodeProperty
 
-        ItemClass = get_item_class(identifier, self.pool, NodeProperty)
+        ItemClass = get_item_class(identifier, self.pool)
         item = ItemClass(name, **kwargs)
         self._append(item)
         return item
@@ -560,8 +416,8 @@ class PropertyCollection(Collection):
 class LinkCollection(Collection):
     """Link colleciton"""
 
-    def __init__(self, parent: object) -> None:
-        super().__init__(parent)
+    def __init__(self, graph: object) -> None:
+        super().__init__(graph=graph, parent=graph)
 
     def _new(self, input: object, output: object, type: int = 1) -> object:
         from node_graph.link import NodeLink
