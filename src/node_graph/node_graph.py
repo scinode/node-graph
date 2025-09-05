@@ -230,7 +230,9 @@ class NodeGraph:
             elif name in self.nodes:
                 self.nodes[name].set_inputs(input)
             else:
-                raise KeyError(f"{name} not found in WorkGraph inputs or nodes.")
+                raise KeyError(
+                    f"{name} does not exist. Accepted keys are: {list(self.get_node_names()) + ['graph_inputs']}."
+                )
 
     @property
     def platform_version(self) -> str:

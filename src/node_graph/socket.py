@@ -388,6 +388,13 @@ class BaseSocket:
         """The name relative to its immediate parent, excluding the root namespace."""
         return self._full_name.split(".", 1)[-1]
 
+    @property
+    def _full_name_with_node(self) -> str:
+        """Full hierarchical name, including node name and all parent namespaces."""
+        if self._node is not None:
+            return f"{self._node.name}.{self._full_name}"
+        return self._full_name
+
     def _to_dict(self) -> Dict[str, Any]:
         """Export the socket to a dictionary for database storage."""
         data: Dict[str, Any] = {
@@ -654,7 +661,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         try:
             return self._sockets[name]
         except KeyError:
-            raise AttributeError(f"{self.__class__.__name__} has no attribute '{name}'")
+            raise AttributeError(
+                f"{self.__class__.__name__}: {self._full_name_with_node} has no attribute '{name}'"
+            )
 
     def __setattr__(self, name: str, value: Any) -> None:
         """

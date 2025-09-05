@@ -25,13 +25,13 @@ In order to define a new node group, one need to give the following informations
 
 Decorator
 -----------
-One can define a node group using the `node.graph_builder` decorator. In the definition of the nodegraph, one can also set the default value for the node property.
+One can define a node group using the `node.graph` decorator. In the definition of the nodegraph, one can also set the default value for the node property.
 
 .. code-block:: python
 
     from node_graph.decorator import node
 
-    @node.graph_builder(identifier="MyAddGroup",
+    @node.graph(identifier="MyAddGroup",
                 outputs = [("add1.Result", "Result")],
     )
     def myaddgroup(x, y):

@@ -59,7 +59,7 @@ class NodeLink:
             # handle multi-link here
             raise Exception(
                 "Socket {}: number of links {} larger than the link limit {}.".format(
-                    self.to_socket._name,
+                    self.to_socket._full_name_with_node,
                     len(self.to_socket._links) + 1,
                     self.to_socket._link_limit,
                 )
