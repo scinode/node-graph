@@ -662,7 +662,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             return self._sockets[name]
         except KeyError:
             raise AttributeError(
-                f"{self.__class__.__name__}: {self._full_name_with_node} has no attribute '{name}'"
+                f"{self.__class__.__name__}: {self._full_name_with_node} has no attribute '{name}'. "
+                f"Available sub-sockets are: {', '.join(self._sockets.keys())}"
             )
 
     def __setattr__(self, name: str, value: Any) -> None:

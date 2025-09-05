@@ -3,6 +3,8 @@
 ============================================
 Customize your own NodeGraph
 ============================================
+One can easily customize their own NodeGraph by creating a new package and defining their own Nodes, Sockets, Properties, Executors and Serializers.
+Additionally, one can also provide the method to run the graph using their own executors and database.
 
 Package structure
 -------------------
