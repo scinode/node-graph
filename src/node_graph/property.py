@@ -101,7 +101,9 @@ class NodeProperty:
         """Validate the given value based on allowed types."""
         if not isinstance(value, self.allowed_types):
             raise TypeError(
-                f"Expected value of type {self.allowed_types}, got {type(value).__name__} instead."
+                f"Invalid value for property '{self.name}': "
+                f"expected {self.allowed_types}, but got {type(value).__name__} "
+                f"(value={value!r})."
             )
 
     def copy(self) -> "NodeProperty":

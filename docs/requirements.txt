@@ -1,3 +1,6 @@
 ipykernel
 sphinx_rtd_theme
 nbsphinx
+furo
+sphinx_gallery
+matplotlib

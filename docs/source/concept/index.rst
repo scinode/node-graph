@@ -2,11 +2,13 @@
 Concepts
 ===========================================
 
-.. toctree::
-   :maxdepth: 1
 
-   node
-   node_graph
-   collection
-   property
-   socket
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+
+   autogen/node_concept
+   autogen/nodegraph_concept
+   autogen/socket_concept
+   autogen/graph_node_concept

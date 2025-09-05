@@ -8,9 +8,9 @@ class TestFloat(Node):
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
-        self.add_property("node_graph.float", "value", default=0.0)
 
     def update_sockets(self):
+        self.add_input("node_graph.float", "value", default=0.0)
         self.add_output("node_graph.float", "float")
         self.add_output("node_graph.any", "_outputs")
 
@@ -29,9 +29,9 @@ class TestString(Node):
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
-        self.add_property("node_graph.string", "value", default="")
 
     def update_sockets(self):
+        self.add_input("node_graph.string", "value", default="")
         self.add_output("node_graph.string", "string")
         self.add_output("node_graph.any", "_outputs")
 

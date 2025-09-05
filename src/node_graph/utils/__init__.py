@@ -68,6 +68,15 @@ def nodegaph_to_short_json(
                 "name": link["from_socket"],
             }
         )
+    # remove the inputs socket of "graph_inputs"
+    if "graph_inputs" in ngdata_short["nodes"]:
+        ngdata_short["nodes"]["graph_inputs"]["inputs"] = []
+    # remove the empty graph-level nodes
+    for name in ["graph_inputs", "graph_outputs", "graph_ctx"]:
+        if name in ngdata_short["nodes"]:
+            node = ngdata_short["nodes"][name]
+            if len(node["inputs"]) == 0 and len(node["outputs"]) == 0:
+                del ngdata_short["nodes"][name]
 
     return ngdata_short
 

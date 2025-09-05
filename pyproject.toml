@@ -32,7 +32,8 @@ dependencies = [
     "colorama",
     "termcolor",
     "cloudpickle",
-    "node-graph-widget"
+    "node-graph-widget",
+    "wrapt"
 ]
 
 [project.urls]

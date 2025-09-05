@@ -6,9 +6,10 @@ metadata:
 nodes:
   - identifier: node_graph.test_float
     name: float1
-    properties:
+    inputs:
       value:
-        value: 2.0
+        property:
+          value: 2.0
   - identifier: node_graph.test_add
     name: add1
     inputs:
