@@ -83,6 +83,29 @@ def test_invalid_outputs():
         add_multiply.build_graph(x=2, y=3)
 
 
+def test_taggged_value_outputs():
+    @node.graph()
+    def add_multiply(x, y):
+        return x
+
+    graph = add_multiply.build_graph(x=2, y=3)
+    assert len(graph.links) == 1
+
+    @node.graph(outputs=namespace(x=Any, y=Any))
+    def add_multiply(x, y):
+        return x, y
+
+    graph = add_multiply.build_graph(x=2, y=3)
+    assert len(graph.links) == 2
+
+    @node.graph(outputs=namespace(x=Any, y=Any))
+    def add_multiply(x, y):
+        return {"x": x, "y": y}
+
+    graph = add_multiply.build_graph(x=2, y=3)
+    assert len(graph.links) == 2
+
+
 def test_namespace_outputs():
     @node.graph()
     def add_multiply(x, y) -> namespace(sum=Any, product=Any):

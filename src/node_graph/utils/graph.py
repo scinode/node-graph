@@ -14,16 +14,21 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
       - dict        -> every leaf value (including nested dicts) must be BaseSocket
       - tuple       -> every item must be BaseSocket; length must match declared outputs
     """
-    from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
+    from node_graph.socket import (
+        BaseSocket,
+        NodeSocket,
+        NodeSocketNamespace,
+        TaggedValue,
+    )
 
     def _ensure_all_sockets_in_dict(d: dict, path: str = "outputs") -> None:
         for k, v in d.items():
             subpath = f"{path}.{k}"
             if isinstance(v, dict):
                 _ensure_all_sockets_in_dict(v, path=subpath)
-            elif not isinstance(v, BaseSocket):
+            elif not isinstance(v, (BaseSocket, TaggedValue)):
                 raise TypeError(
-                    f"Invalid output at '{subpath}': expected BaseSocket, got {type(v).__name__}."
+                    f"Invalid output at '{subpath}': expected BaseSocket or TaggedValue, got {type(v).__name__}."
                 )
 
     if outputs is None:
@@ -34,7 +39,7 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
             )
         return
 
-    elif isinstance(outputs, NodeSocket):
+    elif isinstance(outputs, (NodeSocket, TaggedValue)):
         # Single socket -> assign to first declared output slot
         graph.outputs[0] = outputs
 
@@ -61,9 +66,9 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
                 f"Graph node outputs {len(graph.outputs)}."
             )
         for i, output in enumerate(outputs):
-            if not isinstance(output, BaseSocket):
+            if not isinstance(output, (BaseSocket, TaggedValue)):
                 raise TypeError(
-                    f"Invalid output at index {i}: expected Socket, got {type(output).__name__}."
+                    f"Invalid output at index {i}: expected Socket or TaggedValue, got {type(output).__name__}."
                 )
         outputs_dict = {
             graph.outputs[i]._name: output for i, output in enumerate(outputs)
@@ -73,7 +78,7 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
     else:
         raise TypeError(
             f"Unsupported output type {type(outputs).__name__}. Must be one of "
-            "Socket, dict, tuple, or None."
+            "Socket, TaggedValue, dict, tuple, or None."
         )
 
 
