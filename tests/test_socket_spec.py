@@ -15,7 +15,7 @@ def test_namespace_build_and_roundtrip():
     )
     assert ns.identifier == tm["namespace"]
     assert set(ns.fields.keys()) == {"a", "b", "c"}
-    assert ns.defaults == {"b": 5}
+    assert ns.fields["b"].default == 5
     assert ns.fields["c"].identifier == tm["namespace"]
     assert set(ns.fields["c"].fields.keys()) == {"d"}
 
@@ -47,7 +47,6 @@ def test_expose_include_exclude_prefix_rename():
     # include/only
     inc = ss.expose(base, include=["foo", "baz"])
     assert set(inc.fields.keys()) == {"foo", "baz"}
-    assert inc.defaults == {}
 
     only = base.only("bar")
     assert set(only.fields.keys()) == {"bar"}

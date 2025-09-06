@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, replace, MISSING
 from typing import (
     Any,
     Dict,
@@ -29,6 +29,9 @@ __all__ = [
     "dynamic",
     "expose",
     "infer_specs_from_callable",
+    "set_default",
+    "unset_default",
+    "merge_specs",
 ]
 
 WidgetConfig = Union[str, Dict[str, Any]]
@@ -49,38 +52,44 @@ class SocketSpecMeta:
 class SocketSpec:
     """
     Immutable socket schema tree (leaf or namespace).
+
     - identifier: leaf type identifier or "node_graph.namespace"
     - dynamic: namespace accepts arbitrary keys (item gives per-key schema)
     - item: schema for each dynamic key (leaf or namespace)
     - fields: fixed fields for namespace (name -> schema)
-    - defaults: default values for fixed fields (for leaf sockets only)
+    - default: leaf-only default value
     - meta: optional meta (help/required/widget)
     """
 
     identifier: str
     dynamic: bool = False
     item: Optional["SocketSpec"] = None
+    default: Any = field(default_factory=lambda: MISSING)
     fields: Dict[str, "SocketSpec"] = field(default_factory=dict)
-    defaults: Dict[str, Any] = field(default_factory=dict)
     meta: SocketSpecMeta = field(default_factory=SocketSpecMeta)
 
     # --- structural predicate ---
     def is_namespace(self) -> bool:
-        # Treat empty, declared namespaces as namespaces too (identifier heuristic)
         if self.dynamic or self.fields:
             return True
         ident = self.identifier or ""
         return "namespace" in ident
 
-    # --- serde ---
+    def has_default(self) -> bool:
+        # only check against MISSING, and only for leaves
+        return not isinstance(self.default, type(MISSING)) and (not self.is_namespace())
+
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {"identifier": self.identifier, "dynamic": self.dynamic}
         if self.item is not None:
             d["item"] = self.item.to_dict()
         if self.fields:
             d["fields"] = {k: v.to_dict() for k, v in self.fields.items()}
-        if self.defaults:
-            d["defaults"] = deepcopy(self.defaults)
+
+        # Serialize default only for leaves and only if not MISSING
+        if not self.is_namespace() and not isinstance(self.default, type(MISSING)):
+            d["default"] = deepcopy(self.default)
+
         if any(
             getattr(self.meta, k) is not None
             for k in (
@@ -108,7 +117,6 @@ class SocketSpec:
     def from_dict(
         cls, d: Dict[str, Any], *, type_mapping: Optional[dict] = None
     ) -> "SocketSpec":
-        # mapping accepted for symmetry/extensibility; not stored
         meta = SocketSpecMeta(**d.get("meta", {}))
         item = (
             cls.from_dict(d["item"], type_mapping=type_mapping) if "item" in d else None
@@ -117,16 +125,16 @@ class SocketSpec:
             k: cls.from_dict(v, type_mapping=type_mapping)
             for k, v in d.get("fields", {}).items()
         }
+        default = d.get("default", MISSING)
         return cls(
             identifier=d["identifier"],
             dynamic=bool(d.get("dynamic", False)),
             item=item,
             fields=fields,
-            defaults=deepcopy(d.get("defaults", {})),
+            default=default,
             meta=meta,
         )
 
-    # --- structural transforms (namespace only) ---
     def include(self, *names: str) -> "SocketSpec":
         _ensure_namespace(self)
         wanted = set(names)
@@ -150,16 +158,14 @@ class SocketSpec:
             if new in new_fields:
                 raise ValueError(f"rename collision: '{new}' already exists")
             new_fields[new] = spec
-        new_defaults = {mapping.get(k, k): v for k, v in self.defaults.items()}
-        return replace(self, fields=new_fields, defaults=new_defaults)
+        return replace(self, fields=new_fields)
 
     def prefix(self, pfx: str) -> "SocketSpec":
         _ensure_namespace(self)
         new_fields = {f"{pfx}{k}": v for k, v in self.fields.items()}
-        new_defaults = {f"{pfx}{k}": v for k, v in self.defaults.items()}
-        return replace(self, fields=new_fields, defaults=new_defaults)
+        return replace(self, fields=new_fields)
 
-    # --- optional helper: snapshot from a live namespace (no graph dep) ---
+    # --- snapshot from a live namespace (no graph dep) ---
     @classmethod
     def from_namespace(
         cls, live_ns, *, role: str = "input", type_mapping: Optional[dict] = None
@@ -308,22 +314,32 @@ class BaseSocketSpecAPI:
         tm = cls.TYPE_MAPPING
         spec = SocketSpec(identifier=tm["namespace"])
         new_fields: Dict[str, SocketSpec] = {}
-        defaults: Dict[str, Any] = {}
+
         for name, val in fields.items():
             has_default = isinstance(val, tuple) and len(val) == 2
-            T, default = val if has_default else (val, None)
+            T, default_val = val if has_default else (val, MISSING)
             base_T, meta = _unwrap_annotated(T)
             s_meta = meta or SocketSpecMeta()
+
             if isinstance(base_T, SocketSpec):
                 child = base_T
             elif isinstance(base_T, SocketView):
                 child = base_T.to_spec()
             else:
                 child = SocketSpec(identifier=cls._map_identifier(base_T), meta=s_meta)
-            new_fields[name] = child
+
+            # Set default directly on leaf child
             if has_default:
-                defaults[name] = default
-        return replace(spec, fields=new_fields, defaults=defaults)
+                if child.is_namespace():
+                    raise TypeError(
+                        f"Default provided for namespace field '{name}'. "
+                        "Provide a structured default via function signature mapping instead."
+                    )
+                child = replace(child, default=default_val)
+
+            new_fields[name] = child
+
+        return replace(spec, fields=new_fields)
 
     @classmethod
     def dynamic(cls, item_type: Any, /, **fixed) -> SocketSpec:
@@ -428,25 +444,40 @@ class BaseSpecInferAPI:
         return bool(spec.dynamic or spec.fields)
 
     @classmethod
-    def _apply_namespace_defaults(
+    def _set_leaf_default(cls, spec: SocketSpec, value: Any) -> SocketSpec:
+        if spec.is_namespace():
+            raise TypeError("Cannot set a scalar default on a namespace.")
+        return replace(spec, default=value)
+
+    @classmethod
+    def _apply_structured_defaults_to_leaves(
         cls, ns_spec: SocketSpec, dv: dict[str, Any]
     ) -> SocketSpec:
-        """Recursively apply dict defaults to a namespace SocketSpec (structural)."""
+        """
+        Recursively apply dict defaults by setting defaults on leaf specs only.
+        """
         if not cls._is_namespace(ns_spec):
+            # If a dict was supplied but spec isn’t a namespace, ignore silently.
             return ns_spec
-        new_fields: dict[str, SocketSpec] = {}
-        child_defaults: dict[str, Any] = dict(ns_spec.defaults or {})
-        for k, child in (ns_spec.fields or {}).items():
-            if k in dv:
-                val = dv[k]
-                if isinstance(val, dict) and cls._is_namespace(child):
-                    child = cls._apply_namespace_defaults(child, val)
-                else:
-                    child_defaults[k] = val
-            new_fields[k] = child
-        return replace(ns_spec, fields=new_fields, defaults=child_defaults)
 
-    # --- STRICT: never synthesize a namespace from the shape of T ---
+        new_fields: dict[str, SocketSpec] = {}
+        for k, child in (ns_spec.fields or {}).items():
+            if k not in dv:
+                new_fields[k] = child
+                continue
+            val = dv[k]
+            if isinstance(val, dict) and cls._is_namespace(child):
+                # Traverse deeper
+                new_fields[k] = cls._apply_structured_defaults_to_leaves(child, val)
+            else:
+                # Scalar default -> must land on a leaf spec
+                if child.is_namespace():
+                    raise TypeError(
+                        f"Default for '{k}' is scalar, but the field is a namespace."
+                    )
+                new_fields[k] = replace(child, default=val)
+        return replace(ns_spec, fields=new_fields)
+
     @classmethod
     def _spec_from_annotation(cls, T: Any) -> SocketSpec:
         """Only returns a leaf (or passes through explicit SocketSpec/.to_spec())."""
@@ -474,8 +505,6 @@ class BaseSpecInferAPI:
         - **kwargs -> dynamic namespace of item T, call_role="var_kwargs"
 
         """
-        import inspect
-
         if explicit is not None:
             if not isinstance(explicit, SocketSpec):
                 raise TypeError("inputs must be a SocketSpec (namespace/dynamic)")
@@ -489,7 +518,6 @@ class BaseSpecInferAPI:
         ann_map = cls._safe_type_hints(func)
 
         fields: dict[str, SocketSpec] = {}
-        defaults: dict[str, Any] = {}
         # if var_args or var_kwargs are present, the top level becomes dynamic
         is_dyn: bool = False
 
@@ -542,7 +570,7 @@ class BaseSpecInferAPI:
             )
             spec = replace(spec, meta=merged)
 
-            # varargs/kwargs become dynamic namespaces; item type only from Annotated or Any
+            # varargs/kwargs become dynamic namespaces
             if param.kind is inspect.Parameter.VAR_POSITIONAL:
                 item_T, _ = _unwrap_annotated(T)
                 item_spec = cls._spec_from_annotation(
@@ -566,12 +594,17 @@ class BaseSpecInferAPI:
                     meta=spec.meta,
                 )
 
-            # Defaults
+            # Defaults: scalar -> leaf default; dict -> traverse into leaves
             if param.default is not inspect._empty:
                 if isinstance(param.default, dict) and cls._is_namespace(spec):
-                    spec = cls._apply_namespace_defaults(spec, param.default)
+                    spec = cls._apply_structured_defaults_to_leaves(spec, param.default)
                 else:
-                    defaults[name] = param.default
+                    if spec.is_namespace():
+                        raise TypeError(
+                            f"Scalar default provided for namespace parameter '{name}'. "
+                            "Use a structured mapping of defaults."
+                        )
+                    spec = replace(spec, default=param.default)
 
             fields[name] = spec
 
@@ -579,7 +612,6 @@ class BaseSpecInferAPI:
         return SocketSpec(
             identifier=cls.TYPE_MAPPING["namespace"],
             fields=fields,
-            defaults=defaults,
             dynamic=is_dyn,
             meta=SocketSpecMeta(call_role="kwargs"),
         )
@@ -662,8 +694,10 @@ class BaseSpecInferAPI:
 
 def merge_specs(ns: SocketSpec, additions: SocketSpec) -> SocketSpec:
     """
-    Merge two socket specs, giving precedence to the fields in the additions spec.
+    Merge two namespace specs, giving precedence to the fields in `additions`.
     """
+    if not ns.is_namespace() or not additions.is_namespace():
+        raise TypeError("merge_specs expects two namespace SocketSpecs.")
     new_fields = dict(ns.fields or {})
     new_fields.update(additions.fields or {})
     return replace(ns, fields=new_fields)
@@ -731,6 +765,32 @@ def _function_returns_value(func) -> bool:
         if v.returns_value:
             return True
     return False
+
+
+def _set_leaf_default(ns: SocketSpec, path: tuple[str, ...], value: Any) -> SocketSpec:
+    head, *rest = path
+    child = ns.fields[head]
+    if rest:
+        if not child.is_namespace():
+            raise TypeError("Path passes through a leaf.")
+        return replace(
+            ns, fields={**ns.fields, head: _set_leaf_default(child, tuple(rest), value)}
+        )
+    if child.is_namespace():
+        raise TypeError("Cannot set default on a namespace.")
+    return replace(ns, fields={**ns.fields, head: replace(child, default=value)})
+
+
+def set_default(spec: SocketSpec | SocketView, dotted: str, value: Any) -> SocketSpec:
+    root = spec.to_spec() if hasattr(spec, "to_spec") else spec
+    return _set_leaf_default(root, tuple(dotted.split(".")), value)
+
+
+def unset_default(spec: SocketSpec | SocketView, dotted: str) -> SocketSpec:
+    from dataclasses import MISSING
+
+    root = spec.to_spec() if hasattr(spec, "to_spec") else spec
+    return _set_leaf_default(root, tuple(dotted.split(".")), MISSING)
 
 
 # Convenience: expose classmethods directly (bound to the base class)

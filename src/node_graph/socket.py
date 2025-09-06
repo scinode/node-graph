@@ -3,7 +3,7 @@ from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class
-from dataclasses import dataclass, field
+from dataclasses import MISSING, dataclass, field
 from node_graph.orm.mapping import type_mapping
 from node_graph.registry import EntryPointPool
 import wrapt
@@ -867,11 +867,10 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     ) -> "NodeSocketNamespace":
         """
         Materialize a runtime namespace (and children) from a SocketSpec.
-        If *spec* is a leaf (non-namespace), a single leaf socket named 'result' is created.
+        The *spec* must be a namespace.
         """
         from node_graph.materialize import runtime_meta_from_spec
 
-        # check if spec.identifier is not a namespace
         if spec.identifier != cls._type_mapping["namespace"]:
             raise ValueError(
                 f"The socket spec identifier must be a namespace, got: {spec.identifier}"
@@ -889,12 +888,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             pool=pool or (node.SocketPool if node else None),
         )
 
-        # Namespace
-        parent_defaults = dict(getattr(spec, "defaults", {}) or {})
+        # materialize fixed fields
         for fname, f_spec in (spec.fields or {}).items():
-            cls._append_from_spec(
-                ns, fname, f_spec, parent_defaults, node=node, graph=graph, role=role
-            )
+            cls._append_from_spec(ns, fname, f_spec, node=node, graph=graph, role=role)
         return ns
 
     @classmethod
@@ -903,12 +899,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         parent_ns: "NodeSocketNamespace",
         name: str,
         spec: "SocketSpec",
-        parent_defaults: dict,
         *,
         node,
         graph,
         role: str,
     ) -> None:
+        from copy import deepcopy
         from node_graph.materialize import runtime_meta_from_spec
 
         if spec.identifier == cls._type_mapping["namespace"]:
@@ -924,18 +920,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 pool=parent_ns._SocketPool,
             )
             parent_ns._append(child)
-            # cascade defaults into nested namespace if provided as dict
-            child_defaults = (
-                parent_defaults.get(name)
-                if isinstance(parent_defaults.get(name), dict)
-                else {}
-            )
+
             for fname, f_spec in (spec.fields or {}).items():
                 cls._append_from_spec(
                     child,
                     fname,
                     f_spec,
-                    child_defaults,
                     node=node,
                     graph=graph,
                     role=role,
@@ -945,9 +935,11 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             leaf_meta = runtime_meta_from_spec(
                 spec, role=role, function_generated=True, type_mapping=cls._type_mapping
             )
+
             prop = {"identifier": spec.identifier}
-            if name in parent_defaults:
-                prop["default"] = parent_defaults[name]
+            if not isinstance(spec.default, type(MISSING)):
+                prop["default"] = deepcopy(spec.default)
+
             ItemClass = get_item_class(spec.identifier, parent_ns._SocketPool)
             sock = ItemClass(
                 name=name,
