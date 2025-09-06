@@ -4,6 +4,7 @@ from copy import deepcopy
 from node_graph.socket_spec import SocketSpec
 from node_graph.orm.mapping import type_mapping as default_type_mapping
 from node_graph.socket import SocketMetadata
+from dataclasses import MISSING
 
 
 def _spec_shape_snapshot(
@@ -14,14 +15,15 @@ def _spec_shape_snapshot(
     expose their structure via `socket._metadata.extras`.
 
     Shape:
-      {
-        "identifier": "...",
-        # if namespace:
-        "sockets": { name: <snapshot>, ... },
-        "dynamic": true,
-        "item": <snapshot>,           # present only if dynamic
-        "defaults": {...},            # optional
-      }
+      Leaf:
+        { "identifier": "...", "default": <value?> }
+      Namespace:
+        {
+          "identifier": "...",
+          "sockets": { name: <snapshot>, ... },      # if fixed fields
+          "dynamic": true,                           # if dynamic
+          "item": <snapshot>,                        # if dynamic (item present)
+        }
     """
     type_mapping = type_mapping or default_type_mapping
     d: Dict[str, Any] = {"identifier": spec.identifier}
@@ -42,10 +44,10 @@ def _spec_shape_snapshot(
             else:
                 # fallback to 'any' when item is missing
                 d["item"] = {"identifier": type_mapping.get("any", "node_graph.any")}
-
-        # carry defaults
-        if spec.defaults:
-            d["defaults"] = deepcopy(spec.defaults)
+    else:
+        # leaf: include default if present
+        if not isinstance(getattr(spec, "default", MISSING), type(MISSING)):
+            d["default"] = deepcopy(spec.default)
 
     return d
 
@@ -67,7 +69,7 @@ def runtime_meta_from_spec(
       - extras["identifier"]
       - extras["sockets"] for fixed namespace fields
       - extras["dynamic"] + extras["item"] for dynamic namespaces
-      - extras["defaults"] (optional)
+      - extras["default"] on leaves (optional)
       - extras["widget"] when present on the spec
     """
     type_mapping = type_mapping or default_type_mapping
