@@ -1,6 +1,7 @@
 from node_graph import NodeGraph, node
 from node_graph.socket_spec import namespace, dynamic
 from typing import Any
+import pytest
 
 
 @node()
@@ -32,6 +33,54 @@ def test_run_as_a_node(decorated_myadd_group):
     addgroup1 = ng.add_node(decorated_myadd_group, "addgroup1", y=9)
     assert len(addgroup1.inputs) == 3  # 2 +  "_wait"
     assert len(addgroup1.outputs) == 3  # 1 + "_wait", "_outputs"
+
+
+def test_none_outputs():
+    @node.graph()
+    def add_multiply(x, y):
+        add(x, y)
+        multiply(x, y)
+
+    graph = add_multiply.build_graph(x=2, y=3)
+    assert len(graph.outputs) == 0
+
+    @node.graph(outputs=namespace(sum=Any, product=Any))
+    def add_multiply(x, y):
+        add(x, y)
+        multiply(x, y)
+
+    with pytest.raises(
+        ValueError,
+        match="The function returned None, but the Graph node declares outputs. ",
+    ):
+        add_multiply.build_graph(x=2, y=3)
+
+
+def test_invalid_outputs():
+
+    # does not return Socket, dict, tuple, or None
+    @node.graph()
+    def add_multiply(x, y):
+        return x + y
+
+    with pytest.raises(TypeError, match="Unsupported output type"):
+        add_multiply.build_graph(x=2, y=3)
+
+    # dict with invalid type
+    @node.graph(outputs=namespace(sum=Any, product=Any))
+    def add_multiply(x, y):
+        return {"sum": add(x, y).result, "product": x * y}
+
+    with pytest.raises(TypeError, match="Invalid output at"):
+        add_multiply.build_graph(x=2, y=3)
+
+    # Tuple with invalid type
+    @node.graph(outputs=namespace(sum=Any, product=Any))
+    def add_multiply(x, y):
+        return add(x, y).result, x * y
+
+    with pytest.raises(TypeError, match="Invalid output at"):
+        add_multiply.build_graph(x=2, y=3)
 
 
 def test_namespace_outputs():

@@ -15,6 +15,8 @@ import inspect
 from copy import deepcopy
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from .socket import NodeSocketNamespace
+import ast
+import textwrap
 
 __all__ = [
     "SocketSpecMeta",
@@ -586,7 +588,12 @@ class BaseSpecInferAPI:
     def build_outputs_from_signature(
         cls, func, explicit: SocketSpec | None
     ) -> SocketSpec:
-        """Always return a NAMESPACE spec. If no explicit fields, add 'result' leaf."""
+        """Always return a NAMESPACE spec, but:
+        - If the function body never does `return <value>`, return an EMPTY namespace,
+        regardless of annotations.
+        - Otherwise, honor explicit, Annotated, or wrap leaf under DEFAULT_OUTPUT_KEY.
+        """
+        import inspect
 
         def _wrap_leaf_as_ns(leaf: SocketSpec) -> SocketSpec:
             return SocketSpec(
@@ -600,43 +607,41 @@ class BaseSpecInferAPI:
                 explicit = explicit.to_spec()
             if not isinstance(explicit, SocketSpec):
                 raise TypeError("outputs must be a SocketSpec")
+            # Respect namespaces (even empty) as-is; just set call_role
             if cls._is_namespace(explicit):
-                # if user supplied an *empty* non-dynamic namespace, give it a default 'result: Any'
-                if not explicit.fields and not explicit.dynamic:
-                    leaf = SocketSpec(identifier=cls.TYPE_MAPPING["default"])
-                    return replace(
-                        explicit,
-                        fields={cls.DEFAULT_OUTPUT_KEY: leaf},
-                        meta=SocketSpecMeta(call_role="return"),
-                    )
                 return replace(explicit, meta=SocketSpecMeta(call_role="return"))
-            # Leaf explicit -> wrap under 'result'
             return _wrap_leaf_as_ns(explicit)
 
+        # If function body never returns a value -> EMPTY namespace (no 'result')
+        if not _function_returns_value(func):
+            return SocketSpec(
+                identifier=cls.TYPE_MAPPING["namespace"],
+                fields={},  # empty
+                dynamic=False,
+                meta=SocketSpecMeta(call_role="return"),
+            )
+
+        # Otherwise, infer from return annotation / metadata
         ann_map = cls._safe_type_hints(func)
         ret = ann_map.get("return", None)
 
-        # Prefer spec from Annotated metadata if present
         spec_from_meta = _extract_spec_from_annotated(ret)
         if spec_from_meta is not None:
             return replace(
                 spec_from_meta, meta=replace(spec_from_meta.meta, call_role="return")
             )
 
-        if ret is None or ret is inspect._empty:
-            leaf = SocketSpec(identifier=cls.TYPE_MAPPING["default"])
-            return _wrap_leaf_as_ns(leaf)
-
-        # Handle SocketView-like
         if hasattr(ret, "to_spec") and callable(getattr(ret, "to_spec")):
             base_spec = ret.to_spec()
             return replace(base_spec, meta=replace(base_spec.meta, call_role="return"))
 
-        # Strict: never expand shapes; just leaf-ify the annotation and wrap
-        base_T, meta = _unwrap_annotated(ret)
-        meta = meta or SocketSpecMeta()
+        if ret is None or ret is inspect._empty:
+            # We already know a value *is* returned (from body), but annotation is None/missing:
+            # fallback to default leaf under 'result'
+            leaf = SocketSpec(identifier=cls.TYPE_MAPPING["default"])
+            return _wrap_leaf_as_ns(leaf)
 
-        # Already a SocketSpec
+        base_T, _meta = _unwrap_annotated(ret)
         if isinstance(base_T, SocketSpec):
             return replace(base_T, meta=replace(base_T.meta, call_role="return"))
 
@@ -662,6 +667,70 @@ def merge_specs(ns: SocketSpec, additions: SocketSpec) -> SocketSpec:
     new_fields = dict(ns.fields or {})
     new_fields.update(additions.fields or {})
     return replace(ns, fields=new_fields)
+
+
+def _function_returns_value(func) -> bool:
+    """
+    True iff the *top-level* function body contains `return <non-None>`.
+
+    Conservative defaults:
+    - If source is unavailable, or AST parse fails, or the function node can't be found,
+      return True (assume it returns a value).
+    """
+    try:
+        src = inspect.getsource(func)
+    except (OSError, TypeError):
+        # No source (e.g., builtins). Be conservative: assume it DOES return a value
+        return True
+
+    src = textwrap.dedent(src)
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        # Be conservative: assume it DOES return a value
+        return True
+
+    # Find the outer function by name
+    target_fn = None
+    for node in tree.body:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == func.__name__
+        ):
+            target_fn = node
+            break
+    if target_fn is None:
+        # Conservative: assume it DOES return a value
+        return True
+
+    class _TopLevelReturnVisitor(ast.NodeVisitor):
+        def __init__(self):
+            self.returns_value = False
+
+        # Don’t descend into nested defs/classes
+        def visit_FunctionDef(self, node):  # nested defs: skip
+            pass
+
+        def visit_AsyncFunctionDef(self, node):
+            pass
+
+        def visit_ClassDef(self, node):
+            pass
+
+        def visit_Return(self, node: ast.Return):
+            # `return` (no value) or `return None` -> does NOT produce an output value
+            if node.value is None:
+                return
+            if isinstance(node.value, ast.Constant) and node.value.value is None:
+                return
+            self.returns_value = True
+
+    v = _TopLevelReturnVisitor()
+    for stmt in target_fn.body:
+        v.visit(stmt)
+        if v.returns_value:
+            return True
+    return False
 
 
 # Convenience: expose classmethods directly (bound to the base class)

@@ -3,35 +3,78 @@ from typing import Any, Optional, Callable
 from node_graph.socket_spec import SocketSpec
 
 
-def _assign_wg_outputs(outputs: Any, wg: NodeGraph) -> None:
+def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
     """
     Inspect the raw outputs from the function and attach them to the NodeGraph.
-    """
-    from node_graph.socket import NodeSocket, NodeSocketNamespace
 
-    if isinstance(outputs, NodeSocket):
-        wg.outputs[0] = outputs
+    Rules:
+      - None        -> no outputs
+      - NodeSocket  -> map to first declared output
+      - Namespace   -> iterate sockets; assign by name (respect non-dynamic outputs)
+      - dict        -> every leaf value (including nested dicts) must be BaseSocket
+      - tuple       -> every item must be BaseSocket; length must match declared outputs
+    """
+    from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
+
+    def _ensure_all_sockets_in_dict(d: dict, path: str = "outputs") -> None:
+        for k, v in d.items():
+            subpath = f"{path}.{k}"
+            if isinstance(v, dict):
+                _ensure_all_sockets_in_dict(v, path=subpath)
+            elif not isinstance(v, BaseSocket):
+                raise TypeError(
+                    f"Invalid output at '{subpath}': expected BaseSocket, got {type(v).__name__}."
+                )
+
+    if outputs is None:
+        if len(graph.outputs) != 0:
+            raise ValueError(
+                "The function returned None, but the Graph node declares outputs. "
+                "Either remove the declared outputs or ensure the function returns them."
+            )
+        return
+
+    elif isinstance(outputs, NodeSocket):
+        # Single socket -> assign to first declared output slot
+        graph.outputs[0] = outputs
+
     elif isinstance(outputs, NodeSocketNamespace):
         for socket in outputs:
-            # skip some built-in outputs from the task, e.g., the exit_code
-            if socket._name not in wg.outputs and not wg.outputs._metadata.dynamic:
-                # Should we raise an warning here?
+            # skip some built-in outputs, e.g., the exit_code
+            if (
+                socket._name not in graph.outputs
+                and not graph.outputs._metadata.dynamic
+            ):
+                # Not declared and not dynamic: silently skip (or log if you prefer)
                 continue
-            wg.outputs[socket._name] = socket
+            graph.outputs[socket._name] = socket
+
     elif isinstance(outputs, dict):
-        wg.outputs = outputs
+        _ensure_all_sockets_in_dict(outputs)
+        # If you also want to enforce declared names when not dynamic, do it here (optional).
+        graph.outputs = outputs
+
     elif isinstance(outputs, tuple):
-        if len(outputs) != len(wg.outputs):
+        if len(outputs) != len(graph.outputs):
             raise ValueError(
-                f"The length of the outputs {len(outputs)} does not match the length of the \
-                    Graph task outputs {len(wg.outputs)}."
+                f"The length of the outputs {len(outputs)} does not match the length of the "
+                f"Graph node outputs {len(graph.outputs)}."
             )
-        outputs_dict = {}
         for i, output in enumerate(outputs):
-            outputs_dict[wg.outputs[i]._name] = output
-        wg.outputs = outputs_dict
+            if not isinstance(output, BaseSocket):
+                raise TypeError(
+                    f"Invalid output at index {i}: expected Socket, got {type(output).__name__}."
+                )
+        outputs_dict = {
+            graph.outputs[i]._name: output for i, output in enumerate(outputs)
+        }
+        graph.outputs = outputs_dict
+
     else:
-        wg.outputs[0] = outputs
+        raise TypeError(
+            f"Unsupported output type {type(outputs).__name__}. Must be one of "
+            "Socket, dict, tuple, or None."
+        )
 
 
 def materialize_graph(
@@ -59,11 +102,11 @@ def materialize_graph(
 
     merged = {**kwargs, **(var_kwargs or {})}
     name = identifier or func.__name__
-    with graph_class(name=name, inputs=in_spec, outputs=out_spec) as wg:
+    with graph_class(name=name, inputs=in_spec, outputs=out_spec) as graph:
         inputs = prepare_function_inputs(func, *args, **merged)
-        wg.graph_inputs.set_inputs(inputs)
-        tag_socket_value(wg.inputs)
-        inputs = wg.inputs._value
-        raw = func(**wg.inputs._value)
-        _assign_wg_outputs(raw, wg)
-        return wg
+        graph.graph_inputs.set_inputs(inputs)
+        tag_socket_value(graph.inputs)
+        inputs = graph.inputs._value
+        raw = func(**graph.inputs._value)
+        _assign_graph_outputs(raw, graph)
+        return graph
