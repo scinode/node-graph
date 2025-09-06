@@ -4,6 +4,7 @@ from node_graph import socket_spec as ss
 from node_graph.orm.mapping import type_mapping
 from typing import Any, Annotated
 from node_graph import node
+from dataclasses import MISSING
 
 
 def test_namespace_build_and_roundtrip():
@@ -210,3 +211,67 @@ def test_expose_node_spec():
     assert isinstance(ng.outputs.out1, NodeSocketNamespace)
     assert isinstance(ng.outputs.out1.sum, NodeSocket)
     assert isinstance(ng.outputs.out2, NodeSocket)
+
+
+def test_default():
+    ns = ss.namespace(
+        a=int,
+        b=(int, 5),
+        c=ss.namespace(d=str),
+    )
+    ns1 = ss.set_default(ns, "b", 10)
+    assert ns1.fields["b"].default == 10
+    ns2 = ss.unset_default(ns1, "b")
+    assert isinstance(ns2.fields["b"].default, type(MISSING))
+    n3 = ss.set_default(ns2, "c.d", 10)
+    assert n3.fields["c"].fields["d"].default == 10
+
+    with pytest.raises(TypeError, match="Cannot set default on a namespace."):
+        ss.set_default(ns, "c", 10)
+
+    with pytest.raises(TypeError, match="Path passes through a leaf."):
+        ss.unset_default(ns, "b.c")
+
+
+def test_set_default_from_annotation():
+    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = {"x": 1, "y": 2}):
+        return a + b
+
+    ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+    assert ns.fields["b"].fields["x"].default == 1
+    assert ns.fields["b"].fields["y"].default == 2
+
+    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = 1):
+        return a + b
+
+    with pytest.raises(
+        TypeError, match="Scalar default provided for namespace parameter"
+    ):
+        ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+
+    def add(
+        a,
+        b: Annotated[dict, ss.namespace(x=int, y=ss.namespace(z=int))] = {
+            "x": 1,
+            "y": {"z": 2},
+        },
+    ):
+        return a + b
+
+    ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+    assert ns.fields["b"].fields["x"].default == 1
+    assert ns.fields["b"].fields["y"].fields["z"].default == 2
+
+    def add(
+        a,
+        b: Annotated[dict, ss.namespace(x=int, y=ss.namespace(z=int))] = {
+            "x": 1,
+            "y": 1,
+        },
+    ):
+        return a + b
+
+    with pytest.raises(
+        TypeError, match="Default for 'y' is scalar, but the field is a namespace."
+    ):
+        ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)

@@ -444,12 +444,6 @@ class BaseSpecInferAPI:
         return bool(spec.dynamic or spec.fields)
 
     @classmethod
-    def _set_leaf_default(cls, spec: SocketSpec, value: Any) -> SocketSpec:
-        if spec.is_namespace():
-            raise TypeError("Cannot set a scalar default on a namespace.")
-        return replace(spec, default=value)
-
-    @classmethod
     def _apply_structured_defaults_to_leaves(
         cls, ns_spec: SocketSpec, dv: dict[str, Any]
     ) -> SocketSpec:
@@ -496,7 +490,7 @@ class BaseSpecInferAPI:
 
     @classmethod
     def build_inputs_from_signature(
-        cls, func, explicit: SocketSpec | None
+        cls, func, explicit: SocketSpec | None = None
     ) -> SocketSpec:
         """Always return a NAMESPACE spec (possibly empty).
         - POSITIONAL_ONLY -> call_role="args"
