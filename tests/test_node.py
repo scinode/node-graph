@@ -71,7 +71,7 @@ def test_to_dict():
     math = ng.add_node(NodePool.node_graph.test_add, "Math")
     math.inputs["x"].property.value = 2
     data = math.to_dict()
-    assert data["identifier"] == "node_graph.test_add"
+    assert data["metadata"]["identifier"] == "node_graph.test_add"
 
 
 def test_copy():

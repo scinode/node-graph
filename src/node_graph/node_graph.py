@@ -370,17 +370,20 @@ class NodeGraph:
         """Export graph metadata including *live* graph-level IO specs.
         We snapshot current shapes of graph inputs/outputs/ctx using `SocketSpec.from_namespace`.
         """
+        self._inputs = SocketSpec.from_namespace(
+            self.graph_inputs.inputs, type_mapping=self.type_mapping
+        )
+        self._outputs = SocketSpec.from_namespace(
+            self.graph_outputs.inputs, type_mapping=self.type_mapping
+        )
+        self._ctx = SocketSpec.from_namespace(
+            self.graph_ctx.inputs, type_mapping=self.type_mapping
+        )
         meta: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            "inputs_spec": SocketSpec.from_namespace(
-                self.graph_inputs.inputs, type_mapping=self.type_mapping
-            ).to_dict(),
-            "outputs_spec": SocketSpec.from_namespace(
-                self.graph_outputs.inputs, type_mapping=self.type_mapping
-            ).to_dict(),
-            "ctx_spec": SocketSpec.from_namespace(
-                self.graph_ctx.inputs, type_mapping=self.type_mapping
-            ).to_dict(),
+            "inputs_spec": self._inputs.to_dict(),
+            "outputs_spec": self._outputs.to_dict(),
+            "ctx_spec": self._ctx.to_dict(),
         }
         # also save the parent class information
         meta["graph_class"] = {
@@ -443,9 +446,12 @@ class NodeGraph:
             links (List[Dict[str, Any]]): The links data.
         """
         for link in links:
-            self.add_link(
-                self.nodes[link["from_node"]].outputs[link["from_socket"]],
-                self.nodes[link["to_node"]].inputs[link["to_socket"]],
+            self.nodes[link["to_node"]].set_inputs(
+                {
+                    link["to_socket"]: self.nodes[link["from_node"]].outputs[
+                        link["from_socket"]
+                    ]
+                }
             )
 
     @classmethod
@@ -520,7 +526,7 @@ class NodeGraph:
                 node = node_class.from_dict(ndata, graph=self)
                 self.nodes._append(node)
             else:
-                identifier = ndata["identifier"]
+                identifier = md["identifier"]
                 node = self.add_node(
                     identifier,
                     name=name,

@@ -88,15 +88,10 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata["nodes"] = {}
     for node in nodes:
         node.setdefault("metadata", {})
+        node["metadata"]["identifier"] = node.pop("identifier", None)
         node["properties"] = node.get("properties", {})
-        node["inputs"] = {
-            "name": "inputs",
-            "sockets": node.get("inputs", {}),
-        }
-        node["outputs"] = {
-            "name": "outputs",
-            "sockets": node.get("outputs", {}),
-        }
+        node["inputs"] = node.get("inputs", {})
+        node["outputs"] = node.get("outputs", {})
         ntdata["nodes"][node["name"]] = node
     return ntdata
 

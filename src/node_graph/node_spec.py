@@ -12,6 +12,7 @@ from .error_handler import ErrorHandlerSpec
 @dataclass(frozen=True)
 class NodeSpec:
     identifier: str
+    node_type: str = "Normal"
     catalog: str = "Others"
     inputs: Optional[SocketSpec] = None
     outputs: Optional[SocketSpec] = None

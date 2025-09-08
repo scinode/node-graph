@@ -13,7 +13,7 @@ def test_build_node():
     NodeCls = build_node_from_callable(**ndata)
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
-    assert task1.to_dict()["executor"]["mode"] == "module"
+    assert task1.to_dict()["metadata"]["spec_schema"]["executor"]["mode"] == "module"
     assert len(ng.nodes) == 4
     "x" in ng.nodes[-1].inputs
 

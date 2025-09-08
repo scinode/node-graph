@@ -185,24 +185,16 @@ class Node:
         else:
             metadata = self.get_metadata()
             properties = self.export_properties()
-            input_sockets = self.inputs._to_dict()
-            output_sockets = self.outputs._to_dict()
-            executor = self.export_executor_to_dict()
             data = {
-                "identifier": self.identifier,
                 "uuid": self.uuid,
+                "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
                 "name": self.name,
                 "state": self.state,
                 "action": self.action,
                 "error": "",
                 "metadata": metadata,
                 "properties": properties,
-                "inputs": input_sockets,
-                "outputs": output_sockets,
-                "executor": executor,
-                "error_handlers": {
-                    name: eh.to_dict() for name, eh in self.error_handlers.items()
-                },
+                "inputs": self.inputs._value,
                 "position": self.position,
                 "description": self.description,
                 "log": self.log,
@@ -230,12 +222,9 @@ class Node:
         metadata = self._metadata
         metadata.update(
             {
-                "node_type": self.node_type,
-                "catalog": self.catalog,
-                "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
+                "identifier": self.identifier,
             }
         )
-        # also save the parent class information
         metadata["node_class"] = {
             "callable_name": self.__class__.__name__,
             "module_path": self.__class__.__module__,
@@ -304,7 +293,6 @@ class Node:
         """udpate node from dict data. Set metadata and properties.
         This method can be overrided.
         """
-        from node_graph.utils import collect_values_inside_namespace
 
         for key in ["uuid", "state", "action", "description", "hash", "position"]:
             if data.get(key):
@@ -325,8 +313,7 @@ class Node:
         for name, prop in data.get("properties", {}).items():
             self.properties[name].value = prop["value"]
         # inputs
-        input_values = collect_values_inside_namespace(data["inputs"])
-        self.inputs._set_socket_value(input_values)
+        self.inputs._set_socket_value(data["inputs"])
 
     @classmethod
     def load(cls, uuid: str) -> None:
@@ -446,24 +433,15 @@ class Node:
         data = deep_copy_only_dicts(data)
         for key, value in data.items():
             # if the value is a node, link the node's top-level output to the input
+            if value is None:
+                continue
             if isinstance(value, Node):
                 self.graph.add_link(value.outputs["_outputs"], self.inputs[key])
                 continue
             if key in self.properties:
                 self.properties[key].value = value
-            elif key in self.inputs:
-                self.inputs[key]._set_socket_value(value)
-            elif self.inputs._metadata.dynamic:
-                # if the socket is dynamic, we can add the input dynamically
-                inp = self.add_input(self.SocketPool.any, key)
-                inp._set_socket_value(value)
             else:
-                raise Exception(
-                    "No property named {}. Accept name are {}".format(
-                        key,
-                        list(self.get_property_names() + list(self.get_input_names())),
-                    )
-                )
+                self.inputs._set_socket_value({key: value})
 
     def get(self, key: str) -> Any:
         """Get the value of property by key.

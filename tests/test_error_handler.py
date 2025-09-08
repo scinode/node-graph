@@ -153,8 +153,8 @@ def test_node_roundtrip_preserves_error_handlers():
 
     node = spec.to_node(name="n1")
     data = node.to_dict(short=False, should_serialize=False)
-    assert "error_handlers" in data
-    assert len(data["error_handlers"]) == 1
+    assert "error_handlers" in data["metadata"]["spec_schema"]
+    assert len(data["metadata"]["spec_schema"]["error_handlers"]) == 1
 
     # mutate copy, then update_from_dict into a fresh node
     # data2 = copy.deepcopy(data)
