@@ -17,7 +17,7 @@ class NodeSpec:
     inputs: Optional[SocketSpec] = None
     outputs: Optional[SocketSpec] = None
     executor: Optional[NodeExecutor] = None
-    error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=list)
+    error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     base_class_path: Optional[str] = None
     # not persisted directly; used at runtime
@@ -135,7 +135,7 @@ def hash_spec(
 
 
 class BaseHandle:
-    def __init__(self, spec, get_current_graph, graph_class=None):
+    def __init__(self, spec: NodeSpec, get_current_graph, graph_class=None):
         self.identifier = spec.identifier
         self._spec = spec
         self._inputs_spec = spec.inputs
@@ -169,7 +169,7 @@ class BaseHandle:
 
         if zone:
             zone.children.add(node)
-        exec_obj = self._spec.executor.executor if self._spec.executor else None
+        exec_obj = self._spec.executor.callable if self._spec.executor else None
         if isinstance(exec_obj, BaseHandle) and hasattr(exec_obj, "_func"):
             exec_obj = exec_obj._func
 
@@ -193,7 +193,7 @@ class BaseHandle:
             raise TypeError(".build() is only available on graph specs")
         if self._spec.executor is None:
             raise RuntimeError("Spec has no executor")
-        func = self._spec.executor.executor
+        func = self._spec.executor.callable
         if isinstance(func, BaseHandle) and hasattr(func, "_func"):
             func = func._func
 

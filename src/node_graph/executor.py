@@ -192,7 +192,7 @@ class NodeExecutor:
         return dataclasses.asdict(self)
 
     @property
-    def executor(self) -> Union[Callable, None]:
+    def callable(self) -> Union[Callable, None]:
         """
         Dynamically retrieve the actual callable (function/class/method/etc.)
         based on the NodeExecutor's mode.

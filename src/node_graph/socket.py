@@ -759,15 +759,25 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
     @property
     def _value(self) -> Dict[str, Any]:
+        return self._collect_values()
+
+    def _collect_values(self, raw: bool = True) -> Dict[str, Any]:
         data = {}
         for name, item in self._sockets.items():
             if isinstance(item, NodeSocketNamespace):
-                value = item._value
+                value = item._collect_values(raw=raw)
                 if value:
                     data[name] = value
             else:
                 if item.value is not None:
-                    data[name] = item.value
+                    if raw:
+                        data[name] = (
+                            item.value.__wrapped__
+                            if isinstance(item.value, TaggedValue)
+                            else item.value
+                        )
+                    else:
+                        data[name] = item.value
         return data
 
     @_value.setter

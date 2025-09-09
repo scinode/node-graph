@@ -460,7 +460,7 @@ def test_tagged_value():
     # assign the value to another socket
     n1 = ng.add_node(Node, "test1")
     s1 = NodeSocketNamespace("inputs", node=n1, graph=ng, metadata={"dynamic": True})
-    s1._set_socket_value(s._value)
+    s1._set_socket_value(s._collect_values(raw=False))
     # this will add link between the two sockets, instead of copying the value
     assert len(ng.links) == 4
     assert "test.a -> test1.a" in ng.links

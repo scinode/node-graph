@@ -74,7 +74,7 @@ class Node:
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.error_handlers = error_handlers or {}
+        self._error_handlers = error_handlers or {}
         self.properties = self._PropertyClass(self, pool=self.PropertyPool)
         self.inputs = self._socket_spec.SocketNamespace(
             "inputs", node=self, pool=self.SocketPool, graph=self.graph
@@ -186,6 +186,7 @@ class Node:
             metadata = self.get_metadata()
             properties = self.export_properties()
             data = {
+                "identifier": self.identifier,
                 "uuid": self.uuid,
                 "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
                 "name": self.name,
@@ -195,6 +196,9 @@ class Node:
                 "metadata": metadata,
                 "properties": properties,
                 "inputs": self.inputs._value,
+                "error_handlers": {
+                    name: eh.to_dict() for name, eh in self.error_handlers.items()
+                },
                 "position": self.position,
                 "description": self.description,
                 "log": self.log,
@@ -223,6 +227,8 @@ class Node:
         metadata.update(
             {
                 "identifier": self.identifier,
+                "node_type": self.node_type,
+                "catalog": self.catalog,
             }
         )
         metadata["node_class"] = {
@@ -305,7 +311,7 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         if "error_handlers" in data:
-            self.error_handlers = {
+            self._error_handlers = {
                 name: ErrorHandlerSpec.from_dict(eh)
                 for name, eh in data["error_handlers"].items()
             }
@@ -313,7 +319,7 @@ class Node:
         for name, prop in data.get("properties", {}).items():
             self.properties[name].value = prop["value"]
         # inputs
-        self.inputs._set_socket_value(data["inputs"])
+        self.inputs._set_socket_value(data.get("inputs", {}))
 
     @classmethod
     def load(cls, uuid: str) -> None:
@@ -384,11 +390,26 @@ class Node:
         """Get the default executor."""
         return self._executor
 
+    @property
+    def error_handlers(self) -> Dict[str, ErrorHandlerSpec]:
+        return self.get_error_handlers()
+
+    def get_error_handlers(self) -> Dict[str, ErrorHandlerSpec]:
+        """Get the error handlers."""
+        return self._error_handlers
+
+    def add_error_handler(self, error_handler: ErrorHandlerSpec | dict) -> None:
+        """Add an error handler to this node."""
+        from node_graph.error_handler import normalize_error_handlers
+
+        error_handlers = normalize_error_handlers(error_handler)
+        self._error_handlers.update(error_handlers)
+
     def execute(self):
         """Execute the node."""
         from node_graph.node_spec import BaseHandle
 
-        executor = self.get_executor().executor
+        executor = self.get_executor().callable
         # the imported executor could be a wrapped function
         if isinstance(executor, BaseHandle) and hasattr(executor, "_func"):
             executor = getattr(executor, "_func")
