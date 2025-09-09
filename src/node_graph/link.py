@@ -30,7 +30,6 @@ class NodeLink:
     def check_socket_match(self) -> None:
         """Check if the socket type match, and belong to the same node graph."""
         if self.from_node.graph != self.to_node.graph:
-            print(id(self.from_node.graph), id(self.to_node.graph))
             raise Exception(
                 "Can not link sockets from different graphs. {} and {}".format(
                     self.from_node.graph,

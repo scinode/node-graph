@@ -336,7 +336,7 @@ class NodeGraph:
         raise NotImplementedError("The 'save' method is not implemented.")
 
     def to_dict(
-        self, short: bool = False, should_serialize: bool = False
+        self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
         """Converts the node graph to a dictionary.
 
@@ -348,7 +348,7 @@ class NodeGraph:
         """
         metadata = self.get_metadata()
         nodes = self.export_nodes_to_dict(
-            short=short, should_serialize=should_serialize
+            include_sockets=include_sockets, should_serialize=should_serialize
         )
 
         links = self.links_to_dict()
@@ -393,7 +393,7 @@ class NodeGraph:
         return meta
 
     def export_nodes_to_dict(
-        self, short: bool = False, should_serialize: bool = False
+        self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
         """Converts the nodes to a dictionary.
 
@@ -407,7 +407,7 @@ class NodeGraph:
         nodes = {}
         for node in self.nodes:
             nodes[node.name] = node.to_dict(
-                short=short, should_serialize=should_serialize
+                include_sockets=include_sockets, should_serialize=should_serialize
             )
         return nodes
 
@@ -699,7 +699,7 @@ class NodeGraph:
     def to_widget_value(self) -> dict:
         from node_graph.utils import nodegaph_to_short_json
 
-        ngdata = nodegaph_to_short_json(self.to_dict())
+        ngdata = nodegaph_to_short_json(self.to_dict(include_sockets=True))
         return ngdata
 
     def __repr__(self) -> str:

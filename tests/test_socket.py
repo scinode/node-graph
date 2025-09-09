@@ -249,6 +249,21 @@ def test_set_namespace(node_with_namespace_socket):
     assert n.inputs._value == data
 
 
+def test_set_namespace_with_nested_key(node_with_namespace_socket):
+    n = node_with_namespace_socket
+    # use nested key with "."
+    data = {
+        "x": 2.0,
+        "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
+        "dynamic.x": 2,
+        "dynamic.sub.y": 5,
+        "dynamic.sub.z": 6.0,
+    }
+    n.inputs._value = data
+    assert n.inputs.dynamic.x.value == 2
+    assert n.inputs.dynamic.sub.y.value == 5
+
+
 @pytest.mark.parametrize(
     "op, name, ref_result",
     (

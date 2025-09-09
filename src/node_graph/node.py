@@ -171,39 +171,34 @@ class Node:
         """Reset this node and all its child nodes to "CREATED"."""
 
     def to_dict(
-        self, short: bool = False, should_serialize: bool = False
+        self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
 
-        if short:
-            data = {
-                "name": self.name,
-                "identifier": self.identifier,
-                "node_type": self.node_type,
-                "uuid": self.uuid,
-            }
-        else:
-            metadata = self.get_metadata()
-            properties = self.export_properties()
-            data = {
-                "identifier": self.identifier,
-                "uuid": self.uuid,
-                "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
-                "name": self.name,
-                "state": self.state,
-                "action": self.action,
-                "error": "",
-                "metadata": metadata,
-                "properties": properties,
-                "inputs": self.inputs._value,
-                "error_handlers": {
-                    name: eh.to_dict() for name, eh in self.error_handlers.items()
-                },
-                "position": self.position,
-                "description": self.description,
-                "log": self.log,
-                "hash": "",  # we can only calculate the hash during runtime when all the data is ready
-            }
+        metadata = self.get_metadata()
+        properties = self.export_properties()
+        data = {
+            "identifier": self.identifier,
+            "uuid": self.uuid,
+            "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
+            "name": self.name,
+            "state": self.state,
+            "action": self.action,
+            "error": "",
+            "metadata": metadata,
+            "properties": properties,
+            "inputs": self.inputs._value,
+            "error_handlers": {
+                name: eh.to_dict() for name, eh in self.error_handlers.items()
+            },
+            "position": self.position,
+            "description": self.description,
+            "log": self.log,
+            "hash": "",  # we can only calculate the hash during runtime when all the data is ready
+        }
+        if include_sockets:
+            data["input_sockets"] = self.inputs._to_dict()
+            data["output_sockets"] = self.outputs._to_dict()
         # to avoid some dict has the same address with others nodes
         # which happens when {} is used as default value
         # we copy the value only
@@ -479,12 +474,12 @@ class Node:
         """Modify and save a node to database."""
 
     def to_widget_value(self):
-        tdata = self.to_dict()
+        tdata = self.to_dict(include_sockets=True)
 
-        for key in ("properties", "executor", "node_class", "process"):
+        for key in ("properties", "executor", "node_class", "process", "input_values"):
             tdata.pop(key, None)
         inputs = []
-        for input in tdata["inputs"]["sockets"].values():
+        for input in tdata["input_sockets"]["sockets"].values():
             input.pop("property", None)
             inputs.append(input)
 

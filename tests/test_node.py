@@ -173,3 +173,14 @@ def test_add_inputs():
     node = Node()
     node.add_input("node_graph.int", "e")
     assert "e" in node.inputs
+
+
+def test_add_error_handler():
+    def sample_handler(task):
+        """dummy handler"""
+
+    node = Node()
+    node.add_error_handler(
+        {"test": {"executor": sample_handler, "exit_codes": [1, 2], "max_retries": 3}}
+    )
+    assert len(node.error_handlers) == 1

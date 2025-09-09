@@ -152,7 +152,7 @@ def test_node_roundtrip_preserves_error_handlers():
     )
 
     node = spec.to_node(name="n1")
-    data = node.to_dict(short=False, should_serialize=False)
+    data = node.to_dict()
     assert "error_handlers" in data["metadata"]["spec_schema"]
     assert len(data["metadata"]["spec_schema"]["error_handlers"]) == 1
 

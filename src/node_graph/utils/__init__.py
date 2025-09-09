@@ -39,7 +39,7 @@ def nodegaph_to_short_json(
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
         inputs = []
-        for input in node["inputs"]["sockets"].values():
+        for input in node["input_sockets"]["sockets"].values():
             metadata = input.get("metadata", {}) or {}
             if metadata.get("required", False):
                 inputs.append(
