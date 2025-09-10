@@ -589,7 +589,7 @@ class BaseSpecInferAPI:
                 )
 
             # Defaults: scalar -> leaf default; dict -> traverse into leaves
-            if param.default is not inspect._empty:
+            if param.default is not inspect._empty and param.default is not None:
                 if isinstance(param.default, dict) and cls._is_namespace(spec):
                     spec = cls._apply_structured_defaults_to_leaves(spec, param.default)
                 else:

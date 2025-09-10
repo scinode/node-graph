@@ -111,7 +111,7 @@ def materialize_graph(
         inputs = prepare_function_inputs(func, *args, **merged)
         graph.graph_inputs.set_inputs(inputs)
         tag_socket_value(graph.inputs)
-        inputs = graph.inputs._value
-        raw = func(**graph.inputs._value)
+        inputs = graph.inputs._collect_values(raw=False)
+        raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         return graph

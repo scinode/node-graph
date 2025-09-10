@@ -47,7 +47,7 @@ def build_node_from_callable(
     ):
         return executor
     if isinstance(executor, str):
-        executor = NodeExecutor(module_path=executor).executor
+        executor = NodeExecutor(module_path=executor).callable
     if callable(executor):
         return node(inputs=inputs, outputs=outputs)(executor)
 

@@ -336,7 +336,7 @@ class NodeGraph:
         raise NotImplementedError("The 'save' method is not implemented.")
 
     def to_dict(
-        self, short: bool = False, should_serialize: bool = False
+        self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
         """Converts the node graph to a dictionary.
 
@@ -348,7 +348,7 @@ class NodeGraph:
         """
         metadata = self.get_metadata()
         nodes = self.export_nodes_to_dict(
-            short=short, should_serialize=should_serialize
+            include_sockets=include_sockets, should_serialize=should_serialize
         )
 
         links = self.links_to_dict()
@@ -370,17 +370,20 @@ class NodeGraph:
         """Export graph metadata including *live* graph-level IO specs.
         We snapshot current shapes of graph inputs/outputs/ctx using `SocketSpec.from_namespace`.
         """
+        self._inputs = SocketSpec.from_namespace(
+            self.graph_inputs.inputs, type_mapping=self.type_mapping
+        )
+        self._outputs = SocketSpec.from_namespace(
+            self.graph_outputs.inputs, type_mapping=self.type_mapping
+        )
+        self._ctx = SocketSpec.from_namespace(
+            self.graph_ctx.inputs, type_mapping=self.type_mapping
+        )
         meta: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            "inputs_spec": SocketSpec.from_namespace(
-                self.graph_inputs.inputs, type_mapping=self.type_mapping
-            ).to_dict(),
-            "outputs_spec": SocketSpec.from_namespace(
-                self.graph_outputs.inputs, type_mapping=self.type_mapping
-            ).to_dict(),
-            "ctx_spec": SocketSpec.from_namespace(
-                self.graph_ctx.inputs, type_mapping=self.type_mapping
-            ).to_dict(),
+            "inputs_spec": self._inputs.to_dict(),
+            "outputs_spec": self._outputs.to_dict(),
+            "ctx_spec": self._ctx.to_dict(),
         }
         # also save the parent class information
         meta["graph_class"] = {
@@ -390,7 +393,7 @@ class NodeGraph:
         return meta
 
     def export_nodes_to_dict(
-        self, short: bool = False, should_serialize: bool = False
+        self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
         """Converts the nodes to a dictionary.
 
@@ -404,7 +407,7 @@ class NodeGraph:
         nodes = {}
         for node in self.nodes:
             nodes[node.name] = node.to_dict(
-                short=short, should_serialize=should_serialize
+                include_sockets=include_sockets, should_serialize=should_serialize
             )
         return nodes
 
@@ -443,9 +446,12 @@ class NodeGraph:
             links (List[Dict[str, Any]]): The links data.
         """
         for link in links:
-            self.add_link(
-                self.nodes[link["from_node"]].outputs[link["from_socket"]],
-                self.nodes[link["to_node"]].inputs[link["to_socket"]],
+            self.nodes[link["to_node"]].set_inputs(
+                {
+                    link["to_socket"]: self.nodes[link["from_node"]].outputs[
+                        link["from_socket"]
+                    ]
+                }
             )
 
     @classmethod
@@ -520,7 +526,7 @@ class NodeGraph:
                 node = node_class.from_dict(ndata, graph=self)
                 self.nodes._append(node)
             else:
-                identifier = ndata["identifier"]
+                identifier = md["identifier"]
                 node = self.add_node(
                     identifier,
                     name=name,
@@ -693,7 +699,7 @@ class NodeGraph:
     def to_widget_value(self) -> dict:
         from node_graph.utils import nodegaph_to_short_json
 
-        ngdata = nodegaph_to_short_json(self.to_dict())
+        ngdata = nodegaph_to_short_json(self.to_dict(include_sockets=True))
         return ngdata
 
     def __repr__(self) -> str:

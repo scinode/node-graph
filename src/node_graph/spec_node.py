@@ -18,6 +18,7 @@ class _SpecBackedMixin:
 
         self._spec = spec
         self._executor = getattr(spec, "executor", None)
+        self._error_handlers.update(getattr(spec, "error_handlers", {}))
 
         # mirror identity from the spec
         self.identifier = spec.identifier

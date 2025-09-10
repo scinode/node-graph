@@ -759,15 +759,25 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
     @property
     def _value(self) -> Dict[str, Any]:
+        return self._collect_values()
+
+    def _collect_values(self, raw: bool = True) -> Dict[str, Any]:
         data = {}
         for name, item in self._sockets.items():
             if isinstance(item, NodeSocketNamespace):
-                value = item._value
+                value = item._collect_values(raw=raw)
                 if value:
                     data[name] = value
             else:
                 if item.value is not None:
-                    data[name] = item.value
+                    if raw:
+                        data[name] = (
+                            item.value.__wrapped__
+                            if isinstance(item.value, TaggedValue)
+                            else item.value
+                        )
+                    else:
+                        data[name] = item.value
         return data
 
     @_value.setter
@@ -775,40 +785,104 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         self._set_socket_value(value)
 
     def _set_socket_value(self, value: Dict[str, Any] | NodeSocket, **kwargs) -> None:
-        """Set the value of the socket.
-        In the kwargs, one can specify the pool, link_limit, metadata etc"""
+        """Set value(s) into this namespace.
+
+        Supports:
+        - linking another socket (BaseSocket)
+        - nested dicts
+        - dotted keys like "data.x" or "nested.data.x"
+
+        Creation rules:
+        - Missing immediate children can be created only if *this* namespace is dynamic.
+        - Intermediate dotted segments are created as namespaces (dynamic=True) when needed.
+        """
         if value is None:
             return
+
+        # Link another socket directly to this namespace
         if isinstance(value, BaseSocket):
             self._node.graph.add_link(value, self)
-        elif isinstance(value, dict):
-            for key, val in value.items():
-                if key not in self:
-                    if self._metadata.dynamic:
-                        if isinstance(val, dict) or isinstance(
-                            val, NodeSocketNamespace
-                        ):
-                            self._new(
-                                self._SocketPool["namespace"],
-                                key,
-                                metadata={"dynamic": True},
-                                **kwargs,
-                            )
-                        else:
-                            self._new(self._SocketPool["any"], key, **kwargs)
-                    else:
-                        raise ValueError(
-                            f"Socket: {key} does not exist in a non-dynamic namespace socket: {self._name}. "
-                            f"This namespace belongs to: {self._node.name}"
-                        )
-                if isinstance(self[key], NodeSocketNamespace):
-                    self[key]._set_socket_value(val, **kwargs)
-                else:
-                    self[key]._set_socket_value(val)
-        else:
+            return
+
+        if not isinstance(value, dict):
             raise ValueError(
                 f"Invalid value type for socket {self._name}: {value}, expected dict or Socket."
             )
+
+        for key, val in value.items():
+            # If the key is dotted, descend or create per segment
+            if "." in key:
+                head, tail = key.split(".", 1)
+
+                # Ensure the immediate child exists (create if allowed)
+                if head not in self._sockets:
+                    if not self._metadata.dynamic:
+                        raise ValueError(
+                            f"Socket: {head} does not exist in non-dynamic namespace '{self._name}'. "
+                            f"This namespace belongs to: {self._node.name}"
+                        )
+                    # We are going to descend (tail exists), so create a namespace
+                    self._new(
+                        self._SocketPool["namespace"],
+                        head,
+                        metadata={
+                            "dynamic": True,
+                            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+                        },
+                        **kwargs,
+                    )
+
+                child = self._sockets[head]
+                if not isinstance(child, NodeSocketNamespace):
+                    raise ValueError(
+                        f"Cannot set nested key '{key}' under non-namespace socket '{head}'."
+                    )
+
+                # Recurse into the child namespace with the remaining tail
+                child._set_socket_value({tail: val}, **kwargs)
+                continue  # next key
+
+            # Non-dotted key path (single-segment)
+            if key not in self._sockets:
+                if not self._metadata.dynamic:
+                    raise ValueError(
+                        f"Socket: {key} does not exist in a non-dynamic namespace socket: {self._name}. "
+                        f"This namespace belongs to: {self._node.name}"
+                    )
+
+                # Decide whether to create a namespace or a leaf based on the value type
+                if isinstance(val, (dict, NodeSocketNamespace)):
+                    # create child namespace (dynamic)
+                    self._new(
+                        self._SocketPool["namespace"],
+                        key,
+                        metadata={
+                            "dynamic": True,
+                            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+                        },
+                        **kwargs,
+                    )
+                else:
+                    # create a leaf socket that can accept "any"
+                    self._new(self._SocketPool["any"], key, **kwargs)
+
+            # Now we’re guaranteed the key exists; delegate appropriately
+            target = self._sockets[key]
+            if isinstance(target, NodeSocketNamespace):
+                # If incoming val is a dict, recurse. If it’s a socket, link to the namespace.
+                if isinstance(val, dict):
+                    target._set_socket_value(val, **kwargs)
+                elif isinstance(val, BaseSocket):
+                    self._node.graph.add_link(val, target)
+                else:
+                    # Treat setting a leaf value into a namespace as error for clarity
+                    raise ValueError(
+                        f"Cannot set a non-dict value on namespace '{target._full_name_with_node}'. "
+                        f"Got: {type(val).__name__}"
+                    )
+            else:
+                # Leaf socket: forward to its own setter (which handles linking or value assignment)
+                target._set_socket_value(val)
 
     @property
     def _all_links(self) -> List["NodeLink"]:
@@ -994,12 +1068,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 if len(keys) > 1:
                     return item[keys[1]]
                 return item
-            parent_name = (
-                self._parent._name if self._parent is not None else self._node.name
-            )
             raise AttributeError(
-                f""""{key}" is not in this namespace. Acceptable names are {self._get_keys()}."""
-                f"""This namespace belongs to {parent_name}."""
+                f""""{key}" is not in this namespace: {self._full_name_with_node}. Acceptable names are {self._get_keys()}."""
             )
 
     def __contains__(self, name: str) -> bool:
@@ -1014,8 +1084,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         keys = name.split(".", 1)
         if keys[0] in self._sockets:
             if len(keys) > 1:
-                return keys[1] in self._sockets[keys[0]]
+                child = self._sockets[keys[0]]
+                if isinstance(child, NodeSocketNamespace):
+                    return keys[1] in child
+                return False  # cannot have nested under a non-namespace
             return True
+        return False
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""

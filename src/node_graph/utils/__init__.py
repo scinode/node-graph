@@ -39,7 +39,7 @@ def nodegaph_to_short_json(
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
         inputs = []
-        for input in node["inputs"]["sockets"].values():
+        for input in node["input_sockets"]["sockets"].values():
             metadata = input.get("metadata", {}) or {}
             if metadata.get("required", False):
                 inputs.append(
@@ -88,15 +88,10 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata["nodes"] = {}
     for node in nodes:
         node.setdefault("metadata", {})
+        node["metadata"]["identifier"] = node.pop("identifier", None)
         node["properties"] = node.get("properties", {})
-        node["inputs"] = {
-            "name": "inputs",
-            "sockets": node.get("inputs", {}),
-        }
-        node["outputs"] = {
-            "name": "outputs",
-            "sockets": node.get("outputs", {}),
-        }
+        node["inputs"] = node.get("inputs", {})
+        node["outputs"] = node.get("outputs", {})
         ntdata["nodes"][node["name"]] = node
     return ntdata
 

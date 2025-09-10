@@ -74,7 +74,7 @@ class Node:
         self.parent = parent
         self._metadata = metadata or {}
         self._executor = executor
-        self.error_handlers = error_handlers or {}
+        self._error_handlers = error_handlers or {}
         self.properties = self._PropertyClass(self, pool=self.PropertyPool)
         self.inputs = self._socket_spec.SocketNamespace(
             "inputs", node=self, pool=self.SocketPool, graph=self.graph
@@ -171,43 +171,34 @@ class Node:
         """Reset this node and all its child nodes to "CREATED"."""
 
     def to_dict(
-        self, short: bool = False, should_serialize: bool = False
+        self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
         """Save all datas, include properties, input and output sockets."""
 
-        if short:
-            data = {
-                "name": self.name,
-                "identifier": self.identifier,
-                "node_type": self.node_type,
-                "uuid": self.uuid,
-            }
-        else:
-            metadata = self.get_metadata()
-            properties = self.export_properties()
-            input_sockets = self.inputs._to_dict()
-            output_sockets = self.outputs._to_dict()
-            executor = self.export_executor_to_dict()
-            data = {
-                "identifier": self.identifier,
-                "uuid": self.uuid,
-                "name": self.name,
-                "state": self.state,
-                "action": self.action,
-                "error": "",
-                "metadata": metadata,
-                "properties": properties,
-                "inputs": input_sockets,
-                "outputs": output_sockets,
-                "executor": executor,
-                "error_handlers": {
-                    name: eh.to_dict() for name, eh in self.error_handlers.items()
-                },
-                "position": self.position,
-                "description": self.description,
-                "log": self.log,
-                "hash": "",  # we can only calculate the hash during runtime when all the data is ready
-            }
+        metadata = self.get_metadata()
+        properties = self.export_properties()
+        data = {
+            "identifier": self.identifier,
+            "uuid": self.uuid,
+            "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
+            "name": self.name,
+            "state": self.state,
+            "action": self.action,
+            "error": "",
+            "metadata": metadata,
+            "properties": properties,
+            "inputs": self.inputs._value,
+            "error_handlers": {
+                name: eh.to_dict() for name, eh in self.error_handlers.items()
+            },
+            "position": self.position,
+            "description": self.description,
+            "log": self.log,
+            "hash": "",  # we can only calculate the hash during runtime when all the data is ready
+        }
+        if include_sockets:
+            data["input_sockets"] = self.inputs._to_dict()
+            data["output_sockets"] = self.outputs._to_dict()
         # to avoid some dict has the same address with others nodes
         # which happens when {} is used as default value
         # we copy the value only
@@ -230,12 +221,11 @@ class Node:
         metadata = self._metadata
         metadata.update(
             {
+                "identifier": self.identifier,
                 "node_type": self.node_type,
                 "catalog": self.catalog,
-                "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
             }
         )
-        # also save the parent class information
         metadata["node_class"] = {
             "callable_name": self.__class__.__name__,
             "module_path": self.__class__.__module__,
@@ -304,7 +294,6 @@ class Node:
         """udpate node from dict data. Set metadata and properties.
         This method can be overrided.
         """
-        from node_graph.utils import collect_values_inside_namespace
 
         for key in ["uuid", "state", "action", "description", "hash", "position"]:
             if data.get(key):
@@ -317,7 +306,7 @@ class Node:
             if data["metadata"].get(key):
                 setattr(self, key, data["metadata"].get(key))
         if "error_handlers" in data:
-            self.error_handlers = {
+            self._error_handlers = {
                 name: ErrorHandlerSpec.from_dict(eh)
                 for name, eh in data["error_handlers"].items()
             }
@@ -325,8 +314,7 @@ class Node:
         for name, prop in data.get("properties", {}).items():
             self.properties[name].value = prop["value"]
         # inputs
-        input_values = collect_values_inside_namespace(data["inputs"])
-        self.inputs._set_socket_value(input_values)
+        self.inputs._set_socket_value(data.get("inputs", {}))
 
     @classmethod
     def load(cls, uuid: str) -> None:
@@ -397,11 +385,26 @@ class Node:
         """Get the default executor."""
         return self._executor
 
+    @property
+    def error_handlers(self) -> Dict[str, ErrorHandlerSpec]:
+        return self.get_error_handlers()
+
+    def get_error_handlers(self) -> Dict[str, ErrorHandlerSpec]:
+        """Get the error handlers."""
+        return self._error_handlers
+
+    def add_error_handler(self, error_handler: ErrorHandlerSpec | dict) -> None:
+        """Add an error handler to this node."""
+        from node_graph.error_handler import normalize_error_handlers
+
+        error_handlers = normalize_error_handlers(error_handler)
+        self._error_handlers.update(error_handlers)
+
     def execute(self):
         """Execute the node."""
         from node_graph.node_spec import BaseHandle
 
-        executor = self.get_executor().executor
+        executor = self.get_executor().callable
         # the imported executor could be a wrapped function
         if isinstance(executor, BaseHandle) and hasattr(executor, "_func"):
             executor = getattr(executor, "_func")
@@ -446,24 +449,15 @@ class Node:
         data = deep_copy_only_dicts(data)
         for key, value in data.items():
             # if the value is a node, link the node's top-level output to the input
+            if value is None:
+                continue
             if isinstance(value, Node):
                 self.graph.add_link(value.outputs["_outputs"], self.inputs[key])
                 continue
             if key in self.properties:
                 self.properties[key].value = value
-            elif key in self.inputs:
-                self.inputs[key]._set_socket_value(value)
-            elif self.inputs._metadata.dynamic:
-                # if the socket is dynamic, we can add the input dynamically
-                inp = self.add_input(self.SocketPool.any, key)
-                inp._set_socket_value(value)
             else:
-                raise Exception(
-                    "No property named {}. Accept name are {}".format(
-                        key,
-                        list(self.get_property_names() + list(self.get_input_names())),
-                    )
-                )
+                self.inputs._set_socket_value({key: value})
 
     def get(self, key: str) -> Any:
         """Get the value of property by key.
@@ -480,12 +474,12 @@ class Node:
         """Modify and save a node to database."""
 
     def to_widget_value(self):
-        tdata = self.to_dict()
+        tdata = self.to_dict(include_sockets=True)
 
-        for key in ("properties", "executor", "node_class", "process"):
+        for key in ("properties", "executor", "node_class", "process", "input_values"):
             tdata.pop(key, None)
         inputs = []
-        for input in tdata["inputs"]["sockets"].values():
+        for input in tdata["input_sockets"]["sockets"].values():
             input.pop("property", None)
             inputs.append(input)
 
