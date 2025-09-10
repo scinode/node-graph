@@ -102,6 +102,7 @@ def test_nodespec_roundtrip_preserves_error_handlers():
                 "executor": sample_handler,
                 "exit_codes": [DummyExitCodes.ERROR_A],
                 "max_retries": 5,
+                "kwargs": {"increment": 1},
             },
             "handler_b": {
                 "executor": NodeExecutor.from_callable(another_handler).to_dict(),
@@ -133,6 +134,8 @@ def test_nodespec_roundtrip_preserves_error_handlers():
     )
     assert spec2.error_handlers["handler_a"].exit_codes == [DummyExitCodes.ERROR_A]
     assert spec2.error_handlers["handler_b"].exit_codes == [DummyExitCodes.ERROR_B]
+    assert spec2.error_handlers["handler_a"].max_retries == 5
+    assert spec2.error_handlers["handler_a"].kwargs == {"increment": 1}
     # executor payloads remain round-trippable
     for eh in spec2.error_handlers.values():
         _assert_executor_roundtrips(eh.executor)

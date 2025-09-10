@@ -61,11 +61,7 @@ def normalize_error_handlers(
     out = {}
     for name, item in value.items():
         if isinstance(item, ErrorHandlerSpec):
-            out[name] = ErrorHandlerSpec(
-                executor=item.executor,
-                exit_codes=[int(x) for x in item.exit_codes],
-                max_retries=int(item.max_retries),
-            )
+            out[name] = item
         else:
             # dict format:
             # {"executor": <callable|NodeExecutor|dict>, "exit_codes": [int,...], "max_retries": int}
@@ -73,6 +69,10 @@ def normalize_error_handlers(
             exit_codes = [int(x) for x in item.get("exit_codes", [])]
             max_retries = int(item.get("max_retries", 1))
             out[name] = ErrorHandlerSpec(
-                executor=handler_exec, exit_codes=exit_codes, max_retries=max_retries
+                executor=handler_exec,
+                exit_codes=exit_codes,
+                max_retries=max_retries,
+                retry=item.get("retry", 0),
+                kwargs=item.get("kwargs", {}),
             )
     return out
