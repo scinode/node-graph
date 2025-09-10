@@ -123,7 +123,7 @@ def test_load_graph():
     assert ng1.nodes.test1.inputs._value == ng.nodes.test1.inputs._value
 
 
-def test_build_graph_inputs_outputs(ng):
+def test_build_inputs_outputs(ng):
     """Test build graph inputs and outputs."""
     ng = NodeGraph(
         name="test_graph_inputs_outputs",

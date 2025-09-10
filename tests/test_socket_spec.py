@@ -205,7 +205,7 @@ def test_expose_node_spec():
         tc = test_calc(x)
         return {"out1": am, "out2": tc.square}
 
-    ng = test_graph.build_graph(x=1, data={"y": 2})
+    ng = test_graph.build(x=1, data={"y": 2})
     assert "sum" in ng.outputs.out1
     assert "out2" in ng.outputs
     assert isinstance(ng.outputs.out1, NodeSocketNamespace)

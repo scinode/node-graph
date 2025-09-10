@@ -19,8 +19,8 @@ def two_outputs(x, y) -> namespace(x=Any, y=Any):
     return {"x": x, "y": y}
 
 
-def test_build_graph(decorated_myadd_group):
-    ng = decorated_myadd_group.build_graph(x=1, y=2)
+def test_build(decorated_myadd_group):
+    ng = decorated_myadd_group.build(x=1, y=2)
     assert isinstance(ng, NodeGraph)
     assert len(ng.nodes) == 6
     assert len(ng.inputs) == 2
@@ -41,7 +41,7 @@ def test_none_outputs():
         add(x, y)
         multiply(x, y)
 
-    graph = add_multiply.build_graph(x=2, y=3)
+    graph = add_multiply.build(x=2, y=3)
     assert len(graph.outputs) == 0
 
     @node.graph(outputs=namespace(sum=Any, product=Any))
@@ -53,7 +53,7 @@ def test_none_outputs():
         ValueError,
         match="The function returned None, but the Graph node declares outputs. ",
     ):
-        add_multiply.build_graph(x=2, y=3)
+        add_multiply.build(x=2, y=3)
 
 
 def test_invalid_outputs():
@@ -64,7 +64,7 @@ def test_invalid_outputs():
         return x + y
 
     with pytest.raises(TypeError, match="Unsupported output type"):
-        add_multiply.build_graph(x=2, y=3)
+        add_multiply.build(x=2, y=3)
 
     # dict with invalid type
     @node.graph(outputs=namespace(sum=Any, product=Any))
@@ -72,7 +72,7 @@ def test_invalid_outputs():
         return {"sum": add(x, y).result, "product": x * y}
 
     with pytest.raises(TypeError, match="Invalid output at"):
-        add_multiply.build_graph(x=2, y=3)
+        add_multiply.build(x=2, y=3)
 
     # Tuple with invalid type
     @node.graph(outputs=namespace(sum=Any, product=Any))
@@ -80,7 +80,7 @@ def test_invalid_outputs():
         return add(x, y).result, x * y
 
     with pytest.raises(TypeError, match="Invalid output at"):
-        add_multiply.build_graph(x=2, y=3)
+        add_multiply.build(x=2, y=3)
 
 
 def test_taggged_value_outputs():
@@ -88,21 +88,21 @@ def test_taggged_value_outputs():
     def add_multiply(x, y):
         return x
 
-    graph = add_multiply.build_graph(x=2, y=3)
+    graph = add_multiply.build(x=2, y=3)
     assert len(graph.links) == 1
 
     @node.graph(outputs=namespace(x=Any, y=Any))
     def add_multiply(x, y):
         return x, y
 
-    graph = add_multiply.build_graph(x=2, y=3)
+    graph = add_multiply.build(x=2, y=3)
     assert len(graph.links) == 2
 
     @node.graph(outputs=namespace(x=Any, y=Any))
     def add_multiply(x, y):
         return {"x": x, "y": y}
 
-    graph = add_multiply.build_graph(x=2, y=3)
+    graph = add_multiply.build(x=2, y=3)
     assert len(graph.links) == 2
 
 
@@ -111,7 +111,7 @@ def test_namespace_outputs():
     def add_multiply(x, y) -> namespace(sum=Any, product=Any):
         return {"sum": add(x, y).result, "product": multiply(x, y).result}
 
-    graph = add_multiply.build_graph(x=2, y=3)
+    graph = add_multiply.build(x=2, y=3)
     assert "sum" in graph.outputs
     assert "product" in graph.outputs
 
@@ -119,7 +119,7 @@ def test_namespace_outputs():
     def add_multiply(x, y) -> namespace(sum=Any, product=Any):
         return add(x, y).result, multiply(x, y).result
 
-    graph = add_multiply.build_graph(x=2, y=3)
+    graph = add_multiply.build(x=2, y=3)
     assert "sum" in graph.outputs
     assert "product" in graph.outputs
 
@@ -129,7 +129,7 @@ def test_return_top_level_outputs():
     def test_graph(x, y) -> two_outputs.outputs:
         return two_outputs(x, y)
 
-    graph = test_graph.build_graph(x=2, y=3)
+    graph = test_graph.build(x=2, y=3)
     assert "x" in graph.outputs
     assert "y" in graph.outputs
 
@@ -139,7 +139,7 @@ def test_dynamic_outputs():
     def test_graph(x, y) -> dynamic(Any):
         return two_outputs(x, y)
 
-    graph = test_graph.build_graph(x=2, y=3)
+    graph = test_graph.build(x=2, y=3)
     assert "x" in graph.outputs
     assert "y" in graph.outputs
 
@@ -147,5 +147,8 @@ def test_dynamic_outputs():
     def test_graph(x, y):
         return two_outputs(x, y)
 
-    graph = test_graph.build_graph(x=2, y=3)
-    assert "x" not in graph.outputs
+    with pytest.raises(
+        ValueError,
+        match="Output socket name 'x' not declared in Graph node outputs.",
+    ):
+        graph = test_graph.build(x=2, y=3)

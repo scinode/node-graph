@@ -186,7 +186,7 @@ class BaseHandle:
 
         return node.outputs
 
-    def build_graph(self, /, *args, **kwargs):
+    def build(self, /, *args, **kwargs):
         from node_graph.utils.graph import materialize_graph
 
         if self._spec.metadata.get("node_type", "").upper() != "GRAPH":
