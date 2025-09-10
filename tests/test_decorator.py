@@ -152,6 +152,6 @@ def test_use_socket_view():
     def test_graph(a, b):
         return test(a, b)
 
-    graph = test_graph.build_graph(a=1, b=2)
+    graph = test_graph.build(a=1, b=2)
     assert "sum" in graph.outputs
     assert "product" in graph.outputs

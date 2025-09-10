@@ -44,14 +44,32 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
         graph.outputs[0] = outputs
 
     elif isinstance(outputs, NodeSocketNamespace):
+        # if this is a dynamic namespace, we should link the top-level outputs
+        if outputs._metadata.dynamic:
+            graph.outputs = outputs
+
         for socket in outputs:
-            # skip some built-in outputs, e.g., the exit_code
             if (
                 socket._name not in graph.outputs
                 and not graph.outputs._metadata.dynamic
             ):
-                # Not declared and not dynamic: silently skip (or log if you prefer)
-                continue
+                if socket._name.startswith("_"):
+                    # Allow internal names to pass through even if not declared.
+                    # This is useful for internal sockets that don't need
+                    # to be exposed as a Graph output.
+                    continue
+                raise ValueError(
+                    "Output socket name "
+                    f"'{socket._name}' not declared in Graph node outputs.\n\n"
+                    "How to fix:\n"
+                    "1) Make graph outputs dynamic if you want to return arbitrary names:\n"
+                    "   • `outputs = dynamic(Any)`\n"
+                    "     (then returning arbitrary sockets is allowed)\n"
+                    "2) Declare this output explicitly on the Graph:\n"
+                    f"   • e.g. `outputs = namespace({socket._name}=Any, <some_other_name>=Any)`\n"
+                    "3) Expose task outputs instead of inventing new names:\n"
+                    f"   • e.g. `outputs = namespace({socket._name}=some_task.outputs, <some_other_name>=some_task.outputs)`\n"
+                )
             graph.outputs[socket._name] = socket
 
     elif isinstance(outputs, dict):

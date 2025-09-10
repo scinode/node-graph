@@ -2,7 +2,7 @@ from node_graph import NodeGraph
 
 
 def test_subgraph(decorated_myadd_group):
-    sub_ng = decorated_myadd_group.build_graph(x=1, y=2)
+    sub_ng = decorated_myadd_group.build(x=1, y=2)
     ng = NodeGraph(name="test_outputs")
     node1 = ng.add_node(sub_ng, "sub_ng", y=9)
     assert node1.name == "sub_ng"
@@ -11,7 +11,7 @@ def test_subgraph(decorated_myadd_group):
 
 
 def test_subgraph_link(decorated_myadd_group, decorated_myadd):
-    sub_ng = decorated_myadd_group.build_graph(x=1, y=2)
+    sub_ng = decorated_myadd_group.build(x=1, y=2)
     ng = NodeGraph(name="test_outputs")
     add1 = ng.add_node(decorated_myadd, "add1", x=2, y=3)
     node1 = ng.add_node(sub_ng, "sub_ng", x=add1.outputs.result, y=9)

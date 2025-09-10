@@ -40,7 +40,7 @@ def add_multiply(x, y, z):
 # Build the node group
 #
 
-ng = add_multiply.build_graph(1, 2, 3)
+ng = add_multiply.build(1, 2, 3)
 ng.to_html()
 
 
