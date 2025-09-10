@@ -196,6 +196,8 @@ class BaseHandle:
         func = self._spec.executor.callable
         if isinstance(func, BaseHandle) and hasattr(func, "_func"):
             func = func._func
+        if hasattr(func, "__globals__"):
+            func.__globals__[func.__name__] = self
 
         return materialize_graph(
             func,
