@@ -78,7 +78,7 @@ def _raise_illegal(sock, what: str, tips: list[str]):
 
     common = [
         "General guidance:",
-        "  • Wrap logic in a nested @task.graph.",
+        "  • Wrap logic in a nested @node.graph.",
         "  • Or use the WorkGraph If zone for branching on predicates.",
         "  • Or for loops, use the While zone or For zone.",
     ]
@@ -101,14 +101,14 @@ def _tip_cast(kind):  # numeric/bytes/path-like casts
 def _tip_iter():  # iteration/len/container-ish
     return [
         "You tried to iterate or take len()/index a future.",
-        "Use @task.graph to build logic that needs to iterate over values.",
+        "Use @node.graph to build logic that needs to iterate over values.",
     ]
 
 
 def _tip_bool():
     return [
         "You used a future in a boolean context (if/while/assert/and/or).",
-        "Wrap logic in a nested @task.graph.",
+        "Wrap logic in a nested @node.graph.",
     ]
 
 
@@ -123,14 +123,14 @@ def _tip_numpy():
 def _tip_ctxmgr():
     return [
         "You tried to use a future as a context manager.",
-        "Wrap side effects in a graph task or zone instead.",
+        "Wrap side effects in a graph node or zone instead.",
     ]
 
 
 def _tip_indexing():
     return [
         "You tried to subscript a future (obj[idx]).",
-        "Index inside the graph (task/zone) where the value is concrete.",
+        "Index inside the graph (node/zone) where the value is concrete.",
     ]
 
 
@@ -342,7 +342,7 @@ class OperatorSocketMixin:
         _raise_illegal(
             self,
             "await on a future (__await__)",
-            ["Awaiting is not supported; use @task.graph to build logic instead."],
+            ["Awaiting is not supported; use @node.graph to build logic instead."],
         )
 
     def __aiter__(self):
@@ -350,7 +350,7 @@ class OperatorSocketMixin:
             self,
             "async iteration (__aiter__)",
             [
-                "Async iteration is not supported; use @task.graph to build logic instead."
+                "Async iteration is not supported; use @node.graph to build logic instead."
             ],
         )
 
@@ -359,7 +359,7 @@ class OperatorSocketMixin:
             self,
             "async next (__anext__)",
             [
-                "Async iteration is not supported; use @task.graph to build logic instead."
+                "Async iteration is not supported; use @node.graph to build logic instead."
             ],
         )
 

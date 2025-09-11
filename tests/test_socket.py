@@ -37,8 +37,8 @@ def test_predicate_socket_creation_and_bool_forbidden(future_socket):
 
     msg = str(e.value)
     assert "Illegal operation on a future value (Socket)" in msg
-    # Guidance order: @task.graph first, then If/While zones
-    assert "• Wrap logic in a nested @task.graph." in msg
+    # Guidance order: @node.graph first, then If/While zones
+    assert "• Wrap logic in a nested @node.graph." in msg
 
 
 @pytest.mark.parametrize(
