@@ -80,7 +80,7 @@ def _raise_illegal(sock, what: str, tips: list[str]):
         "General guidance:",
         "  • Wrap logic in a nested @node.graph.",
         "  • Or use the WorkGraph If zone for branching on predicates.",
-        "  • Or for loops, use the While zone or For zone.",
+        "  • Or for loops, use the While zone or Map zone.",
     ]
 
     msg = (
