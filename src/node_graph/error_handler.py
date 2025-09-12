@@ -1,14 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Dict, List, Union
-from node_graph.executor import NodeExecutor
+from typing import Any, Dict, List, Union, Callable
+from node_graph.executor import RuntimeExecutor, SafeExecutor, BaseExecutor
 
 
 @dataclass()
 class ErrorHandlerSpec:
     """Container for a handler executor and its integer exit codes."""
 
-    executor: NodeExecutor
+    executor: BaseExecutor
     exit_codes: List[int]
     max_retries: int = 1
     retry: int = 0
@@ -25,7 +25,7 @@ class ErrorHandlerSpec:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ErrorHandlerSpec":
-        executor = NodeExecutor(**d["executor"])
+        executor = SafeExecutor(**d["executor"])
         exit_codes = [int(x) for x in d.get("exit_codes", [])]
         return cls(
             executor=executor,
@@ -36,20 +36,20 @@ class ErrorHandlerSpec:
         )
 
 
-def _as_executor(obj: Union[NodeExecutor, Dict[str, Any], Any]) -> NodeExecutor:
-    """Normalize a handler-like object to NodeExecutor.
+def _as_executor(obj: Union[BaseExecutor, Dict[str, Any], Callable]) -> BaseExecutor:
+    """Normalize a handler-like object to Executor.
 
     Accepts:
-      - NodeExecutor
-      - dict produced by NodeExecutor.to_dict()
-      - callable (wrapped via NodeExecutor.from_callable)
+      - BaseExecutor
+      - dict produced by BaseExecutor.to_dict()
+      - callable (wrapped via RuntimeExecutor.from_callable)
     """
-    if isinstance(obj, NodeExecutor):
+    if isinstance(obj, BaseExecutor):
         return obj
     if isinstance(obj, dict):
-        return NodeExecutor(**obj)
+        return SafeExecutor(**obj)
     # fall back to callable
-    return NodeExecutor.from_callable(obj)
+    return RuntimeExecutor.from_callable(obj)
 
 
 def normalize_error_handlers(
@@ -64,7 +64,7 @@ def normalize_error_handlers(
             out[name] = item
         else:
             # dict format:
-            # {"executor": <callable|NodeExecutor|dict>, "exit_codes": [int,...], "max_retries": int}
+            # {"executor": <callable|BaseExecutor|dict>, "exit_codes": [int,...], "max_retries": int}
             handler_exec = _as_executor(item["executor"])
             exit_codes = [int(x) for x in item.get("exit_codes", [])]
             max_retries = int(item.get("max_retries", 1))

@@ -1,13 +1,13 @@
 import copy
 from node_graph.socket_spec import namespace as ns
 from node_graph.node_spec import NodeSpec, hash_spec
-from node_graph.executor import NodeExecutor
+from node_graph.executor import RuntimeExecutor
 
 
 def test_nodespec_serialize_roundtrip():
     inp = ns(x=int, y=(int, 2))
     out = ns(sum=int)
-    ex = NodeExecutor(mode="module", module_path="math", callable_name="hypot")
+    ex = RuntimeExecutor(mode="module", module_path="math", callable_name="hypot")
     spec = NodeSpec(
         identifier="pkg.add",
         catalog="Math",

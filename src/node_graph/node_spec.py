@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, Type
 import hashlib
 import json
 from node_graph.socket_spec import SocketSpec, SocketView
-from node_graph.executor import NodeExecutor
+from node_graph.executor import BaseExecutor, SafeExecutor
 from node_graph.node import Node
 from .error_handler import ErrorHandlerSpec
 
@@ -16,7 +16,7 @@ class NodeSpec:
     catalog: str = "Others"
     inputs: Optional[SocketSpec] = None
     outputs: Optional[SocketSpec] = None
-    executor: Optional[NodeExecutor] = None
+    executor: Optional[BaseExecutor] = None
     error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     base_class_path: Optional[str] = None
@@ -54,7 +54,7 @@ class NodeSpec:
     def from_dict(cls, d: Dict[str, Any]) -> "NodeSpec":
         inputs = SocketSpec.from_dict(d["inputs"]) if "inputs" in d else None
         outputs = SocketSpec.from_dict(d["outputs"]) if "outputs" in d else None
-        executor = NodeExecutor(**d["executor"]) if "executor" in d else None
+        executor = SafeExecutor(**d["executor"]) if "executor" in d else None
         error_handlers = {
             name: ErrorHandlerSpec.from_dict(eh)
             for name, eh in d.get("error_handlers", {}).items()

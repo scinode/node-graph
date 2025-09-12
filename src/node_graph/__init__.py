@@ -1,7 +1,7 @@
 from .node_graph import NodeGraph
 from .node import Node
 from .decorator import node
-from .executor import NodeExecutor
+from .executor import SafeExecutor, RuntimeExecutor
 from .nodes import NodePool
 from .collection import group
 from .socket_spec import namespace, dynamic
@@ -13,7 +13,8 @@ __all__ = [
     "NodeGraph",
     "Node",
     "node",
-    "NodeExecutor",
+    "SafeExecutor",
+    "RuntimeExecutor",
     "NodePool",
     "group",
     "namespace",
