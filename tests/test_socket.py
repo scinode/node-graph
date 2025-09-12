@@ -6,6 +6,120 @@ from node_graph.node import Node
 from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
 from node_graph.nodes import NodePool
 import operator as op
+from node_graph.errors import GraphDeferredIllegalOperationError
+
+
+@pytest.fixture
+def future_socket():
+    """A future (result) socket from a node; value only known at runtime."""
+    ng = NodeGraph(name="illegal_ops")
+    add = ng.add_node(NodePool.node_graph.test_add, "add")
+    # We only need the future socket object; no need to set inputs
+    return add.outputs.result
+
+
+def _setitem(s):
+    s[0] = 1
+
+
+def _delitem(s):
+    del s[0]
+
+
+def test_predicate_socket_creation_and_bool_forbidden(future_socket):
+    """Comparisons should produce predicate sockets; using them in boolean context must raise."""
+    cond = future_socket > 5  # should yield another future/predicate socket
+    assert isinstance(cond, BaseSocket)
+
+    with pytest.raises(GraphDeferredIllegalOperationError) as e:
+        if cond:  # triggers __bool__
+            pass
+
+    msg = str(e.value)
+    assert "Illegal operation on a future value (Socket)" in msg
+    # Guidance order: @node.graph first, then If/While zones
+    assert "• Wrap logic in a nested @node.graph." in msg
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda s: int(s),
+        lambda s: float(s),
+        lambda s: complex(s),
+        lambda s: round(s),
+        lambda s: hash(s),
+    ],
+)
+def test_numeric_casts_and_hash_forbidden(future_socket, op):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        op(future_socket)
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda s: len(s),
+        lambda s: iter(s),
+        lambda s: reversed(s),
+        lambda s: (1 in s),  # membership
+        lambda s: s[0],  # __getitem__
+        _setitem,  # __setitem__
+        _delitem,  # __delitem__
+    ],
+)
+def test_container_protocol_forbidden(future_socket, op):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        op(future_socket)
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda s: (s & s),
+        lambda s: (s | s),
+        lambda s: (s ^ s),
+        lambda s: (~s),
+        lambda s: (s @ s),  # matrix multiply
+    ],
+)
+def test_bitwise_and_matmul_forbidden(future_socket, op):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        op(future_socket)
+
+
+def test_function_like_ctxmgr_async_forbidden(future_socket):
+
+    # context manager
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        with future_socket:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_await_forbidden(future_socket):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        await future_socket
+
+
+def test_numpy_interop_forbidden(future_socket):
+    # array coercion
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        np.array(future_socket)
+
+    # ufunc
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        np.sin(future_socket)
+
+    # high-level numpy functions should also be blocked via __array_function__ if implemented
+    # (keep this one lenient: some NumPy versions call ufuncs under the hood)
+    try:
+        with pytest.raises(GraphDeferredIllegalOperationError):
+            np.stack([future_socket, future_socket])
+    except TypeError:
+        # If your implementation routes this differently, TypeError is acceptable;
+        # the important part is that it does NOT silently coerce.
+        pass
 
 
 def test_check_identifier():

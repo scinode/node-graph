@@ -67,6 +67,73 @@ def op_ne(x, y):
     return x != y
 
 
+def _raise_illegal(sock, what: str, tips: list[str]):
+    from .errors import GraphDeferredIllegalOperationError
+
+    node = getattr(sock, "_node", None)
+    node_name = getattr(node, "name", None) or "<unknown-node>"
+    socket_name = (
+        getattr(sock, "_NAME", None) or getattr(sock, "name", None) or "<socket>"
+    )
+
+    common = [
+        "General guidance:",
+        "  • Wrap logic in a nested @node.graph.",
+        "  • Or use the WorkGraph If zone for branching on predicates.",
+        "  • Or for loops, use the While zone or Map zone.",
+    ]
+
+    msg = (
+        f"Illegal operation on a future value (Socket): {what}\n"
+        f"Socket: {socket_name} of node '{node_name}'"
+    )
+    msg += "\n\nFix:\n" + "\n".join(tips + [""] + common)
+    raise GraphDeferredIllegalOperationError(msg)
+
+
+def _tip_cast(kind):  # numeric/bytes/path-like casts
+    return [
+        f"Avoid {kind} on futures. Compute the value inside the graph, then cast afterwards.",
+        "If you need a cast during execution, use a dedicated cast node.",
+    ]
+
+
+def _tip_iter():  # iteration/len/container-ish
+    return [
+        "You tried to iterate or take len()/index a future.",
+        "Use @node.graph to build logic that needs to iterate over values.",
+    ]
+
+
+def _tip_bool():
+    return [
+        "You used a future in a boolean context (if/while/assert/and/or).",
+        "Wrap logic in a nested @node.graph.",
+    ]
+
+
+def _tip_numpy():
+    return [
+        "NumPy tried to coerce or operate on a future.",
+        "Use built-in operator sockets (+, -, *, <, …) to build predicates/expressions,",
+        "or use a dedicated numpy/ufunc node.",
+    ]
+
+
+def _tip_ctxmgr():
+    return [
+        "You tried to use a future as a context manager.",
+        "Wrap side effects in a graph node or zone instead.",
+    ]
+
+
+def _tip_indexing():
+    return [
+        "You tried to subscript a future (obj[idx]).",
+        "Index inside the graph (node/zone) where the value is concrete.",
+    ]
+
+
 class OperatorSocketMixin:
     @property
     def _decorator(self):
@@ -180,6 +247,134 @@ class OperatorSocketMixin:
         else:
             self._waiting_on.add(other)
         return other
+
+    # Truthiness / boolean contexts
+    def __bool__(self):
+        _raise_illegal(self, "boolean evaluation", _tip_bool())
+
+    # Numeric casts & indices
+    def __int__(self):
+        _raise_illegal(self, "int() cast", _tip_cast("int()"))
+
+    def __float__(self):
+        _raise_illegal(self, "float() cast", _tip_cast("float()"))
+
+    def __complex__(self):
+        _raise_illegal(self, "complex() cast", _tip_cast("complex()"))
+
+    def __index__(self):
+        _raise_illegal(self, "use as an index (__index__)", _tip_cast("indexing"))
+
+    def __round__(self, *a, **k):
+        _raise_illegal(self, "round()", _tip_cast("round()"))
+
+    def __trunc__(self):
+        _raise_illegal(self, "trunc()", _tip_cast("trunc()"))
+
+    def __floor__(self):
+        _raise_illegal(self, "math.floor()", _tip_cast("floor()"))
+
+    def __ceil__(self):
+        _raise_illegal(self, "math.ceil()", _tip_cast("ceil()"))
+
+    # Sequence / mapping / container protocols
+    def __len__(self):
+        _raise_illegal(self, "len()", _tip_iter())
+
+    def __iter__(self):
+        _raise_illegal(self, "iteration", _tip_iter())
+
+    def __reversed__(self):
+        _raise_illegal(self, "reversed()", _tip_iter())
+
+    def __contains__(self, _):
+        _raise_illegal(self, "membership test (x in socket)", _tip_iter())
+
+    def __getitem__(self, _):
+        _raise_illegal(self, "subscript access (socket[idx])", _tip_indexing())
+
+    def __setitem__(self, *_):
+        _raise_illegal(self, "item assignment (socket[idx] = ...)", _tip_indexing())
+
+    def __delitem__(self, *_):
+        _raise_illegal(self, "item deletion (del socket[idx])", _tip_indexing())
+
+    # Bitwise / logical operators that people misuse for predicates
+    def __and__(self, _):
+        _raise_illegal(self, "bitwise and (&) on futures", _tip_bool())
+
+    def __or__(self, _):
+        _raise_illegal(self, "bitwise or (|) on futures", _tip_bool())
+
+    def __xor__(self, _):
+        _raise_illegal(self, "bitwise xor (^) on futures", _tip_bool())
+
+    def __invert__(self):
+        _raise_illegal(self, "bitwise not (~) on futures", _tip_bool())
+
+    def __matmul__(self, _):
+        _raise_illegal(self, "matrix multiply (@)", _tip_numpy())
+
+    # Hashing / dict keys / set members
+    def __hash__(self):
+        _raise_illegal(
+            self,
+            "hashing (use as dict/set key)",
+            ["Futures are not stable keys. Resolve to a concrete value first."],
+        )
+
+    # Function-like / context-manager / async
+    def __enter__(self):
+        _raise_illegal(
+            self,
+            "context-manager enter (__enter__)",
+            ["Use Socket as a context manager is not supported."],
+        )
+
+    def __exit__(self, *a):
+        _raise_illegal(
+            self,
+            "context-manager exit (__exit__)",
+            ["Use Socket as a context manager is not supported."],
+        )
+
+    def __await__(self):
+        _raise_illegal(
+            self,
+            "await on a future (__await__)",
+            ["Awaiting is not supported; use @node.graph to build logic instead."],
+        )
+
+    def __aiter__(self):
+        _raise_illegal(
+            self,
+            "async iteration (__aiter__)",
+            [
+                "Async iteration is not supported; use @node.graph to build logic instead."
+            ],
+        )
+
+    def __anext__(self):
+        _raise_illegal(
+            self,
+            "async next (__anext__)",
+            [
+                "Async iteration is not supported; use @node.graph to build logic instead."
+            ],
+        )
+
+    # NumPy interoperability guards
+    # Prevent silent coercion to ndarray
+    def __array__(self, *a, **k):
+        _raise_illegal(self, "NumPy array coercion (__array__)", _tip_numpy())
+
+    # Intercept ufuncs like np.add, np.sin, etc.
+    def __array_ufunc__(self, *a, **k):
+        _raise_illegal(self, "NumPy ufunc on future (__array_ufunc__)", _tip_numpy())
+
+    # Intercept high-level NumPy functions
+    def __array_function__(self, *a, **k):
+        _raise_illegal(self, "NumPy high-level op (__array_function__)", _tip_numpy())
 
 
 class WaitingOn:
