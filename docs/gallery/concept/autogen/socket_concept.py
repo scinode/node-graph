@@ -79,7 +79,7 @@ print("Custom node with Any socket and property:", node.inputs.symbols.value)
 # There are two built-in serialization methods:
 #
 # - ``None``: no serialization, used for base types (Int, Float, Bool, String).
-# - ``Pickle``: used for :class:`SocketAny`.
+# - ``Json``: JSON serialization, used for complex types (e.g. lists, dicts).
 #
 # Users can define a new socket type with a custom serialization method.
 

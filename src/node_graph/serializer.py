@@ -1,6 +1,5 @@
 from typing import Any, Dict
 import json
-import cloudpickle as pickle
 
 
 class SerializeNone:
@@ -35,22 +34,6 @@ class SerializeJson:
         return deserialize
 
 
-class SerializePickle:
-    def get_serialize(self) -> Dict[str, str]:
-        serialize: Dict[str, str] = {
-            "module_path": "node_graph.serializer",
-            "callable_name": "serialize_pickle",
-        }
-        return serialize
-
-    def get_deserialize(self) -> Dict[str, str]:
-        deserialize: Dict[str, str] = {
-            "module_path": "node_graph.serializer",
-            "callable_name": "deserialize_pickle",
-        }
-        return deserialize
-
-
 def serialize_none(data: Any) -> Any:
     return data
 
@@ -68,16 +51,4 @@ def serialize_json(data: Any) -> str:
 def deserialize_json(data: str) -> Any:
 
     data = json.loads(data)
-    return data
-
-
-def serialize_pickle(data: Any) -> bytes:
-
-    data = pickle.dumps(data)
-    return data
-
-
-def deserialize_pickle(data: bytes) -> Any:
-
-    data = pickle.loads(data)
     return data

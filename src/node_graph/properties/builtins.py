@@ -1,9 +1,9 @@
 from node_graph.property import NodeProperty
-from node_graph.serializer import SerializeJson, SerializePickle
+from node_graph.serializer import SerializeJson
 from typing import Any
 
 
-class PropertyAny(NodeProperty, SerializePickle):
+class PropertyAny(NodeProperty, SerializeJson):
     """A new class for Any type."""
 
     identifier: str = "node_graph.any"
@@ -104,7 +104,7 @@ class PropertyEnum(NodeProperty, SerializeJson):
 
 # ====================================
 # Vector
-class PropertyVector(NodeProperty, SerializePickle):
+class PropertyVector(NodeProperty, SerializeJson):
     """node_graph Vector property"""
 
     identifier: str = "node_graph.vector"
@@ -188,7 +188,7 @@ class PropertyBoolVector(PropertyVector):
 
 # =======================================
 # matrix
-class MatrixProperty(NodeProperty, SerializePickle):
+class MatrixProperty(NodeProperty, SerializeJson):
     """node_graph Matrix property"""
 
     identifier: str = "node_graph.matrix"
@@ -262,7 +262,7 @@ def validate_base_type(value):
             )
 
 
-class PropertyBaseDict(NodeProperty, SerializePickle):
+class PropertyBaseDict(NodeProperty, SerializeJson):
     """node_graph BaseDict property.
     All the elements should be a base type (int, float, string, bool).
     """
@@ -284,7 +284,7 @@ class PropertyBaseDict(NodeProperty, SerializePickle):
             raise Exception("{} is not a dict.".format(value))
 
 
-class PropertyBaseList(NodeProperty, SerializePickle):
+class PropertyBaseList(NodeProperty, SerializeJson):
     """node_graph BaseList property.
     All the elements should be a base type (int, float, string, bool).
     """
