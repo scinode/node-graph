@@ -9,7 +9,7 @@ from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
 )
-from .executor import NodeExecutor
+from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
 from node_graph.socket_spec import BaseSocketSpecAPI
 from .config import BuiltinPolicy
@@ -55,7 +55,7 @@ class Node:
         graph: Optional["NodeGraph"] = None,
         parent: Optional[Node] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        executor: Optional[NodeExecutor] = None,
+        executor: Optional[BaseExecutor] = None,
         error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
     ) -> None:
         """Initialize the Node.
@@ -278,7 +278,7 @@ class Node:
         if executor is None:
             return executor
         if isinstance(executor, dict):
-            executor = NodeExecutor(**executor)
+            executor = SafeExecutor(**executor)
         return executor.to_dict()
 
     @classmethod
@@ -381,7 +381,7 @@ class Node:
         node.outputs = self.outputs._copy(node=node)
         return node
 
-    def get_executor(self) -> Optional[NodeExecutor]:
+    def get_executor(self) -> Optional[BaseExecutor]:
         """Get the default executor."""
         return self._executor
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, Optional, Callable, List, Dict
 import inspect
-from .executor import NodeExecutor
+from .executor import RuntimeExecutor
 from .error_handler import ErrorHandlerSpec, normalize_error_handlers
 from .node import Node
 from .node_spec import NodeSpec, hash_spec, NodeHandle, BaseHandle
@@ -46,8 +46,6 @@ def build_node_from_callable(
         and issubclass(executor, Node)
     ):
         return executor
-    if isinstance(executor, str):
-        executor = NodeExecutor(module_path=executor).callable
     if callable(executor):
         return node(inputs=inputs, outputs=outputs)(executor)
 
@@ -83,7 +81,7 @@ def decorator_node(
             catalog=catalog,
             inputs=in_spec,
             outputs=out_spec,
-            executor=NodeExecutor.from_callable(func),
+            executor=RuntimeExecutor.from_callable(func),
             error_handlers=handlers or {},
             base_class_path=f"{base_class.__module__}.{base_class.__name__}"
             if base_class
@@ -123,7 +121,7 @@ def decorator_graph(
             catalog=catalog,
             inputs=in_spec,
             outputs=out_spec,
-            executor=NodeExecutor.from_callable(func),
+            executor=RuntimeExecutor.from_callable(func),
             metadata={"node_type": "Graph", "is_dynamic": True, "graph_callable": True},
             version=hash_spec(ident, in_spec, out_spec, extra="graph"),
         )

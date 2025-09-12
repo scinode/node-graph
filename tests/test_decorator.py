@@ -7,10 +7,9 @@ import pytest
 
 def test_build_node():
     """Build node from a callable."""
-    ndata = {
-        "executor": "math.sqrt",
-    }
-    NodeCls = build_node_from_callable(**ndata)
+    from math import sqrt
+
+    NodeCls = build_node_from_callable(sqrt)
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
     assert task1.to_dict()["metadata"]["spec_schema"]["executor"]["mode"] == "module"

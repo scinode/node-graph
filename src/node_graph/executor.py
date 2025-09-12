@@ -75,25 +75,10 @@ def serialize_callable(
 
 
 @dataclasses.dataclass
-class NodeExecutor:
+class BaseExecutor:
     """
-    A class that encapsulates different ways of representing and executing
+    A base class that encapsulates different ways of representing and executing
     a callable or computational graph.
-
-    Attributes:
-        mode (Optional[str]): Can be "module", "graph", or "pickled_callable".
-        module_path (Optional[str]): If the mode is "module", the path to the
-            module (e.g. 'my_package.my_module').
-        callable_name (Optional[str]): If the mode is "module", the name of
-            the callable within the module.
-        callable_kind (Optional[str]): A free-form string for additional context
-            (replaces 'type' to avoid overshadowing built-in `type`).
-        graph_data (Optional[dict]): If the mode is "graph", a dictionary
-            representing the graph.
-        pickled_callable (Optional[str]): If the mode is "pickled_callable",
-            a base64-encoded serialized callable.
-        source_code (Optional[str]): Optional source code (if captured).
-        metadata (Optional[dict]): Additional metadata or context.
     """
 
     mode: Optional[str] = None  # "module", "graph", "pickled_callable"
@@ -113,52 +98,17 @@ class NodeExecutor:
         self._normalize_module_mode()
 
     @classmethod
-    def from_callable(
-        cls,
-        func: Callable,
-        register_pickle_by_value: bool = False,
-        include_source: bool = True,
-    ) -> "NodeExecutor":
+    def from_graph(cls, graph: Any) -> "BaseExecutor":
         """
-        Factory method that creates a NodeExecutor from a callable by serializing
-        it with cloudpickle (and optionally including source code).
-
-        Args:
-            func (Callable): The callable to be wrapped by NodeExecutor.
-            register_pickle_by_value (bool, optional): Whether to register the
-                callable's module for cloudpickle by-value serialization.
-            include_source (bool, optional): Whether to include the callable's
-                source code in the serialized data.
-
-        Returns:
-            NodeExecutor: An instance of NodeExecutor initialized in
-                "pickled_callable" mode.
-        """
-        executor_data = serialize_callable(
-            func,
-            register_pickle_by_value=register_pickle_by_value,
-            include_source=include_source,
-        )
-        return cls(**executor_data)
-
-    @classmethod
-    def from_graph(cls, graph: Any) -> "NodeExecutor":
-        """
-        Factory method that creates a NodeExecutor from a graph-like object that
+        Factory method that creates a Executor from a graph-like object that
         can be converted to a dictionary.
-
-        Args:
-            graph (Any): An object that implements a `to_dict()` method.
-
-        Returns:
-            NodeExecutor: An instance of NodeExecutor in "graph" mode.
         """
-        graph_data = graph.to_dict()
+        graph_data = graph.to_dict(should_serialize=True)
         return cls(mode="graph", graph_data=graph_data)
 
     def _normalize_module_mode(self) -> None:
         """
-        Ensure the NodeExecutor is properly configured for "module" mode if
+        Ensure the Executor is properly configured for "module" mode if
         `module_path` is set. Automatically splits the module_path to extract
         the callable name if `callable_name` is None.
         """
@@ -171,7 +121,6 @@ class NodeExecutor:
         if self.module_path is None:
             raise ValueError("module_path is required when mode is 'module'.")
 
-        # If there's no explicit callable_name, try splitting the module_path
         if self.callable_name is None:
             parts = self.module_path.split(".")
             if len(parts) < 2:
@@ -184,29 +133,16 @@ class NodeExecutor:
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert this NodeExecutor instance to a dictionary.
-
-        Returns:
-            dict: A dictionary representation of this NodeExecutor.
+        Convert this Executor instance to a dictionary.
         """
         return dataclasses.asdict(self)
 
     @property
     def callable(self) -> Union[Callable, None]:
         """
-        Dynamically retrieve the actual callable (function/class/method/etc.)
-        based on the NodeExecutor's mode.
-
-        - "module": Imports the specified module and returns the callable by name.
-        - "pickled_callable": Unpickles and returns the callable.
-        - "graph": Returns None (not a direct callable).
-        - otherwise: Returns None.
-
-        Returns:
-            Callable or None: The resolved callable, or None if unavailable.
+        Dynamically retrieve the actual callable based on the mode.
         """
         if self.mode == "module":
-            # Attempt to import the module and retrieve the callable
             try:
                 module = importlib.import_module(self.module_path)
                 return getattr(module, self.callable_name)
@@ -216,15 +152,58 @@ class NodeExecutor:
                     f"callable '{self.callable_name}'. Error: {e}"
                 ) from e
 
-        elif self.mode == "pickled_callable":
+        # 'graph' mode does not have a direct callable.
+        # Subclasses will handle other modes.
+        return None
+
+
+class SafeExecutor(BaseExecutor):
+    """
+    An executor that only supports safe modes ('module', 'graph'). It explicitly
+    disallows 'pickled_callable' to prevent arbitrary code execution from
+    untrusted sources. This should be used when deserializing from storage.
+    """
+
+
+class RuntimeExecutor(BaseExecutor):
+    """
+    An executor that supports all modes, including 'pickled_callable'.
+    This is intended for runtime, in-memory graph construction where the
+    callables are coming from a trusted source (i.e., the code itself).
+    """
+
+    @classmethod
+    def from_callable(
+        cls,
+        func: Callable,
+        register_pickle_by_value: bool = False,
+        include_source: bool = True,
+    ) -> "RuntimeExecutor":
+        """
+        Factory method that creates a RuntimeExecutor from a callable by serializing it.
+        """
+        executor_data = serialize_callable(
+            func,
+            register_pickle_by_value=register_pickle_by_value,
+            include_source=include_source,
+        )
+        return cls(**executor_data)
+
+    @property
+    def callable(self) -> Union[Callable, None]:
+        """
+        Dynamically retrieve the actual callable, including support for unpickling.
+        """
+        # First, try the safe modes from the base class
+        c = super().callable
+        if c is not None:
+            return c
+
+        if self.mode == "pickled_callable":
             if not self.pickled_callable:
                 return None
             pickled_data = base64.b64decode(self.pickled_callable.encode("utf-8"))
             func = cloudpickle.loads(pickled_data)
-            # Ensure recursive calls work by injecting the function into its own globals
-            # if hasattr(func, "__globals__"):
-            # func.__globals__[func.__name__] = func
             return func
 
-        # If it's a graph or another mode, we do not have a direct executor
         return None

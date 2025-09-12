@@ -1,6 +1,6 @@
 import pytest
 from node_graph.error_handler import ErrorHandlerSpec, normalize_error_handlers
-from node_graph.executor import NodeExecutor
+from node_graph.executor import RuntimeExecutor, SafeExecutor, BaseExecutor
 from node_graph.node_spec import NodeSpec
 from node_graph.socket_spec import infer_specs_from_callable
 
@@ -20,10 +20,10 @@ class DummyExitCodes:
     ERROR_C = 303
 
 
-def _assert_executor_roundtrips(exec_obj: NodeExecutor):
-    """Assert NodeExecutor is serializable/deserializable with equal dict payload."""
+def _assert_executor_roundtrips(exec_obj: BaseExecutor):
+    """Assert Executor is serializable/deserializable with equal dict payload."""
     d = exec_obj.to_dict()
-    rebuilt = NodeExecutor(**d)
+    rebuilt = SafeExecutor(**d)
     assert rebuilt.to_dict() == d
 
 
@@ -33,7 +33,7 @@ def _build_minimal_spec(fn):
 
 
 def test_error_handler_spec_from_callable_and_serialize():
-    exec_ = NodeExecutor.from_callable(sample_handler)
+    exec_ = RuntimeExecutor.from_callable(sample_handler)
     _assert_executor_roundtrips(exec_)
 
     spec = ErrorHandlerSpec(
@@ -45,10 +45,10 @@ def test_error_handler_spec_from_callable_and_serialize():
     assert isinstance(d, dict)
     assert d["exit_codes"] == [DummyExitCodes.ERROR_A, 42, 7]
     assert d["max_retries"] == 5
-    # handler payload must be a NodeExecutor dict
+    # handler payload must be a Executor dict
     assert isinstance(d["executor"], dict)
     spec2 = ErrorHandlerSpec.from_dict(d)
-    assert isinstance(spec2.executor, NodeExecutor)
+    assert isinstance(spec2.executor, BaseExecutor)
     _assert_executor_roundtrips(spec2.executor)
     assert spec2.exit_codes == [DummyExitCodes.ERROR_A, 42, 7]
     assert spec2.max_retries == 5
@@ -60,26 +60,26 @@ def test_normalize_error_handlers_various_inputs():
         {"test": {"executor": sample_handler, "exit_codes": [1, 2], "max_retries": 3}}
     )
     assert len(handlers) == 1
-    assert isinstance(handlers["test"].executor, NodeExecutor)
+    assert isinstance(handlers["test"].executor, BaseExecutor)
     _assert_executor_roundtrips(handlers["test"].executor)
     assert handlers["test"].exit_codes == [1, 2]
     assert handlers["test"].max_retries == 3
 
-    # 2) NodeExecutor
-    nexec = NodeExecutor.from_callable(another_handler)
+    # 2) Executor
+    nexec = RuntimeExecutor.from_callable(another_handler)
     handlers = normalize_error_handlers(
         {"test": {"executor": nexec, "exit_codes": [10], "max_retries": 1}}
     )
-    assert isinstance(handlers["test"].executor, NodeExecutor)
+    assert isinstance(handlers["test"].executor, BaseExecutor)
     _assert_executor_roundtrips(handlers["test"].executor)
     assert handlers["test"].exit_codes == [10]
 
-    # 3) dict(NodeExecutor)
+    # 3) dict(Executor)
     as_dict = nexec.to_dict()
     handlers = normalize_error_handlers(
         {"test": {"executor": as_dict, "exit_codes": [11, 12]}}
     )
-    assert isinstance(handlers["test"].executor, NodeExecutor)
+    assert isinstance(handlers["test"].executor, BaseExecutor)
     _assert_executor_roundtrips(handlers["test"].executor)
     assert handlers["test"].exit_codes == [11, 12]
 
@@ -105,7 +105,7 @@ def test_nodespec_roundtrip_preserves_error_handlers():
                 "kwargs": {"increment": 1},
             },
             "handler_b": {
-                "executor": NodeExecutor.from_callable(another_handler).to_dict(),
+                "executor": RuntimeExecutor.from_callable(another_handler).to_dict(),
                 "exit_codes": [DummyExitCodes.ERROR_B],
             },
         }
@@ -115,7 +115,7 @@ def test_nodespec_roundtrip_preserves_error_handlers():
         catalog="Tests",
         inputs=in_spec,
         outputs=out_spec,
-        executor=NodeExecutor.from_callable(lambda x: x),
+        executor=RuntimeExecutor.from_callable(lambda x: x),
         error_handlers=handlers,
         metadata={"node_type": "Normal"},
         version="1.0.0",
@@ -130,7 +130,7 @@ def test_nodespec_roundtrip_preserves_error_handlers():
     assert spec2.identifier == "TestNode"
     assert len(spec2.error_handlers) == 2
     assert all(
-        isinstance(eh.executor, NodeExecutor) for eh in spec2.error_handlers.values()
+        isinstance(eh.executor, BaseExecutor) for eh in spec2.error_handlers.values()
     )
     assert spec2.error_handlers["handler_a"].exit_codes == [DummyExitCodes.ERROR_A]
     assert spec2.error_handlers["handler_b"].exit_codes == [DummyExitCodes.ERROR_B]
@@ -150,7 +150,7 @@ def test_node_roundtrip_preserves_error_handlers():
         identifier="TestNode",
         inputs=in_spec,
         outputs=out_spec,
-        executor=NodeExecutor.from_callable(lambda x: x),
+        executor=RuntimeExecutor.from_callable(lambda x: x),
         error_handlers=handlers,
     )
 
@@ -168,7 +168,7 @@ def test_node_roundtrip_preserves_error_handlers():
     # fresh.update_from_dict(data2)
     # assert len(fresh.error_handlers) == 1
     # eh = fresh.error_handlers[0]
-    # assert isinstance(eh.executor, NodeExecutor)
+    # assert isinstance(eh.executor, BaseExecutor)
     # _assert_executor_roundtrips(eh.executor)
     # assert eh.max_retries == 7
     # assert eh.exit_codes == [5]
@@ -201,7 +201,7 @@ def test_decorator_node_applies_error_handlers(monkeypatch):
     assert spec.identifier == "DecoNode"
     assert len(spec.error_handlers) == 1
     eh = spec.error_handlers["test"]
-    assert isinstance(eh.executor, NodeExecutor)
+    assert isinstance(eh.executor, BaseExecutor)
     _assert_executor_roundtrips(eh.executor)
     assert eh.exit_codes == [123]
     assert eh.max_retries == 2
