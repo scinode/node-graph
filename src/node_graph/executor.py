@@ -28,19 +28,10 @@ def serialize_callable(
             the name of the callable, a base64-encoded pickled representation,
             and a mode key set to "pickled_callable".
     """
-    import types
 
-    if not isinstance(func, (types.FunctionType, types.BuiltinFunctionType, type)):
+    if not callable(func):
         raise TypeError("Provided object is not a callable function or class.")
-
-    # Attempt to retrieve source code if requested
-    if include_source:
-        try:
-            source_code = inspect.getsource(func)
-        except (OSError, TypeError):
-            source_code = "Failed to retrieve source code."
-    else:
-        source_code = ""
+    source_code = ""
     callable_name = func.__name__
     if func.__module__ == "__main__" or "." in func.__qualname__.split(".", 1)[-1]:
         mode = "pickled_callable"
@@ -48,6 +39,12 @@ def serialize_callable(
         # Base64 encode the pickled callable
         pickled_callable = base64.b64encode(pickled_data).decode("utf-8")
         module_path = None
+        # Attempt to retrieve source code if requested
+        if include_source:
+            try:
+                source_code = inspect.getsource(func)
+            except (OSError, TypeError):
+                source_code = "Failed to retrieve source code."
     else:
         # Optionally register the module for pickling by value
         if register_pickle_by_value:
