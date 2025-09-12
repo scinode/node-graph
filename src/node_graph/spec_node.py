@@ -24,10 +24,6 @@ class _SpecBackedMixin:
         self.identifier = spec.identifier
         self.catalog = spec.catalog
 
-        # persist spec reference and optionally embed the full schema
-        self._metadata.setdefault(
-            "spec_ref", {"identifier": spec.identifier, "version": spec.version}
-        )
         if embed_spec:
             self._metadata["spec_schema"] = spec.to_dict()
 
