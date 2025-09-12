@@ -1,17 +1,17 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, Type
-import hashlib
-import json
+from typing import Dict, Any, Optional, Type, Callable
 from node_graph.socket_spec import SocketSpec, SocketView
 from node_graph.executor import BaseExecutor, SafeExecutor
 from node_graph.node import Node
 from .error_handler import ErrorHandlerSpec
+import importlib
 
 
 @dataclass(frozen=True)
 class NodeSpec:
     identifier: str
+    mode: str = "embedded"  # 'embedded', 'module_handle', 'decorator_build'
     node_type: str = "Normal"
     catalog: str = "Others"
     inputs: Optional[SocketSpec] = None
@@ -23,19 +23,23 @@ class NodeSpec:
     # not persisted directly; used at runtime
     base_class: Optional[Type[Node]] = None
     version: Optional[str] = None
+    decorator: Optional[Callable] = None  # if created from a decorator
+    decorator_path: Optional[str] = None  # import path of the decorator
 
-    def persistence_mode(self) -> str:
-        """Return one of: 'embedded', 'module_handle'."""
+    def is_importable(self) -> bool:
         try:
-            from node_graph.node_spec import BaseHandle
-
-            return (
-                "module_handle"
-                if isinstance(self.executor.callable, BaseHandle)
-                else "embedded"
-            )
+            mode = getattr(self.executor, "mode", None)
+            return mode == "module"
         except Exception:
-            return "embedded"
+            return False
+
+    def is_module_handle(self) -> str:
+        """Return one of: 'embedded', 'module_handle', 'decorator_build'."""
+
+        try:
+            return isinstance(self.executor.callable, BaseHandle)
+        except Exception:
+            return False
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -44,7 +48,20 @@ class NodeSpec:
           - embedded: store full spec under 'spec_schema'
           - module_handle: store only 'executor' (callable is a decorated handle)
         """
-        mode = self.persistence_mode()
+        importable = self.is_importable()
+
+        # if not importable, we always embed (ignore any user-provided mode)
+        if not importable:
+            mode = "embedded"
+        else:
+            # Importable: pick the most specific compact mode we can support
+            if self.is_module_handle():
+                mode = "module_handle"
+            elif (self.decorator is not None) or (self.decorator_path is not None):
+                mode = "decorator_build"
+            else:
+                # Safe default if nothing else applies
+                mode = "embedded"
         d: Dict[str, Any] = {
             "mode": mode,
             "identifier": self.identifier,
@@ -61,6 +78,12 @@ class NodeSpec:
             path = f"{self.base_class.__module__}.{self.base_class.__qualname__}"
         if path:
             d["base_class_path"] = path
+        # decorator path
+        dec_path = self.decorator_path
+        if dec_path is None and self.decorator is not None:
+            dec_path = f"{self.decorator.__module__}.{self.decorator.__qualname__}"
+        if dec_path:
+            d["decorator_path"] = dec_path
 
         if mode == "embedded":
             if self.inputs is not None:
@@ -114,11 +137,14 @@ class NodeSpec:
                 )
             spec = func_or_handle._spec
             return spec
+        elif mode == "decorator_build":
+            decorator = cls._resolve_decorator(decorator_path=d.get("decorator_path"))
+            return decorator()(func_or_handle)._spec
+
         raise ValueError(f"unrecognized persistence_mode '{mode}'")
 
     def _resolve_base_class(self):
         """Return the concrete Node subclass to instantiate."""
-        import importlib
         from node_graph.spec_node import SpecNode
 
         if self.base_class is not None:
@@ -128,6 +154,17 @@ class NodeSpec:
             return getattr(importlib.import_module(module_name), class_name)
 
         return SpecNode
+
+    @staticmethod
+    def _resolve_decorator(decorator_path: Optional[str] = None) -> Callable:
+        """Return the decorator callable if any."""
+        from node_graph.decorator import node
+
+        if decorator_path:
+            module_name, func_name = decorator_path.rsplit(".", 1)
+            return getattr(importlib.import_module(module_name), func_name)
+
+        return node
 
     def to_node(
         self,
@@ -154,29 +191,6 @@ class NodeSpec:
             error_handlers=self.error_handlers,
         )
         return node
-
-
-def hash_spec(
-    identifier: str,
-    inputs: SocketSpec | None,
-    outputs: SocketSpec | None,
-    extra: Any = None,
-) -> str:
-    def _ser(obj):
-        if obj is None:
-            return None
-        if hasattr(obj, "to_dict"):
-            return obj.to_dict()
-        return obj
-
-    payload = {
-        "identifier": identifier,
-        "inputs": _ser(inputs),
-        "outputs": _ser(outputs),
-        "extra": _ser(extra),
-    }
-    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 class BaseHandle:

@@ -4,7 +4,7 @@ import inspect
 from .executor import RuntimeExecutor
 from .error_handler import ErrorHandlerSpec, normalize_error_handlers
 from .node import Node
-from .node_spec import NodeSpec, hash_spec, NodeHandle, BaseHandle
+from .node_spec import NodeSpec, NodeHandle, BaseHandle
 from .socket_spec import infer_specs_from_callable, SocketSpec
 
 
@@ -87,7 +87,6 @@ def decorator_node(
             if base_class
             else None,
             metadata={"node_type": "Normal", "is_dynamic": True},
-            version=hash_spec(ident, in_spec, out_spec, extra="callable"),
         )
         handle = NodeHandle(spec)
         handle._func = func
@@ -123,7 +122,6 @@ def decorator_graph(
             outputs=out_spec,
             executor=RuntimeExecutor.from_callable(func),
             metadata={"node_type": "Graph", "is_dynamic": True, "graph_callable": True},
-            version=hash_spec(ident, in_spec, out_spec, extra="graph"),
         )
         handle = NodeHandle(spec)
         handle._func = func
