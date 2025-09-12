@@ -24,22 +24,35 @@ class NodeSpec:
     base_class: Optional[Type[Node]] = None
     version: Optional[str] = None
 
+    def persistence_mode(self) -> str:
+        """Return one of: 'embedded', 'module_handle'."""
+        try:
+            from node_graph.node_spec import BaseHandle
+
+            return (
+                "module_handle"
+                if isinstance(self.executor.callable, BaseHandle)
+                else "embedded"
+            )
+        except Exception:
+            return "embedded"
+
     def to_dict(self) -> Dict[str, Any]:
+        """
+        Produce a compact, DB-ready representation of *this spec*.
+        Modes:
+          - embedded: store full spec under 'spec_schema'
+          - module_handle: store only 'executor' (callable is a decorated handle)
+        """
+        mode = self.persistence_mode()
         d: Dict[str, Any] = {
+            "mode": mode,
             "identifier": self.identifier,
             "catalog": self.catalog,
             "metadata": dict(self.metadata),
         }
-        if self.inputs is not None:
-            d["inputs"] = self.inputs.to_dict()
-        if self.outputs is not None:
-            d["outputs"] = self.outputs.to_dict()
         if self.executor is not None:
             d["executor"] = self.executor.to_dict()
-        if self.error_handlers:
-            d["error_handlers"] = {
-                name: eh.to_dict() for name, eh in self.error_handlers.items()
-            }
         if self.version:
             d["version"] = self.version
         # prefer explicit path; otherwise derive from class
@@ -48,28 +61,60 @@ class NodeSpec:
             path = f"{self.base_class.__module__}.{self.base_class.__qualname__}"
         if path:
             d["base_class_path"] = path
+
+        if mode == "embedded":
+            if self.inputs is not None:
+                d["inputs"] = self.inputs.to_dict()
+            if self.outputs is not None:
+                d["outputs"] = self.outputs.to_dict()
+            if self.error_handlers:
+                d["error_handlers"] = {
+                    name: eh.to_dict() for name, eh in self.error_handlers.items()
+                }
+
         return d
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "NodeSpec":
-        inputs = SocketSpec.from_dict(d["inputs"]) if "inputs" in d else None
-        outputs = SocketSpec.from_dict(d["outputs"]) if "outputs" in d else None
+    def from_dict(cls, d: Dict[str, Any]) -> NodeSpec:
+        """
+        Rebuild a NodeSpec from a DB-ready representation produced by to_dict.
+        """
+        from node_graph.socket_spec import SocketSpec
+
+        mode = d.get("mode", "embedded")
         executor = SafeExecutor(**d["executor"]) if "executor" in d else None
         error_handlers = {
             name: ErrorHandlerSpec.from_dict(eh)
             for name, eh in d.get("error_handlers", {}).items()
         }
-        return cls(
-            identifier=d["identifier"],
-            catalog=d.get("catalog", "Others"),
-            inputs=inputs,
-            outputs=outputs,
-            executor=executor,
-            error_handlers=error_handlers,
-            metadata=d.get("metadata", {}),
-            base_class_path=d.get("base_class_path"),
-            version=d.get("version"),
-        )
+        if mode == "embedded":
+            inputs = SocketSpec.from_dict(d["inputs"]) if "inputs" in d else None
+            outputs = SocketSpec.from_dict(d["outputs"]) if "outputs" in d else None
+            return cls(
+                identifier=d["identifier"],
+                catalog=d.get("catalog", "Others"),
+                inputs=inputs,
+                outputs=outputs,
+                executor=executor,
+                error_handlers=error_handlers,
+                metadata=d.get("metadata", {}),
+                base_class_path=d.get("base_class_path"),
+                version=d.get("version"),
+            )
+        if executor is None:
+            raise ValueError(f"persistence_mode '{mode}' requires an executor")
+        func_or_handle = executor.callable
+        if mode == "module_handle":
+            # Directly reuse the spec from the decorated handle
+            from node_graph.node_spec import BaseHandle
+
+            if not isinstance(func_or_handle, BaseHandle):
+                raise TypeError(
+                    "persistence_mode 'module_handle' requires a decorated handle"
+                )
+            spec = func_or_handle._spec
+            return spec
+        raise ValueError(f"unrecognized persistence_mode '{mode}'")
 
     def _resolve_base_class(self):
         """Return the concrete Node subclass to instantiate."""
@@ -93,9 +138,9 @@ class NodeSpec:
         metadata=None,
     ) -> "Node":
         """
-        Materialize a Node from a NodeSpec:
-          - copies identifier/catalog/metadata/executor
-          - builds inputs/outputs from SocketSpec via NodeSocketNamespace._from_spec
+        Materialize a Node from a NodeSpec with smart persistence:
+          - If importable, default to compact persistence modes.
+          - Otherwise, embed the schema to guarantee lossless restore.
         """
         Base = self._resolve_base_class()
         node = Base(
