@@ -75,9 +75,7 @@ def test_from_dict() -> None:
     assert len(ng1.links) == 6
     assert ng1.ctx.y.value == 2.0
     # add non-existing input will raise an error
-    with pytest.raises(
-        ValueError, match="z does not exist in a non-dynamic namespace socket"
-    ):
+    with pytest.raises(ValueError, match="Invalid assignment into namespace socket:"):
         ng1.inputs.z = 3.0
 
 

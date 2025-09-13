@@ -102,7 +102,10 @@ def deep_copy_only_dicts(
     """Copy all nested dictionaries in a structure but keep
     the immutable values (such as integers, strings, or tuples)
     shared between the original and the copy"""
-    if isinstance(original, dict):
+    from node_graph.socket import TaggedValue
+
+    # TaggedValue should not be unpacked
+    if isinstance(original, dict) and not isinstance(original, TaggedValue):
         return {k: deep_copy_only_dicts(v) for k, v in original.items()}
     else:
         # Return the original value if it's not a dictionary

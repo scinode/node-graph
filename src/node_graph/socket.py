@@ -774,6 +774,32 @@ def check_identifier_name(identifier: str, pool: dict) -> None:
         raise ValueError(msg)
 
 
+def _raise_namespace_assignment_error(
+    *,
+    target_ns: "NodeSocketNamespace",
+    incoming_desc: str,
+    reason: str,
+    fixes: list[str],
+) -> None:
+    """Raise a ValueError guiding users when setting/linking values into a namespace."""
+    where = getattr(target_ns, "_full_name_with_node", "<namespace>")
+    msg = [
+        f"Invalid assignment into namespace socket: {where}",
+        "",
+        "What happened:",
+        f"  • {reason}",
+        f"  • Incoming value: {incoming_desc}",
+        "",
+        "Why this matters:",
+        "  • Without a namespace-typed graph input, the whole dict is treated as *one value*,",
+        "    so its inner keys are NOT wired to the child sockets. You'd end up with missing links.",
+        "",
+        "How to fix:",
+        *[f"  • {line}" for line in fixes],
+    ]
+    raise ValueError("\n".join(msg))
+
+
 class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     """A NodeSocket that also acts as a namespace (collection) of other sockets."""
 
@@ -856,9 +882,11 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         try:
             return self._sockets[name]
         except KeyError:
+            avail = ", ".join(self._sockets.keys()) or "<none>"
             raise AttributeError(
-                f"{self.__class__.__name__}: {self._full_name_with_node} has no attribute '{name}'. "
-                f"Available sub-sockets are: {', '.join(self._sockets.keys())}"
+                f"{self.__class__.__name__}: '{self._full_name_with_node}' has no sub-socket '{name}'.\n"
+                f"Available: {avail}\n"
+                f"Tip: If '{name}' should exist, add it to the SocketSpec (or make this namespace dynamic)."
             )
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -999,9 +1027,36 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             self._node.graph.add_link(value, self)
             return
 
+        if isinstance(value, TaggedValue):
+            src = getattr(
+                getattr(value, "_socket", None),
+                "_full_name_with_node",
+                "<unknown-socket>",
+            )
+            _raise_namespace_assignment_error(
+                target_ns=self,
+                incoming_desc=f"TaggedValue(dict) from {src}",
+                reason="A TaggedValue wrapping a dict is being assigned to a *namespace*.",
+                fixes=[
+                    "Annotate the graph-level parameter as a namespace, e.g.:",
+                    f"    def your_graph({self._name}: Annotated[dict, namespace({list(self._sockets.keys())[0]}=, ...)]):",
+                    "",
+                    "Or reuse the node’s own input spec, e.g.:",
+                    f"    def your_graph({self._name}: Annotated[dict, add_multiply.inputs.data]):",
+                    "        add_multiply(data=data)",
+                    "",
+                ],
+            )
+
         if not isinstance(value, dict):
-            raise ValueError(
-                f"Invalid value type for socket {self._name}: {value}, expected dict or Socket."
+            _raise_namespace_assignment_error(
+                target_ns=self,
+                incoming_desc=type(value).__name__,
+                reason="This is a namespace socket and expects a dict (or a Socket link).",
+                fixes=[
+                    "Provide a dict with keys matching the namespace fields;",
+                    "or link another socket/namespace; or declare the graph input as a namespace.",
+                ],
             )
 
         for key, val in value.items():
@@ -1012,9 +1067,15 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 # Ensure the immediate child exists (create if allowed)
                 if head not in self._sockets:
                     if not self._metadata.dynamic:
-                        raise ValueError(
-                            f"Socket: {head} does not exist in non-dynamic namespace '{self._name}'. "
-                            f"This namespace belongs to: {self._node.name}"
+                        _raise_namespace_assignment_error(
+                            target_ns=self,
+                            incoming_desc=f"key '{head}'",
+                            reason=f"Field '{head}' is not defined and this namespace is not dynamic.",
+                            fixes=[
+                                "Define the field in the socket spec (preferred); or",
+                                "mark this namespace dynamic if it must accept arbitrary keys;",
+                                "or correct the key path being assigned.",
+                            ],
                         )
                     # We are going to descend (tail exists), so create a namespace
                     self._new(
@@ -1029,8 +1090,14 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
                 child = self._sockets[head]
                 if not isinstance(child, NodeSocketNamespace):
-                    raise ValueError(
-                        f"Cannot set nested key '{key}' under non-namespace socket '{head}'."
+                    _raise_namespace_assignment_error(
+                        target_ns=self,
+                        incoming_desc=f"nested key '{key}' under leaf '{head}'",
+                        reason=f"'{head}' is a leaf socket, but you attempted to assign nested data below it.",
+                        fixes=[
+                            "Use a namespace socket for hierarchical data; update your SocketSpec accordingly; or",
+                            "flatten your assignment to target a leaf socket directly.",
+                        ],
                     )
 
                 # Recurse into the child namespace with the remaining tail
@@ -1040,9 +1107,14 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             # Non-dotted key path (single-segment)
             if key not in self._sockets:
                 if not self._metadata.dynamic:
-                    raise ValueError(
-                        f"Socket: {key} does not exist in a non-dynamic namespace socket: {self._name}. "
-                        f"This namespace belongs to: {self._node.name}"
+                    _raise_namespace_assignment_error(
+                        target_ns=self,
+                        incoming_desc=f"key '{key}'",
+                        reason=f"Field '{key}' is not defined and this namespace is not dynamic.",
+                        fixes=[
+                            "Add the field to the namespace spec; or",
+                            "make the namespace dynamic if it should grow automatically.",
+                        ],
                     )
 
                 # Decide whether to create a namespace or a leaf based on the value type
@@ -1071,9 +1143,13 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     self._node.graph.add_link(val, target)
                 else:
                     # Treat setting a leaf value into a namespace as error for clarity
-                    raise ValueError(
-                        f"Cannot set a non-dict value on namespace '{target._full_name_with_node}'. "
-                        f"Got: {type(val).__name__}"
+                    _raise_namespace_assignment_error(
+                        target_ns=target,
+                        incoming_desc=type(val).__name__,
+                        reason="A namespace expects a mapping of fields, but a non-dict value was provided.",
+                        fixes=[
+                            "Provide a dict like {'x': 1, 'y': 2} that matches the namespace shape.",
+                        ],
                     )
             else:
                 # Leaf socket: forward to its own setter (which handles linking or value assignment)
