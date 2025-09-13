@@ -3,7 +3,7 @@ import numpy as np
 from node_graph import NodeGraph
 from node_graph.collection import group
 from node_graph.node import Node
-from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
+from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace, TaggedValue
 from node_graph.nodes import NodePool
 import operator as op
 from node_graph.errors import GraphDeferredIllegalOperationError
@@ -376,6 +376,27 @@ def test_set_namespace_with_nested_key(node_with_namespace_socket):
     n.inputs._value = data
     assert n.inputs.dynamic.x.value == 2
     assert n.inputs.dynamic.sub.y.value == 5
+    with pytest.raises(
+        AttributeError,
+        match="NodeSocketNamespace: 'node_graph.node.inputs.non_dynamic.sub' "
+        "has no sub-socket 'non_exist'.",
+    ):
+        # non_dynamic is not dynamic socket, so it will not create the sub socket
+        n.inputs.non_dynamic.sub.non_exist.value == 5
+
+    with pytest.raises(ValueError, match="Invalid assignment into namespace socket:"):
+        n.inputs._value = 1
+
+    with pytest.raises(
+        ValueError, match="Field 'y' is not defined and this namespace is not dynamic."
+    ):
+        n.inputs._value = {"y": 2}
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid assignment into namespace socket:",
+    ):
+        n.inputs.non_dynamic._value = TaggedValue({})
 
 
 @pytest.mark.parametrize(
@@ -564,7 +585,6 @@ def test_socket_group_waiting_on():
 def test_tagged_value():
     """Test tagged value in socket."""
     from node_graph.utils import tag_socket_value
-    from node_graph.socket import NodeSocketNamespace, TaggedValue
 
     ng = NodeGraph(name="test_base_socket_type")
     n = ng.add_node(Node, "test")
