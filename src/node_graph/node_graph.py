@@ -178,7 +178,7 @@ class NodeGraph:
         self.graph_ctx.inputs._clear()
         self.graph_ctx.inputs._set_socket_value(value, link_limit=100000)
 
-    def generate_inputs(self, names: Optional[List[str]] = None) -> None:
+    def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""
         self.inputs._clear()
         all_names = set(self.nodes._get_keys())
@@ -206,7 +206,7 @@ class NodeGraph:
                 # add link from group inputs to node inputs
                 self.add_link(self.inputs[new_key], node.inputs[key])
 
-    def generate_outputs(self, names: Optional[List[str]] = None) -> None:
+    def expose_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from nodes."""
         self.outputs._clear()
         all_names = set(self.nodes._get_keys())
