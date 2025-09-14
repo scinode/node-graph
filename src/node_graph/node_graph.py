@@ -91,27 +91,28 @@ class NodeGraph:
         if init_graph_level_nodes:
             self._init_graph_level_nodes(inputs, outputs)
 
-    def _init_graph_level_nodes(self, inputs, outputs, ctx=None):
+    def _init_graph_level_nodes(self, inputs, outputs):
         from dataclasses import replace
 
         inputs = self._socket_spec.validate_socket_data(inputs)
         outputs = self._socket_spec.validate_socket_data(outputs)
-        ctx = self._socket_spec.validate_socket_data(ctx)
 
         base_class = self.NodePool["graph_level"].load()
 
-        # graph inputs
+        # if inputs is None, we assume it's a dynamic inputs
         inputs = self._socket_spec.dynamic(Any) if inputs is None else inputs
         meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
+        self._inputs = inputs
         self.graph_inputs_spec = NodeSpec(
             identifier="graph_inputs",
             inputs=inputs,
             base_class=base_class,
         )
         self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
-        # graph outputs
+        # if outputs is None, we assume it's a dynamic outputs
         outputs = self._socket_spec.dynamic(Any) if outputs is None else outputs
+        self._outputs = outputs
         self.graph_outputs_spec = NodeSpec(
             identifier="graph_outputs",
             inputs=outputs,
@@ -120,7 +121,7 @@ class NodeGraph:
         graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
         graph_outputs.inputs._name = "outputs"
         # graph context
-        ctx = self._socket_spec.dynamic(Any) if ctx is None else ctx
+        ctx = self._socket_spec.dynamic(Any)
         meta = replace(ctx.meta, sub_socket_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
         self.graph_ctx_spec = NodeSpec(
@@ -367,24 +368,14 @@ class NodeGraph:
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Export graph metadata including *live* graph-level IO specs.
-        We snapshot current shapes of graph inputs/outputs/ctx using `SocketSpec.from_namespace`.
-        """
-        self._inputs = SocketSpec.from_namespace(
-            self.graph_inputs.inputs, type_mapping=self.type_mapping
-        )
-        self._outputs = SocketSpec.from_namespace(
-            self.graph_outputs.inputs, type_mapping=self.type_mapping
-        )
-        self._ctx = SocketSpec.from_namespace(
-            self.graph_ctx.inputs, type_mapping=self.type_mapping
-        )
+        """Export graph metadata including *live* graph-level IO specs."""
         meta: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            "inputs_spec": self._inputs.to_dict(),
-            "outputs_spec": self._outputs.to_dict(),
-            "ctx_spec": self._ctx.to_dict(),
         }
+        if self._inputs is not None:
+            meta["inputs_spec"] = self._inputs.to_dict()
+        if self._outputs is not None:
+            meta["outputs_spec"] = self._outputs.to_dict()
         # also save the parent class information
         meta["graph_class"] = {
             "callable_name": self.__class__.__name__,
@@ -455,7 +446,7 @@ class NodeGraph:
             )
 
     @classmethod
-    def from_dict(cls, ngdata: Dict[str, Any]) -> "NodeGraph":
+    def from_dict(cls, ngdata: Dict[str, Any]) -> NodeGraph:
         """Rebuilds a node graph from a dictionary.
 
         Args:
@@ -467,7 +458,7 @@ class NodeGraph:
 
         md = ngdata.get("metadata", {}) or {}
 
-        ng: "NodeGraph" = cls(
+        ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
             graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
@@ -487,12 +478,7 @@ class NodeGraph:
             if "outputs_spec" in md
             else None
         )
-        ctx_spec = (
-            SocketSpec.from_dict(md["ctx_spec"], type_mapping=ng.type_mapping)
-            if "ctx_spec" in md
-            else None
-        )
-        ng._init_graph_level_nodes(inputs_spec, outputs_spec, ctx_spec)
+        ng._init_graph_level_nodes(inputs_spec, outputs_spec)
 
         for ndata in ngdata["nodes"].values():
             ng.add_node_from_dict(ndata)

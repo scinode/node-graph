@@ -424,6 +424,7 @@ class SocketMetadata:
     dynamic: bool = False
     sub_socket_default_link_limit: int = 1
     required: bool = False
+    is_metadata: bool = False
     builtin_socket: bool = False
     function_socket: bool = False
     socket_type: str = "INPUT"
@@ -436,6 +437,7 @@ class SocketMetadata:
         data = {
             "dynamic": self.dynamic,
             "required": self.required,
+            "is_metadata": self.is_metadata,
             "builtin_socket": self.builtin_socket,
             "function_socket": self.function_socket,
             "socket_type": self.socket_type,
@@ -469,6 +471,7 @@ class SocketMetadata:
                 "socket_type",
                 "arg_type",
                 "required",
+                "is_metadata",
                 "sub_socket_default_link_limit",
                 "extras",
             }

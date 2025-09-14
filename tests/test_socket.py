@@ -154,6 +154,7 @@ def test_metadata():
         "arg_type": "kwargs",
         "socket_type": "INPUT",
         "required": False,
+        "is_metadata": False,
         "builtin_socket": False,
         "function_socket": False,
     }
