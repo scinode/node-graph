@@ -78,6 +78,9 @@ def runtime_meta_from_spec(
     # required
     if spec.meta.required is not None:
         md["required"] = bool(spec.meta.required)
+    # is_metadata
+    if spec.meta.is_metadata is not None:
+        md["is_metadata"] = bool(spec.meta.is_metadata)
 
     # namespace features
     if spec.identifier == type_mapping["namespace"]:

@@ -45,6 +45,7 @@ class SocketSpecMeta:
     # "args" | "kwargs" | "var_args" | "var_kwargs" | "return"
     call_role: Optional[str] = None
     sub_socket_default_link_limit: Optional[int] = 1
+    is_metadata: Optional[bool] = False
     widget: Optional[WidgetConfig] = None
 
 
