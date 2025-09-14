@@ -139,10 +139,14 @@ def test_generate_inputs_names(ng):
     assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
 
 
-@pytest.mark.xfail(raises=ValueError)
 def test_generate_inputs_names_invalid(ng):
     """Test that input generation fails for invalid name"""
-    ng.generate_inputs(names=["missing"])
+    name = "missing"
+    with pytest.raises(
+        ValueError,
+        match="The following named nodes do not exist:",
+    ):
+        ng.generate_inputs(names=[name])
 
 
 def test_generate_outputs(ng):
@@ -161,10 +165,14 @@ def test_generate_outputs_names(ng):
     assert "add2" not in ng.outputs
 
 
-@pytest.mark.xfail(raises=ValueError)
 def test_generate_outputs_names_invalid(ng):
     """Test that output generation fails for invalid name"""
-    ng.generate_outputs(names=["missing"])
+    name = "missing"
+    with pytest.raises(
+        ValueError,
+        match="The following named nodes do not exist:",
+    ):
+        ng.generate_outputs(names=[name])
 
 
 def test_build_inputs_outputs(ng):
