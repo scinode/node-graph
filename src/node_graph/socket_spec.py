@@ -171,129 +171,52 @@ class SocketSpec:
     def from_namespace(
         cls, live_ns, *, role: str = "input", type_mapping: Optional[dict] = None
     ) -> "SocketSpec":
-        """
-        Snapshot a live NodeSocketNamespace (works without a graph) and
-        preserve per-socket metadata such as required/is_metadata/etc.
+        """Snapshot a live NodeSocketNamespace (works without a graph).
+        Duck-typed to support tests (no hard import / isinstance on concrete classes).
         """
         tm = type_mapping or DEFAULT_TM
 
         def _iter_ns_items(ns):
-            # Support both real NodeSocketNamespace (_sockets) and test fakes (mapping-like)
+            # Support both real NodeSocketNamespace (_sockets) and test fakes (sockets)
             if hasattr(ns, "_sockets") and isinstance(getattr(ns, "_sockets"), dict):
                 return ns._sockets.items()
             try:
-                return ns.items()  # if a plain mapping is passed
+                return ns.items()  # if a raw mapping is passed
             except Exception:
                 return []
 
         def _is_ns(obj) -> bool:
             return hasattr(obj, "_sockets") or hasattr(obj, "sockets")
 
-        def _meta_from_socket(sock, *, is_root: bool = False) -> SocketSpecMeta:
-            md = getattr(sock, "_metadata", None)
-            # derive call_role
-            if is_root:
-                call_role = "return" if role == "output" else "kwargs"
-            else:
-                call_role = getattr(md, "arg_type", None) if md else None
-            extras = getattr(md, "extras", {}) if md else {}
-            return SocketSpecMeta(
-                help=extras.get("help"),
-                widget=extras.get("widget"),
-                required=getattr(md, "required", None) if md else None,
-                is_metadata=getattr(md, "is_metadata", None) if md else None,
-                call_role=call_role,
-                sub_socket_default_link_limit=getattr(
-                    md, "sub_socket_default_link_limit", None
-                )
-                if md
-                else None,
-            )
-
-        def _leaf_identifier(sock) -> str:
-            # Prefer the property-bound identifier if available
-            prop = getattr(sock, "property", None)
-            ident = getattr(prop, "identifier", None) if prop is not None else None
-            if ident:
-                return ident
-            # Fallbacks (rarely useful for NodeSocket, but keep for robustness)
-            return (
+        def _leaf_spec(sock) -> "SocketSpec":
+            ident = (
                 getattr(sock, "_identifier", None)
                 or getattr(sock, "identifier", None)
                 or getattr(sock, "ident", None)
                 or tm.get("default", "node_graph.any")
             )
-
-        def _leaf_default(sock):
-            # If the property exposes a default, snapshot it (leaves only)
-            prop = getattr(sock, "property", None)
-            if prop is None:
-                return MISSING
-            d = getattr(prop, "default", MISSING)
-            return deepcopy(d) if not isinstance(d, type(MISSING)) else MISSING
-
-        def _leaf_spec(sock) -> "SocketSpec":
-            spec = SocketSpec(
-                identifier=_leaf_identifier(sock),
-                meta=_meta_from_socket(sock),
-            )
-            d = _leaf_default(sock)
-            if not isinstance(d, type(MISSING)):
-                spec = replace(spec, default=d)
-            return spec
+            return SocketSpec(identifier=ident)
 
         def _ns_spec(ns) -> "SocketSpec":
-            # Build children first
             fields: dict[str, SocketSpec] = {}
             for name, child in _iter_ns_items(ns):
                 if _is_ns(child):
                     fields[name] = _ns_spec(child)
                 else:
                     fields[name] = _leaf_spec(child)
-
-            # Compose namespace spec + metadata
-            ns_meta = _meta_from_socket(ns, is_root=False)
-            dynamic = bool(getattr(getattr(ns, "_metadata", None), "dynamic", False))
-
-            item_spec = None
-            if dynamic:
-                # We can't infer a uniform item schema reliably; fall back to "any"
-                item_spec = SocketSpec(
+            spec = SocketSpec(
+                identifier=tm.get("namespace", "node_graph.namespace"), fields=fields
+            )
+            # best-effort dynamic flag
+            md = getattr(ns, "_metadata", None)
+            if md is not None and getattr(md, "dynamic", False):
+                any_item = SocketSpec(
                     identifier=tm.get("any", tm.get("default", "node_graph.any"))
                 )
+                spec = replace(spec, dynamic=True, item=any_item)
+            return spec
 
-            return SocketSpec(
-                identifier=tm.get("namespace", "node_graph.namespace"),
-                dynamic=dynamic,
-                item=item_spec,
-                fields=fields,
-                meta=ns_meta,
-            )
-
-        # Root namespace
-        root_fields = {}
-        for name, child in _iter_ns_items(live_ns):
-            if _is_ns(child):
-                root_fields[name] = _ns_spec(child)
-            else:
-                root_fields[name] = _leaf_spec(child)
-
-        root_dynamic = bool(
-            getattr(getattr(live_ns, "_metadata", None), "dynamic", False)
-        )
-        root_item = None
-        if root_dynamic:
-            root_item = SocketSpec(
-                identifier=tm.get("any", tm.get("default", "node_graph.any"))
-            )
-
-        return SocketSpec(
-            identifier=tm.get("namespace", "node_graph.namespace"),
-            dynamic=root_dynamic,
-            item=root_item,
-            fields=root_fields,
-            meta=_meta_from_socket(live_ns, is_root=True),
-        )
+        return _ns_spec(live_ns)
 
 
 def _unwrap_annotated(tp: Any) -> tuple[Any, Optional[SocketSpecMeta]]:
