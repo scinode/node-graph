@@ -1,7 +1,6 @@
 from __future__ import annotations
 from node_graph.spec_node import SpecNode
 from node_graph.node_spec import NodeSpec
-from node_graph.socket_spec import SocketSpec
 
 
 class SubGraphNode(SpecNode):
@@ -46,24 +45,14 @@ def _build_subgraph_task_nodespec(
 ) -> NodeSpec:
     from node_graph.executor import RuntimeExecutor
 
-    # mirror IO from the child graph
-    if graph._inputs is None:
-        in_spec = SocketSpec.from_namespace(graph.graph_inputs.inputs)
-    else:
-        in_spec = graph._inputs
-    if graph._outputs is None:
-        out_spec = SocketSpec.from_namespace(graph.graph_outputs.inputs)
-    else:
-        out_spec = graph._outputs
-
     meta = {
         "node_type": "WorkGraph",
     }
 
     return NodeSpec(
         identifier=graph.name,
-        inputs=in_spec,
-        outputs=out_spec,
+        inputs=graph._inputs,
+        outputs=graph._outputs,
         executor=RuntimeExecutor.from_graph(graph),
         base_class=SubGraphNode,
         metadata=meta,

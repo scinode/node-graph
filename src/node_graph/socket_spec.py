@@ -698,6 +698,19 @@ def merge_specs(ns: SocketSpec, additions: SocketSpec) -> SocketSpec:
     return replace(ns, fields=new_fields)
 
 
+def add_spec_field(ns: SocketSpec, name: str, spec: SocketSpec) -> SocketSpec:
+    """
+    Add a new field to a namespace spec. Raises if the field already exists.
+    """
+    if not ns.is_namespace():
+        raise TypeError("add_spec_field expects a namespace SocketSpec.")
+    if name in ns.fields:
+        raise ValueError(f"Field '{name}' already exists in the namespace.")
+    new_fields = dict(ns.fields or {})
+    new_fields[name] = spec
+    return replace(ns, fields=new_fields)
+
+
 def _function_returns_value(func) -> bool:
     """
     True iff the *top-level* function body contains `return <non-None>`.

@@ -102,17 +102,3 @@ def test_from_dict_dynamic_inputs_outputs() -> None:
     assert ng1.ctx.y.value == 2.0
     # add non-existing input will not raise an error
     ng1.inputs.z = 3.0
-
-
-def test_generate_inputs_outputs() -> None:
-    """Test the group inputs and outputs of a node graph."""
-    ng = NodeGraph(name="test_inputs_outputs")
-    node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=1)
-    ng.add_node(NodePool.node_graph.test_add, "add2", x=2, y=node1.outputs.result)
-    ng.generate_inputs()
-    ng.generate_outputs()
-    assert len(ng.inputs) == 2
-    assert len(ng.outputs) == 2
-    assert len(ng.links) == 6
-    assert "add1.x" in ng.inputs
-    assert "add2.result" in ng.outputs

@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.node import Node
 from node_graph.socket import NodeSocket
+from node_graph.socket_spec import add_spec_field
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
@@ -91,27 +92,28 @@ class NodeGraph:
         if init_graph_level_nodes:
             self._init_graph_level_nodes(inputs, outputs)
 
-    def _init_graph_level_nodes(self, inputs, outputs, ctx=None):
+    def _init_graph_level_nodes(self, inputs, outputs):
         from dataclasses import replace
 
         inputs = self._socket_spec.validate_socket_data(inputs)
         outputs = self._socket_spec.validate_socket_data(outputs)
-        ctx = self._socket_spec.validate_socket_data(ctx)
 
         base_class = self.NodePool["graph_level"].load()
 
-        # graph inputs
+        # if inputs is None, we assume it's a dynamic inputs
         inputs = self._socket_spec.dynamic(Any) if inputs is None else inputs
         meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
+        self._inputs = inputs
         self.graph_inputs_spec = NodeSpec(
             identifier="graph_inputs",
             inputs=inputs,
             base_class=base_class,
         )
         self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
-        # graph outputs
+        # if outputs is None, we assume it's a dynamic outputs
         outputs = self._socket_spec.dynamic(Any) if outputs is None else outputs
+        self._outputs = outputs
         self.graph_outputs_spec = NodeSpec(
             identifier="graph_outputs",
             inputs=outputs,
@@ -120,7 +122,7 @@ class NodeGraph:
         graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
         graph_outputs.inputs._name = "outputs"
         # graph context
-        ctx = self._socket_spec.dynamic(Any) if ctx is None else ctx
+        ctx = self._socket_spec.dynamic(Any)
         meta = replace(ctx.meta, sub_socket_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
         self.graph_ctx_spec = NodeSpec(
@@ -177,7 +179,7 @@ class NodeGraph:
         self.graph_ctx.inputs._clear()
         self.graph_ctx.inputs._set_socket_value(value, link_limit=100000)
 
-    def generate_inputs(self, names: Optional[List[str]] = None) -> None:
+    def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""
         self.inputs._clear()
         all_names = set(self.nodes._get_keys())
@@ -196,6 +198,15 @@ class NodeGraph:
             )
             socket._name = node.name
             self.inputs._append(socket)
+            # update the _inputs spec
+            if hasattr(node, "_spec") and node._spec.inputs is not None:
+                self._inputs = add_spec_field(
+                    self._inputs, node.name, node._spec.inputs
+                )
+            else:
+                raise ValueError(
+                    f"Node {node.name} does not have inputs spec, cannot expose inputs."
+                )
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -205,7 +216,7 @@ class NodeGraph:
                 # add link from group inputs to node inputs
                 self.add_link(self.inputs[new_key], node.inputs[key])
 
-    def generate_outputs(self, names: Optional[List[str]] = None) -> None:
+    def expose_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from nodes."""
         self.outputs._clear()
         all_names = set(self.nodes._get_keys())
@@ -222,6 +233,15 @@ class NodeGraph:
             )
             socket._name = node.name
             self.outputs._append(socket)
+            # update the _outputs spec
+            if hasattr(node, "_spec") and node._spec.outputs is not None:
+                self._outputs = add_spec_field(
+                    self._outputs, node.name, node._spec.outputs
+                )
+            else:
+                raise ValueError(
+                    f"Node {node.name} does not have outputs spec, cannot expose outputs."
+                )
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -375,24 +395,14 @@ class NodeGraph:
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Export graph metadata including *live* graph-level IO specs.
-        We snapshot current shapes of graph inputs/outputs/ctx using `SocketSpec.from_namespace`.
-        """
-        self._inputs = SocketSpec.from_namespace(
-            self.graph_inputs.inputs, type_mapping=self.type_mapping
-        )
-        self._outputs = SocketSpec.from_namespace(
-            self.graph_outputs.inputs, type_mapping=self.type_mapping
-        )
-        self._ctx = SocketSpec.from_namespace(
-            self.graph_ctx.inputs, type_mapping=self.type_mapping
-        )
+        """Export graph metadata including *live* graph-level IO specs."""
         meta: Dict[str, Any] = {
             "graph_type": self.graph_type,
-            "inputs_spec": self._inputs.to_dict(),
-            "outputs_spec": self._outputs.to_dict(),
-            "ctx_spec": self._ctx.to_dict(),
         }
+        if self._inputs is not None:
+            meta["inputs_spec"] = self._inputs.to_dict()
+        if self._outputs is not None:
+            meta["outputs_spec"] = self._outputs.to_dict()
         # also save the parent class information
         meta["graph_class"] = {
             "callable_name": self.__class__.__name__,
@@ -463,7 +473,7 @@ class NodeGraph:
             )
 
     @classmethod
-    def from_dict(cls, ngdata: Dict[str, Any]) -> "NodeGraph":
+    def from_dict(cls, ngdata: Dict[str, Any]) -> NodeGraph:
         """Rebuilds a node graph from a dictionary.
 
         Args:
@@ -475,7 +485,7 @@ class NodeGraph:
 
         md = ngdata.get("metadata", {}) or {}
 
-        ng: "NodeGraph" = cls(
+        ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
             graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
@@ -495,12 +505,7 @@ class NodeGraph:
             if "outputs_spec" in md
             else None
         )
-        ctx_spec = (
-            SocketSpec.from_dict(md["ctx_spec"], type_mapping=ng.type_mapping)
-            if "ctx_spec" in md
-            else None
-        )
-        ng._init_graph_level_nodes(inputs_spec, outputs_spec, ctx_spec)
+        ng._init_graph_level_nodes(inputs_spec, outputs_spec)
 
         for ndata in ngdata["nodes"].values():
             ng.add_node_from_dict(ndata)

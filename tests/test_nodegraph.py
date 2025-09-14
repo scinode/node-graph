@@ -1,7 +1,28 @@
-from node_graph import NodeGraph, node, NodePool
-from node_graph.socket_spec import namespace
+from node_graph import NodeGraph, node, NodePool, namespace
 import pytest
 from typing import Any
+
+
+@pytest.fixture
+def test_ng():
+    """A test node_graph."""
+
+    @node(
+        inputs=namespace(
+            input1=namespace(x=Any, y=Any), input2=namespace(x=Any, y=Any)
+        ),
+        outputs=namespace(
+            output1=namespace(x=Any, y=Any), output2=namespace(x=Any, y=Any)
+        ),
+    )
+    def add():
+        pass
+
+    ng = NodeGraph(name="test_nodegraph")
+    ng.add_node(add, "add1")
+    ng.add_node(add, "add2")
+    ng.add_node(add, "add3")
+    return ng
 
 
 def test_from_dict(ng_decorator):
@@ -123,56 +144,73 @@ def test_load_graph():
     assert ng1.nodes.test1.inputs._value == ng.nodes.test1.inputs._value
 
 
-def test_generate_inputs(ng):
+def test_expose_inputs(test_ng):
     """Test generation of inputs from nodes"""
-    ng.generate_inputs()
-    assert ng.inputs.float1._value == ng.nodes["float1"].inputs._value
+    ng = test_ng
+    ng.expose_inputs()
+    assert "add1" in ng.inputs
+    assert "add1" in ng._inputs.fields
     assert ng.inputs.add1._value == ng.nodes["add1"].inputs._value
     assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
 
 
-def test_generate_inputs_names(ng):
+def test_expose_inputs_names(test_ng):
     """Test generation of inputs from named nodes"""
-    ng.generate_inputs(names=["float1", "add2"])
-    assert ng.inputs.float1._value == ng.nodes["float1"].inputs._value
-    assert "add1" not in ng.inputs
+    ng = test_ng
+    ng.expose_inputs(names=["add1", "add2"])
+    assert "add1" in ng.inputs
+    assert "add2" in ng.inputs
+    assert "add3" not in ng.inputs
     assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
 
 
-def test_generate_inputs_names_invalid(ng):
+def test_expose_inputs_names_invalid(test_ng):
     """Test that input generation fails for invalid name"""
     name = "missing"
     with pytest.raises(
         ValueError,
         match="The following named nodes do not exist:",
     ):
-        ng.generate_inputs(names=[name])
+        test_ng.expose_inputs(names=[name])
 
 
-def test_generate_outputs(ng):
+def test_expose_outputs(test_ng):
     """Test generation of outputs from nodes"""
-    ng.generate_outputs()
-    assert ng.outputs.float1._value == ng.nodes["float1"].outputs._value
+    ng = test_ng
+    ng.expose_outputs()
+    assert "add1" in ng.outputs
+    assert "add1" in ng._outputs.fields
     assert ng.outputs.add1._value == ng.nodes["add1"].outputs._value
     assert ng.outputs.add2._value == ng.nodes["add2"].outputs._value
 
 
-def test_generate_outputs_names(ng):
+def test_expose_outputs_names(test_ng):
     """Test generation of outputs from named nodes"""
-    ng.generate_outputs(names=["add1"])
-    assert "float1" not in ng.outputs
+    ng = test_ng
+    ng.expose_outputs(names=["add1"])
     assert ng.outputs.add1._value == ng.nodes["add1"].outputs._value
     assert "add2" not in ng.outputs
 
 
-def test_generate_outputs_names_invalid(ng):
+def test_expose_outputs_names_invalid(test_ng):
     """Test that output generation fails for invalid name"""
     name = "missing"
     with pytest.raises(
         ValueError,
         match="The following named nodes do not exist:",
     ):
-        ng.generate_outputs(names=[name])
+        test_ng.expose_outputs(names=[name])
+
+
+def test_expose_inputs_outputs() -> None:
+    """Test the group inputs and outputs of a node graph."""
+    ng = NodeGraph(name="test_inputs_outputs")
+    ng.add_node(NodePool.node_graph.test_add, "add1")
+    with pytest.raises(
+        ValueError,
+        match="Node add1 does not have inputs spec, cannot expose",
+    ):
+        ng.expose_inputs()
 
 
 def test_build_inputs_outputs(ng):
