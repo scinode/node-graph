@@ -203,6 +203,10 @@ class NodeGraph:
                 self._inputs = add_spec_field(
                     self._inputs, node.name, node._spec.inputs
                 )
+            else:
+                raise ValueError(
+                    f"Node {node.name} does not have inputs spec, cannot expose inputs."
+                )
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -233,6 +237,10 @@ class NodeGraph:
             if hasattr(node, "_spec") and node._spec.outputs is not None:
                 self._outputs = add_spec_field(
                     self._outputs, node.name, node._spec.outputs
+                )
+            else:
+                raise ValueError(
+                    f"Node {node.name} does not have outputs spec, cannot expose outputs."
                 )
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()

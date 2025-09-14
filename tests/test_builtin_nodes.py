@@ -109,10 +109,8 @@ def test_expose_inputs_outputs() -> None:
     ng = NodeGraph(name="test_inputs_outputs")
     node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=1)
     ng.add_node(NodePool.node_graph.test_add, "add2", x=2, y=node1.outputs.result)
-    ng.expose_inputs()
-    ng.expose_outputs()
-    assert len(ng.inputs) == 2
-    assert len(ng.outputs) == 2
-    assert len(ng.links) == 6
-    assert "add1.x" in ng.inputs
-    assert "add2.result" in ng.outputs
+    with pytest.raises(
+        ValueError,
+        match="Node add2 does not have inputs spec, cannot expose",
+    ):
+        ng.expose_inputs()
