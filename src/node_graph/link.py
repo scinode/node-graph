@@ -31,8 +31,7 @@ class NodeLink:
         """Check if the socket type match, and belong to the same node graph."""
         if self.from_node.graph != self.to_node.graph:
             raise Exception(
-                "Can not link sockets from different {}. {} and {}".format(
-                    self.from_node.graph.__class__.__name__,
+                "Can not link sockets from different graphs. {} and {}".format(
                     self.from_node.graph,
                     self.to_node.graph,
                 )
@@ -60,7 +59,7 @@ class NodeLink:
             # handle multi-link here
             raise Exception(
                 "Socket {}: number of links {} larger than the link limit {}.".format(
-                    self.to_socket._name,
+                    self.to_socket._full_name_with_node,
                     len(self.to_socket._links) + 1,
                     self.to_socket._link_limit,
                 )

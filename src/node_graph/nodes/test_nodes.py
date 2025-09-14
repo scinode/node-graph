@@ -8,9 +8,9 @@ class TestFloat(Node):
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
-        self.add_property("node_graph.float", "value", default=0.0)
 
-    def create_sockets(self):
+    def update_sockets(self):
+        self.add_input("node_graph.float", "value", default=0.0)
         self.add_output("node_graph.float", "float")
         self.add_output("node_graph.any", "_outputs")
 
@@ -29,9 +29,9 @@ class TestString(Node):
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
-        self.add_property("node_graph.string", "value", default="")
 
-    def create_sockets(self):
+    def update_sockets(self):
+        self.add_input("node_graph.string", "value", default="")
         self.add_output("node_graph.string", "string")
         self.add_output("node_graph.any", "_outputs")
 
@@ -63,7 +63,7 @@ class TestAdd(Node):
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
 
-    def create_sockets(self):
+    def update_sockets(self):
         self.inputs._clear()
         self.outputs._clear()
         self.add_input("node_graph.float", "x")
@@ -102,7 +102,7 @@ class TestEnum(Node):
             ],
         )
 
-    def create_sockets(self):
+    def update_sockets(self):
         self.inputs._clear()
         self.outputs._clear()
         self.add_output("node_graph.any", "result")
@@ -132,10 +132,10 @@ class TestEnumUpdate(Node):
                 ["add", "test_add", "add function"],
                 ["sqrt", "test_sqrt", "sqrt function"],
             ],
-            update=self.create_sockets,
+            update=self.update_sockets,
         )
 
-    def create_sockets(self):
+    def update_sockets(self):
         self.inputs._clear()
         self.outputs._clear()
         if self.properties["function"].value in ["add"]:
@@ -145,6 +145,7 @@ class TestEnumUpdate(Node):
             self.add_input("node_graph.float", "x")
         self.add_output("node_graph.any", "result")
         self.add_output("node_graph.any", "_outputs")
+        self._ensure_builtins()
 
     def get_executor(self):
         return {

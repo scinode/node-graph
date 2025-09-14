@@ -1,6 +1,7 @@
 import pytest
-from node_graph.decorator import node
-from node_graph import NodeGraph, Node, NodePool
+from node_graph import NodeGraph, Node, NodePool, node
+from node_graph.socket_spec import namespace as ns
+from typing import Any
 
 
 @pytest.fixture
@@ -22,22 +23,9 @@ def node_with_namespace_socket():
 @pytest.fixture
 def func_with_namespace_socket():
     @node(
-        inputs={
-            "nested": {"identifier": "node_graph.namespace"},
-            "nested.d": {},
-            "nested.f": {"identifier": "node_graph.namespace"},
-            "nested.f.g": {},
-            "nested.f.h": {},
-        },
-        outputs={
-            "sum": {},
-            "product": {},
-            "nested": {"identifier": "node_graph.namespace"},
-            "nested.sum": {},
-            "nested.product": {},
-        },
+        outputs=ns(sum=Any, product=Any, nested=ns(sum=Any, product=Any)),
     )
-    def func(a, b=1, nested={}):
+    def func(a, b=1, nested: ns(d=Any, f=ns(g=Any, h=Any)) = {}):
         return {
             "sum": a + b,
             "product": a * b,
@@ -155,19 +143,12 @@ def decorated_myadd_group(decorated_myadd):
     """Generate a decorated node group for test."""
     myadd = decorated_myadd
 
-    @node.graph_builder(outputs={"result": {"identifier": "node_graph.any"}})
+    @node.graph()
     def myaddgroup(x, y):
-        ng = NodeGraph()
-        add1 = ng.add_node(myadd, "add1")
-        add1.set({"t": 3, "x": x, "y": 2})
-        add2 = ng.add_node(myadd, "add2")
-        add2.set({"x": y, "y": 3})
-        add3 = ng.add_node(myadd, "add3")
-        add3.set({"t": 2})
-        ng.add_link(add1.outputs[0], add3.inputs[0])
-        ng.add_link(add2.outputs[0], add3.inputs[1])
-        ng.outputs.result = ng.nodes.add3.outputs.result
-        return ng
+        add1 = myadd(t=3, x=x, y=2)
+        add2 = myadd(x=y, y=3)
+        add3 = myadd(t=2, x=add1.result, y=add2.result)
+        return add3.result
 
     return myaddgroup
 
@@ -178,11 +159,6 @@ def node_with_decorated_node(decorated_myadd):
 
     @node(
         identifier="node_with_decorated_node",
-        inputs={
-            "x": {"identifier": "node_graph.float"},
-            "y": {"identifier": "node_graph.float"},
-        },
-        outputs={"result": {"identifier": "node_graph.any"}},
     )
     def node_with_decorated_node(x, y):
         ng = NodeGraph("node_in_decorated_node")

@@ -24,23 +24,6 @@ def get_executor_from_path(path: dict | str) -> Any:
     return executor
 
 
-def validate_socket_data(data: List[str]) -> Dict[str, Any]:
-    """Validate socket data and convert it to a dictionary.
-    If data is None, return an empty dictionary.
-    If data is a list, convert it to a dictionary with empty dictionaries as values.
-    """
-    if data is None:
-        return {}
-    if isinstance(data, list):
-        if not all(isinstance(d, str) for d in data):
-            raise TypeError("All elements in the list must be strings")
-        return {d: {} for d in data}
-    elif isinstance(data, dict):
-        return data
-    else:
-        raise TypeError(f"Expected list or dict, got {type(data).__name__}")
-
-
 def nodegaph_to_short_json(
     ngdata: Dict[str, Union[str, List, Dict]]
 ) -> Dict[str, Union[str, Dict]]:
@@ -56,7 +39,7 @@ def nodegaph_to_short_json(
     for name, node in ngdata["nodes"].items():
         # Add required inputs to nodes
         inputs = []
-        for input in node["inputs"]["sockets"].values():
+        for input in node["input_sockets"]["sockets"].values():
             metadata = input.get("metadata", {}) or {}
             if metadata.get("required", False):
                 inputs.append(
@@ -85,6 +68,15 @@ def nodegaph_to_short_json(
                 "name": link["from_socket"],
             }
         )
+    # remove the inputs socket of "graph_inputs"
+    if "graph_inputs" in ngdata_short["nodes"]:
+        ngdata_short["nodes"]["graph_inputs"]["inputs"] = []
+    # remove the empty graph-level nodes
+    for name in ["graph_inputs", "graph_outputs", "graph_ctx"]:
+        if name in ngdata_short["nodes"]:
+            node = ngdata_short["nodes"][name]
+            if len(node["inputs"]) == 0 and len(node["outputs"]) == 0:
+                del ngdata_short["nodes"][name]
 
     return ngdata_short
 
@@ -96,15 +88,10 @@ def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     ntdata["nodes"] = {}
     for node in nodes:
         node.setdefault("metadata", {})
-        node["properties"] = validate_socket_data(node.get("properties", {}))
-        node["inputs"] = {
-            "name": "inputs",
-            "sockets": validate_socket_data(node.get("inputs", {})),
-        }
-        node["outputs"] = {
-            "name": "outputs",
-            "sockets": validate_socket_data(node.get("outputs", {})),
-        }
+        node["metadata"]["identifier"] = node.pop("identifier", None)
+        node["properties"] = node.get("properties", {})
+        node["inputs"] = node.get("inputs", {})
+        node["outputs"] = node.get("outputs", {})
         ntdata["nodes"][node["name"]] = node
     return ntdata
 
@@ -115,7 +102,10 @@ def deep_copy_only_dicts(
     """Copy all nested dictionaries in a structure but keep
     the immutable values (such as integers, strings, or tuples)
     shared between the original and the copy"""
-    if isinstance(original, dict):
+    from node_graph.socket import TaggedValue
+
+    # TaggedValue should not be unpacked
+    if isinstance(original, dict) and not isinstance(original, TaggedValue):
         return {k: deep_copy_only_dicts(v) for k, v in original.items()}
     else:
         # Return the original value if it's not a dictionary
@@ -138,18 +128,21 @@ def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
         args_data["var_kwargs"] = name
 
 
-def collect_values_inside_namespace(namespace: Dict[str, Any]) -> Dict[str, Any]:
+def collect_values_inside_namespace(
+    namespace: Dict[str, Any], include_none: bool = True
+) -> Dict[str, Any]:
     """Collect values inside the namespace."""
     values = {}
-    for key, socket in namespace["sockets"].items():
+    for key, socket in namespace.get("sockets", {}).items():
         if "sockets" in socket:
-            data = collect_values_inside_namespace(socket)
+            data = collect_values_inside_namespace(socket, include_none=include_none)
             if data:
                 values[key] = data
         if "property" in socket:
             value = socket.get("property", {}).get("value")
-            if value is not None:
-                values[key] = value
+            if value is None and not include_none:
+                continue
+            values[key] = value
     return values
 
 
@@ -203,3 +196,20 @@ def socket_value_id_mapping(socket):
             else:
                 mapping[value_id] = [sub_socket]
     return mapping
+
+
+def tag_socket_value(socket: "NodeSocket") -> "NodeSocket":
+    """Use a tagged object for the socket's property value."""
+    from node_graph.socket import NodeSocketNamespace, TaggedValue
+
+    if isinstance(socket, NodeSocketNamespace):
+        for sub_socket in socket._sockets.values():
+            tag_socket_value(sub_socket)
+    else:
+        # replace the socket's property value directly with a TaggedValue
+        # this avoids triggering the value setter
+        if socket.property:
+            if socket.property.value is not None:
+                socket.property.value = TaggedValue(
+                    socket.property.value, socket=socket
+                )

@@ -6,15 +6,12 @@ metadata:
 nodes:
   - identifier: node_graph.test_float
     name: float1
-    properties:
-      value:
-        value: 2.0
+    inputs:
+      value: 2.0
   - identifier: node_graph.test_add
     name: add1
     inputs:
-      y:
-        property:
-          value: 3.0
+      y: 3.0
 links:
   - to_node: add1
     to_socket: "x"

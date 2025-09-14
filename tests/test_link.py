@@ -6,7 +6,7 @@ def test_link_another_node_graph(ng, ng_decorator):
     try:
         ng.add_link(ng.nodes["add1"].outputs[0], ng_decorator.nodes["add3"].inputs[1])
     except Exception as e:
-        assert "Can not link sockets from different NodeGraph" in str(e)
+        assert "Can not link sockets from different graphs" in str(e)
 
 
 def test_max_link_limit(ng):
@@ -14,7 +14,10 @@ def test_max_link_limit(ng):
     try:
         ng.add_link(ng.nodes["float1"].outputs[0], ng.nodes["add2"].inputs["y"])
     except Exception as e:
-        assert str(e) == "Socket y: number of links 2 larger than the link limit 1."
+        assert (
+            str(e)
+            == "Socket add2.inputs.y: number of links 2 larger than the link limit 1."
+        )
 
 
 def test_clear(ng):

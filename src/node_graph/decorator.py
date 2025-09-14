@@ -1,11 +1,11 @@
 from __future__ import annotations
-import functools
-from typing import Any, List, Dict, Tuple, Union, Optional, Callable
+from typing import Any, Optional, Callable, List, Dict
 import inspect
-from node_graph.executor import NodeExecutor
-from node_graph.node import Node
-from node_graph.orm.mapping import type_mapping as node_graph_type_mapping
-from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
+from .executor import RuntimeExecutor
+from .error_handler import ErrorHandlerSpec, normalize_error_handlers
+from .node import Node
+from .node_spec import NodeSpec, NodeHandle, BaseHandle
+from .socket_spec import infer_specs_from_callable, SocketSpec
 
 
 def set_node_arguments(call_args, call_kwargs, node):
@@ -18,7 +18,7 @@ def set_node_arguments(call_args, call_kwargs, node):
             raise TypeError(
                 f"Too many positional arguments. expects {len(input_names)} but you supplied {len(call_args)}."
             )
-    node.set(call_kwargs)
+    node.set_inputs(call_kwargs)
     outputs = [
         output for output in node.outputs if output._name not in ["_wait", "_outputs"]
     ]
@@ -28,225 +28,37 @@ def set_node_arguments(call_args, call_kwargs, node):
         return node.outputs
 
 
-def inspect_function(
-    func: Callable[..., Any]
-) -> Tuple[
-    List[List[Union[str, Any]]],
-    Dict[str, Dict[str, Union[Any, Optional[Any]]]],
-    Optional[str],
-    Optional[str],
-]:
-    """inspect the arguments of a function, and return a list of arguments
-    and a list of keyword arguments, and a list of default values
-    and a list of annotations
-
-    Args:
-        func (Callable[..., Any]): any function
-
-    Returns:
-        Tuple[List[List[Union[str, Any]]], Dict[str, Dict[str, Union[Any, Optional[Any]]]],
-        Optional[str], Optional[str]]: (args, kwargs, defaults, annotations)
-    """
-
-    # Get the signature of the function
-    signature = inspect.signature(func)
-
-    # Get the parameters of the function
-    parameters = signature.parameters
-
-    # Iterate over the parameters
-    args = []
-    kwargs = {}
-    var_args = None
-    var_kwargs = None
-    for name, parameter in parameters.items():
-        if parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
-            arg: List[Union[str, Any]] = [name, parameter.annotation]
-            args.append(arg)
-        elif parameter.kind in [
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.KEYWORD_ONLY,
-        ]:
-            kwargs[name] = {"type": parameter.annotation}
-            if parameter.default is not inspect.Parameter.empty:
-                kwargs[name]["default"] = parameter.default
-                kwargs[name]["has_default"] = True
-            else:
-                kwargs[name]["has_default"] = False
-        elif parameter.kind == inspect.Parameter.VAR_POSITIONAL:
-            var_args = name
-        elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
-            var_kwargs = name
-
-    return args, kwargs, var_args, var_kwargs
-
-
-def generate_input_sockets(
-    func: Callable[..., Any],
-    inputs: Optional[Dict[str, Any]] = None,
-    properties: Optional[Dict[str, Any]] = None,
-    type_mapping: Optional[Dict[type, str]] = None,
-) -> List[Dict[str, Union[str, Dict[str, Union[str, Any]]]]]:
-    """Generate input sockets from a function.
-    If the input sockets is not given, then the function
-    will be used to update the input sockets."""
-
-    if type_mapping is None:
-        type_mapping = node_graph_type_mapping
-    inputs = inputs if inputs is not None else {}
-    properties = properties if properties is not None else {}
-    args, kwargs, var_args, var_kwargs = inspect_function(func)
-    user_defined_input_names = list(inputs.keys()) + list(properties.keys())
-    for arg in args:
-        if arg[0] not in user_defined_input_names:
-            inputs[arg[0]] = {
-                "identifier": type_mapping.get(arg[1], type_mapping["default"]),
-                "metadata": {
-                    "arg_type": "args",
-                    "required": True,
-                    "function_socket": True,
-                },
-            }
-    for name, kwarg in kwargs.items():
-        if name not in user_defined_input_names:
-            identifier = type_mapping.get(kwarg["type"], type_mapping["default"])
-            input = {
-                "identifier": identifier,
-                "metadata": {
-                    "arg_type": "kwargs",
-                    "required": True,
-                    "function_socket": True,
-                },
-                "property": {"identifier": identifier},
-            }
-            if kwarg.get("has_default", False):
-                input["property"]["default"] = kwarg["default"]
-                input["metadata"]["required"] = False
-            inputs[name] = input
-    # if var_args in input_names, set the link_limit to 1000000 and the identifier to namespace
-    if var_args is not None:
-        has_var_args = False
-        for name, input in inputs.items():
-            if name == var_args:
-                input.setdefault("link_limit", 1000000)
-                if (
-                    input.get("identifier", type_mapping["namespace"])
-                    != type_mapping["namespace"]
-                ):
-                    raise ValueError(
-                        "Socket with var_args must have namespace identifier"
-                    )
-                input["identifier"] = type_mapping["namespace"]
-                input.setdefault("metadata", {})
-                input["metadata"]["arg_type"] = "var_args"
-                has_var_args = True
-        if not has_var_args:
-            inputs[var_args] = {
-                "identifier": type_mapping["namespace"],
-                "metadata": {"arg_type": "var_args", "function_socket": True},
-                "link_limit": 1000000,
-            }
-    if var_kwargs is not None:
-        has_var_kwargs = False
-        for name, input in inputs.items():
-            if name == var_kwargs:
-                input.setdefault("link_limit", 1000000)
-                if (
-                    input.get("identifier", type_mapping["namespace"])
-                    != type_mapping["namespace"]
-                ):
-                    raise ValueError(
-                        "Socket with var_args must have namespace identifier"
-                    )
-                input["identifier"] = type_mapping["namespace"]
-                input.setdefault("metadata", {})
-                input["metadata"].update({"arg_type": "var_kwargs", "dynamic": True})
-                has_var_kwargs = True
-        if not has_var_kwargs:
-            inputs[var_kwargs] = {
-                "identifier": type_mapping["namespace"],
-                "metadata": {
-                    "arg_type": "var_kwargs",
-                    "dynamic": True,
-                    "function_socket": True,
-                },
-                "link_limit": 1000000,
-            }
-    final_inputs = {
-        "name": "inputs",
-        "identifier": "node_graph.namespace",
-        "sockets": inputs,
-        "metadata": {"dynamic": var_kwargs is not None},
-    }
-    return final_inputs
-
-
 def build_node_from_callable(
     executor: Callable,
-    inputs: Optional[List[str | dict]] = None,
-    outputs: Optional[List[str | dict]] = None,
+    inputs: Optional[SocketSpec | List[str]] = None,
+    outputs: Optional[SocketSpec | List[str]] = None,
 ) -> Node:
     """Build task from a callable object.
     First, check if the executor is already a task.
     If not, check if it is a function or a class.
     If it is a function, build task from function.
     """
-    from node_graph.nodes.factory.function_node import DecoratedFunctionNodeFactory
 
     # if it already has Node class, return it
     if (
-        hasattr(executor, "_NodeCls")
-        and inspect.isclass(executor._NodeCls)
-        and issubclass(executor._NodeCls, Node)
+        isinstance(executor, BaseHandle)
         or inspect.isclass(executor)
         and issubclass(executor, Node)
     ):
         return executor
-    if isinstance(executor, str):
-        executor = NodeExecutor(module_path=executor).executor
     if callable(executor):
-        return DecoratedFunctionNodeFactory.from_function(
-            executor, inputs=inputs, outputs=outputs
-        )
+        return node(inputs=inputs, outputs=outputs)(executor)
 
     raise ValueError(f"The executor {executor} is not supported.")
 
 
-def _make_wrapper(NodeCls, original_callable):
-    """
-    Common wrapper that, when called, adds a node to the current graph
-    and returns the outputs.
-    """
-
-    @functools.wraps(original_callable)
-    def wrapper(*call_args, **call_kwargs):
-        from node_graph.manager import get_current_graph
-
-        graph = get_current_graph()
-        if graph is None:
-            raise RuntimeError(
-                f"No active Graph available for {original_callable.__name__}."
-            )
-        node = graph.add_node(NodeCls)
-        active_zone = getattr(graph, "_active_zone", None)
-        if active_zone:
-            active_zone.children.add(node)
-        outputs = set_node_arguments(call_args, call_kwargs, node)
-        return outputs
-
-    # Expose the NodeCls on the wrapper if you want
-    wrapper._NodeCls = NodeCls
-    wrapper._func = original_callable
-    return wrapper
-
-
 def decorator_node(
     identifier: Optional[str] = None,
-    node_type: str = "Normal",
-    properties: Optional[Dict[str, Any]] = None,
-    inputs: Optional[Dict[str, Any]] = None,
-    outputs: Optional[Dict[str, Any]] = None,
+    inputs: Optional[SocketSpec | List[str]] = None,
+    outputs: Optional[SocketSpec | List[str]] = None,
+    error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
     catalog: str = "Others",
+    base_class: type | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
     After decoration, calling that function `func(x, y, ...)`
@@ -256,69 +68,73 @@ def decorator_node(
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        properties (dict): node properties
         inputs (dict): node inputs
         outputs (dict): node outputs
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        node_outputs = outputs or {"result": {"identifier": "node_graph.any"}}
-        NodeCls = DecoratedFunctionNodeFactory.from_function(
-            func=func,
-            identifier=identifier,
-            node_type=node_type,
-            properties=properties,
-            inputs=inputs,
-            outputs=node_outputs,
+    def wrap(func) -> NodeHandle:
+        ident = identifier or func.__name__
+        in_spec, out_spec = infer_specs_from_callable(func, inputs, outputs)
+        handlers = normalize_error_handlers(error_handlers)
+        spec = NodeSpec(
+            identifier=ident,
             catalog=catalog,
+            inputs=in_spec,
+            outputs=out_spec,
+            executor=RuntimeExecutor.from_callable(func),
+            error_handlers=handlers or {},
+            base_class_path=f"{base_class.__module__}.{base_class.__name__}"
+            if base_class
+            else None,
+            metadata={"node_type": "Normal", "is_dynamic": True},
         )
+        handle = NodeHandle(spec)
+        handle._func = func
+        return handle
 
-        return _make_wrapper(NodeCls, func)
-
-    return decorator
+    return wrap
 
 
-def decorator_graph_builder(
+def decorator_graph(
     identifier: Optional[str] = None,
-    properties: Optional[Dict[str, Any]] = None,
-    inputs: Optional[Dict[str, Any]] = None,
-    outputs: Optional[Dict[str, Any]] = None,
+    inputs: Optional[SocketSpec | list] = None,
+    outputs: Optional[SocketSpec | list] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Generate a decorator that register a function as a graph_builder node.
+    """Generate a decorator that register a function as a graph node.
 
     Attributes:
         indentifier (str): node identifier
         catalog (str): node catalog
-        properties (dict): node properties
         inputs (dict): node inputs
         outputs (dict): node outputs
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        from node_graph.nodes.builtins import GraphBuilderNode
+    def wrap(func) -> NodeHandle:
+        ident = identifier or func.__name__
 
-        NodeCls = DecoratedFunctionNodeFactory.from_function(
-            func=func,
-            identifier=identifier,
-            node_type="node_group",
-            properties=properties,
-            inputs=inputs,
-            outputs=outputs,
+        in_spec, out_spec = infer_specs_from_callable(func, inputs, outputs)
+
+        spec = NodeSpec(
+            identifier=ident,
             catalog=catalog,
-            node_class=GraphBuilderNode,
+            inputs=in_spec,
+            outputs=out_spec,
+            executor=RuntimeExecutor.from_callable(func),
+            metadata={"node_type": "Graph", "is_dynamic": True, "graph_callable": True},
         )
+        handle = NodeHandle(spec)
+        handle._func = func
+        return handle
 
-        return _make_wrapper(NodeCls, func)
-
-    return decorator
+    return wrap
 
 
 class NodeDecoratorCollection:
     """Collection of node decorators."""
 
     node: Callable[..., Any] = staticmethod(decorator_node)
-    graph_builder: Callable[..., Any] = staticmethod(decorator_graph_builder)
+    graph: Callable[..., Any] = staticmethod(decorator_graph)
 
     # Alias '@node' to '@node.node'.
     def __call__(self, *args, **kwargs):

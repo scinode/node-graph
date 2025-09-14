@@ -36,14 +36,17 @@ class NodeProperty:
         self.update = update
         self.arg_type = arg_type
         self._value = default
-        self._value_id = None
         if value is not None:
             self.value = value
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the property to a dictionary for database storage."""
+        from node_graph.socket import TaggedValue
+
         data = {
-            "value": self.value,
+            "value": self.value.__wrapped__
+            if isinstance(self.value, TaggedValue)
+            else self.value,
             "name": self.name,
             "identifier": self.identifier,
             "default": self.default,
@@ -91,8 +94,6 @@ class NodeProperty:
         """Set the value and invoke the update callback if present."""
         self.validate(value)
         self._value = value
-        # Store the ID of the value to track link
-        self._value_id = id(value)
         if self.update:
             self.update()
 
@@ -100,7 +101,9 @@ class NodeProperty:
         """Validate the given value based on allowed types."""
         if not isinstance(value, self.allowed_types):
             raise TypeError(
-                f"Expected value of type {self.allowed_types}, got {type(value).__name__} instead."
+                f"Invalid value for property '{self.name}': "
+                f"expected {self.allowed_types}, but got {type(value).__name__} "
+                f"(value={value!r})."
             )
 
     def copy(self) -> "NodeProperty":
@@ -126,7 +129,7 @@ class NodeProperty:
         if PropertyPool is None:
             from node_graph.properties import PropertyPool
 
-        ItemClass = get_item_class(identifier, PropertyPool, NodeProperty)
+        ItemClass = get_item_class(identifier, PropertyPool)
         return ItemClass(name=name, **kwargs)
 
     def __str__(self) -> str:

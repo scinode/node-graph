@@ -1,15 +1,15 @@
 from node_graph.socket import NodeSocket
-from node_graph.serializer import SerializeJson, SerializePickle
+from node_graph.serializer import SerializeJson
 
 
-class SocketAny(NodeSocket, SerializePickle):
+class SocketAny(NodeSocket, SerializeJson):
     """Socket that accepts any type of data."""
 
     _identifier: str = "node_graph.any"
     _socket_property_identifier: str = "node_graph.any"
 
 
-class SocketNamespace(NodeSocket, SerializePickle):
+class SocketNamespace(NodeSocket, SerializeJson):
     """Socket that holds a namespace."""
 
     _identifier: str = "node_graph.namespace"

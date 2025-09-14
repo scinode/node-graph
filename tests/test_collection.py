@@ -17,7 +17,8 @@ def test_base_collection():
     assert len(coll) == 2
     assert node1.graph == ng
     # copy
-    coll1 = coll._copy()
+    ng1 = NodeGraph(name="test_base_collection")
+    coll1 = coll._copy(graph=ng1)
     assert len(coll1) == 2
     # delete
     coll._pop(node1.name)

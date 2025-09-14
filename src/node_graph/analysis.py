@@ -67,10 +67,6 @@ class NodeGraphAnalysis:
         self._cache_descendants: Dict[str, Set[str]] = {}
         self._cache_zone: Dict[str, Dict[str, List[str]]] = {}
 
-    # -------------------------------------------------------------------------
-    # Public API that uses cached data
-    # -------------------------------------------------------------------------
-
     def get_input_links(self, node: Node) -> List[NodeLink]:
         """
         Return all links leading INTO the given node (by name-based lookup).
@@ -171,9 +167,6 @@ class NodeGraphAnalysis:
         self._ensure_cache_valid()
         return self._cache_zone
 
-    # -------------------------------------------------------------------------
-    # Internals
-    # -------------------------------------------------------------------------
     @staticmethod
     def _node_changed(g1: NodeGraph, n1: Node, g2: NodeGraph, n2: Node) -> bool:
         """
@@ -250,9 +243,6 @@ class NodeGraphAnalysis:
         # Fallback to normal "!=" comparison
         return v1 != v2
 
-    # -------------------------------------------------------------------------
-    # Caching logic
-    # -------------------------------------------------------------------------
     def _ensure_cache_valid(self):
         """
         If the graph version changed, rebuild the adjacency-based caches:

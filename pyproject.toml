@@ -32,7 +32,8 @@ dependencies = [
     "colorama",
     "termcolor",
     "cloudpickle",
-    "node-graph-widget"
+    "node-graph-widget",
+    "wrapt"
 ]
 
 [project.urls]
@@ -59,9 +60,7 @@ tests = [
 
 [project.entry-points."node_graph.node"]
 "node_graph.node" = "node_graph.node:Node"
-"node_graph.graph_inputs" = "node_graph.nodes.builtins:GraphInputs"
-"node_graph.graph_outputs" = "node_graph.nodes.builtins:GraphOutputs"
-"node_graph.graph_ctx" = "node_graph.nodes.builtins:GraphContext"
+"node_graph.graph_level" = "node_graph.nodes.builtins:GraphLevelNode"
 "node_graph.test_float" = "node_graph.nodes.test_nodes:TestFloat"
 "node_graph.test_string" = "node_graph.nodes.test_nodes:TestString"
 "node_graph.test_add" = "node_graph.nodes.test_nodes:TestAdd"

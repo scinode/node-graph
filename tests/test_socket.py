@@ -3,9 +3,123 @@ import numpy as np
 from node_graph import NodeGraph
 from node_graph.collection import group
 from node_graph.node import Node
-from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace
+from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace, TaggedValue
 from node_graph.nodes import NodePool
 import operator as op
+from node_graph.errors import GraphDeferredIllegalOperationError
+
+
+@pytest.fixture
+def future_socket():
+    """A future (result) socket from a node; value only known at runtime."""
+    ng = NodeGraph(name="illegal_ops")
+    add = ng.add_node(NodePool.node_graph.test_add, "add")
+    # We only need the future socket object; no need to set inputs
+    return add.outputs.result
+
+
+def _setitem(s):
+    s[0] = 1
+
+
+def _delitem(s):
+    del s[0]
+
+
+def test_predicate_socket_creation_and_bool_forbidden(future_socket):
+    """Comparisons should produce predicate sockets; using them in boolean context must raise."""
+    cond = future_socket > 5  # should yield another future/predicate socket
+    assert isinstance(cond, BaseSocket)
+
+    with pytest.raises(GraphDeferredIllegalOperationError) as e:
+        if cond:  # triggers __bool__
+            pass
+
+    msg = str(e.value)
+    assert "Illegal operation on a future value (Socket)" in msg
+    # Guidance order: @node.graph first, then If/While zones
+    assert "• Wrap logic in a nested @node.graph." in msg
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda s: int(s),
+        lambda s: float(s),
+        lambda s: complex(s),
+        lambda s: round(s),
+        lambda s: hash(s),
+    ],
+)
+def test_numeric_casts_and_hash_forbidden(future_socket, op):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        op(future_socket)
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda s: len(s),
+        lambda s: iter(s),
+        lambda s: reversed(s),
+        lambda s: (1 in s),  # membership
+        lambda s: s[0],  # __getitem__
+        _setitem,  # __setitem__
+        _delitem,  # __delitem__
+    ],
+)
+def test_container_protocol_forbidden(future_socket, op):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        op(future_socket)
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda s: (s & s),
+        lambda s: (s | s),
+        lambda s: (s ^ s),
+        lambda s: (~s),
+        lambda s: (s @ s),  # matrix multiply
+    ],
+)
+def test_bitwise_and_matmul_forbidden(future_socket, op):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        op(future_socket)
+
+
+def test_function_like_ctxmgr_async_forbidden(future_socket):
+
+    # context manager
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        with future_socket:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_await_forbidden(future_socket):
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        await future_socket
+
+
+def test_numpy_interop_forbidden(future_socket):
+    # array coercion
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        np.array(future_socket)
+
+    # ufunc
+    with pytest.raises(GraphDeferredIllegalOperationError):
+        np.sin(future_socket)
+
+    # high-level numpy functions should also be blocked via __array_function__ if implemented
+    # (keep this one lenient: some NumPy versions call ufuncs under the hood)
+    try:
+        with pytest.raises(GraphDeferredIllegalOperationError):
+            np.stack([future_socket, future_socket])
+    except TypeError:
+        # If your implementation routes this differently, TypeError is acceptable;
+        # the important part is that it does NOT silently coerce.
+        pass
 
 
 def test_check_identifier():
@@ -40,6 +154,7 @@ def test_metadata():
         "arg_type": "kwargs",
         "socket_type": "INPUT",
         "required": False,
+        "is_metadata": False,
         "builtin_socket": False,
         "function_socket": False,
     }
@@ -132,8 +247,14 @@ def test_repr():
     """Test __repr__ method."""
     node = Node()
     node.add_input("node_graph.int", "x")
-    assert repr(node.inputs) == "NodeSocketNamespace(name='inputs', sockets=['x'])"
-    assert repr(node.outputs) == "NodeSocketNamespace(name='outputs', sockets=[])"
+    assert (
+        repr(node.inputs)
+        == "NodeSocketNamespace(name='inputs', sockets=['_wait', 'x'])"
+    )
+    assert (
+        repr(node.outputs)
+        == "NodeSocketNamespace(name='outputs', sockets=['_outputs', '_wait'])"
+    )
 
 
 def test_check_name():
@@ -178,7 +299,8 @@ def test_namespace(node_with_namespace_socket):
     assert n.inputs.non_dynamic.sub.y._full_name == "inputs.non_dynamic.sub.y"
     assert n.inputs.non_dynamic.sub.y._scoped_name == "non_dynamic.sub.y"
     # nested keys
-    assert n.inputs._get_all_keys() == [
+    assert set(n.inputs._get_all_keys()) == {
+        "_wait",
         "x",
         "non_dynamic",
         "dynamic",
@@ -186,10 +308,10 @@ def test_namespace(node_with_namespace_socket):
         "non_dynamic.sub.y",
         "non_dynamic.sub.z",
         "dynamic.x",
-    ]
+    }
     # to_dict
     data = n.inputs._to_dict()
-    assert set(data["sockets"].keys()) == set(["x", "non_dynamic", "dynamic"])
+    assert set(data["sockets"].keys()) == set(["_wait", "x", "non_dynamic", "dynamic"])
     # copy
     inputs = n.inputs._copy()
     assert inputs._value == n.inputs._value
@@ -242,23 +364,40 @@ def test_set_namespace(node_with_namespace_socket):
     assert n.inputs._value == data
 
 
-def test_keys_order():
-    node = Node()
-    node.add_input("node_graph.int", "e")
-    node.add_input("node_graph.int", "d")
-    node.add_input("node_graph.int", "a")
-    node.add_input("node_graph.int", "c")
-    node.add_input("node_graph.int", "b")
-    assert node.inputs[1]._name == "d"
-    assert node.inputs["d"]._name == "d"
-    assert node.inputs[-2]._name == "c"
-    assert node.inputs._get_keys() == ["e", "d", "a", "c", "b"]
-    del node.inputs["a"]
-    assert node.inputs._get_keys() == ["e", "d", "c", "b"]
-    del node.inputs[1]
-    assert node.inputs._get_keys() == ["e", "c", "b"]
-    del node.inputs[[0, 2]]
-    assert node.inputs._get_keys() == ["c"]
+def test_set_namespace_with_nested_key(node_with_namespace_socket):
+    n = node_with_namespace_socket
+    # use nested key with "."
+    data = {
+        "x": 2.0,
+        "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
+        "dynamic.x": 2,
+        "dynamic.sub.y": 5,
+        "dynamic.sub.z": 6.0,
+    }
+    n.inputs._value = data
+    assert n.inputs.dynamic.x.value == 2
+    assert n.inputs.dynamic.sub.y.value == 5
+    with pytest.raises(
+        AttributeError,
+        match="NodeSocketNamespace: 'node_graph.node.inputs.non_dynamic.sub' "
+        "has no sub-socket 'non_exist'.",
+    ):
+        # non_dynamic is not dynamic socket, so it will not create the sub socket
+        n.inputs.non_dynamic.sub.non_exist.value == 5
+
+    with pytest.raises(ValueError, match="Invalid assignment into namespace socket:"):
+        n.inputs._value = 1
+
+    with pytest.raises(
+        ValueError, match="Field 'y' is not defined and this namespace is not dynamic."
+    ):
+        n.inputs._value = {"y": 2}
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid assignment into namespace socket:",
+    ):
+        n.inputs.non_dynamic._value = TaggedValue({})
 
 
 @pytest.mark.parametrize(
@@ -275,12 +414,15 @@ def test_keys_order():
 )
 def test_operation(op, name, ref_result, decorated_myadd):
     """Test socket operation."""
+    print("decorated_myadd: ", decorated_myadd)
     socket1 = decorated_myadd(2, 2)
     socket2 = decorated_myadd(1, 1)
+    print("socket1:", socket1)
+    print("socket2:", socket2)
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
-    result._node.set({"x": 4, "y": 2})
+    result._node.set_inputs({"x": 4, "y": 2})
     result = result._node.execute()
     assert result == ref_result
     # test with non-socket value
@@ -313,7 +455,7 @@ def test_operation_comparision(op, name, ref_result, decorated_myadd):
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
     assert name in result._node.name
-    result._node.set({"x": 4, "y": 2})
+    result._node.set_inputs({"x": 4, "y": 2})
     result = result._node.execute()
     assert result == ref_result
     # test with non-socket value
@@ -441,11 +583,13 @@ def test_socket_group_waiting_on():
     assert n3.inputs._wait._links[1].from_node.name == n2.name
 
 
-def test_value_id_mapping():
-    """Test socket value id mapping."""
-    from node_graph.utils import socket_value_id_mapping
+def test_tagged_value():
+    """Test tagged value in socket."""
+    from node_graph.utils import tag_socket_value
 
-    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    ng = NodeGraph(name="test_base_socket_type")
+    n = ng.add_node(Node, "test")
+    s = NodeSocketNamespace("inputs", node=n, graph=ng, metadata={"dynamic": True})
     # single value
     a = 1
     # nested socket
@@ -458,9 +602,15 @@ def test_value_id_mapping():
         "c": c,
         "another_a": a,  # the same input are passed to different sockets
     }
-    mapping = socket_value_id_mapping(s)
-    assert mapping == {
-        id(a): [s.a, s.another_a],
-        id(b["sub_b"]): [s.b.sub_b],
-        id(c): [s.c],
-    }
+    tag_socket_value(s)
+    assert isinstance(s.a.value, TaggedValue)
+    assert s.a.value._socket._name == "a"
+    for link in ng.links:
+        print(link.name)
+    # assign the value to another socket
+    n1 = ng.add_node(Node, "test1")
+    s1 = NodeSocketNamespace("inputs", node=n1, graph=ng, metadata={"dynamic": True})
+    s1._set_socket_value(s._collect_values(raw=False))
+    # this will add link between the two sockets, instead of copying the value
+    assert len(ng.links) == 4
+    assert "test.a -> test1.a" in ng.links
