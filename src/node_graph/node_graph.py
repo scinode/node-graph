@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.node import Node
 from node_graph.socket import NodeSocket
+from node_graph.socket_spec import add_spec_field
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
 from node_graph_widget import NodeGraphWidget
@@ -197,6 +198,11 @@ class NodeGraph:
             )
             socket._name = node.name
             self.inputs._append(socket)
+            # update the _inputs spec
+            if hasattr(node, "_spec") and node._spec.inputs is not None:
+                self._inputs = add_spec_field(
+                    self._inputs, node.name, node._spec.inputs
+                )
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -223,6 +229,11 @@ class NodeGraph:
             )
             socket._name = node.name
             self.outputs._append(socket)
+            # update the _outputs spec
+            if hasattr(node, "_spec") and node._spec.outputs is not None:
+                self._outputs = add_spec_field(
+                    self._outputs, node.name, node._spec.outputs
+                )
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
