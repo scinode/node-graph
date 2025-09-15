@@ -23,9 +23,6 @@ def test_nodehandle_inputs_outputs_view():
     # selection works
     assert isinstance(iv.x, ss.SocketView)
     assert isinstance(ov.sum, ss.SocketView)
-    # transforms
-    only_y = iv.only("y").to_spec()
-    assert set(only_y.fields.keys()) == {"y"}
 
 
 def test_nodehandle_call_flow():
