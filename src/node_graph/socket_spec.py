@@ -6,10 +6,6 @@ from typing import (
     Optional,
     Union,
     Iterable,
-    Annotated,
-    get_origin,
-    get_args,
-    get_type_hints,
 )
 import inspect
 from copy import deepcopy
@@ -17,6 +13,18 @@ from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from .socket import NodeSocketNamespace
 import ast
 import textwrap
+import types
+import sys
+
+if sys.version_info < (3, 10):
+    # Python 3.9 -> need typing_extensions for include_extras
+    from typing_extensions import Annotated, get_args, get_origin, get_type_hints
+else:
+    from typing import Annotated, get_args, get_origin, get_type_hints
+
+# Cache UnionType if available (3.10+), else None
+_UNION_TYPE = getattr(types, "UnionType", None)
+
 
 __all__ = [
     "SocketSpecMeta",
@@ -35,6 +43,73 @@ __all__ = [
 ]
 
 WidgetConfig = Union[str, Dict[str, Any]]
+
+
+def _is_union_origin(origin: Any) -> bool:
+    """True if origin represents a Union across versions (typing.Union or X|Y)."""
+    return (origin is Union) or (_UNION_TYPE is not None and origin is _UNION_TYPE)
+
+
+def _is_annotated_type(tp: Any) -> bool:
+    """True if tp is an Annotated[...] wrapper across versions."""
+    if get_origin(tp) is Annotated:
+        return True
+    # 3.9 fallback: Annotated instances expose __metadata__/__args__
+    return hasattr(tp, "__metadata__") and hasattr(tp, "__args__")
+
+
+def _find_first_annotated(tp: Any) -> Optional[Any]:
+    """
+    Return the first Annotated[...] wrapper found in tp, searching inside Union/Optional.
+    (recurse into other generics does not support.)
+    """
+    if _is_annotated_type(tp):
+        return tp
+    origin = get_origin(tp)
+    if _is_union_origin(origin):
+        for arg in get_args(tp):
+            found = _find_first_annotated(arg)
+            if found is not None:
+                return found
+    return None
+
+
+def _annotated_parts(annot: Any) -> tuple[Any, tuple[Any, ...]]:
+    """Given an Annotated wrapper, return (base_type, metadata_tuple)."""
+    args = get_args(annot)
+    base = args[0] if args else annot
+    meta = getattr(annot, "__metadata__", None)
+    if meta is None:
+        meta = tuple(args[1:]) if len(args) > 1 else ()
+    return base, tuple(meta)
+
+
+def _unwrap_annotated(tp: Any) -> tuple[Any, Optional[SocketSpecMeta]]:
+    """Return (base_type, SocketSpecMeta|None) for Annotated types (incl. inside Optional/Union)."""
+    annot = _find_first_annotated(tp)
+    if annot is None:
+        return tp, None
+    base, metas = _annotated_parts(annot)
+    spec_meta = next((m for m in metas if isinstance(m, SocketSpecMeta)), None)
+    return base, spec_meta
+
+
+def _extract_spec_from_annotated(tp: Any) -> Optional[SocketSpec]:
+    """
+    Return a SocketSpec from Annotated metadata (preferring SocketView.to_spec()).
+    Works when Annotated is nested in Optional/Union.
+    """
+    annot = _find_first_annotated(tp)
+    if annot is None:
+        return None
+    _, metas = _annotated_parts(annot)
+    for m in metas:
+        if isinstance(m, SocketView):
+            return m.to_spec()
+    for m in metas:
+        if isinstance(m, SocketSpec):
+            return m
+    return None
 
 
 @dataclass(frozen=True)
@@ -219,16 +294,6 @@ class SocketSpec:
         return _ns_spec(live_ns)
 
 
-def _unwrap_annotated(tp: Any) -> tuple[Any, Optional[SocketSpecMeta]]:
-    origin = get_origin(tp)
-    if origin is Annotated:
-        args = list(get_args(tp))
-        base = args[0]
-        m = next((a for a in args[1:] if isinstance(a, SocketSpecMeta)), None)
-        return base, m
-    return tp, None
-
-
 def _is_namespace(spec: SocketSpec) -> bool:
     return spec.is_namespace()
 
@@ -236,17 +301,6 @@ def _is_namespace(spec: SocketSpec) -> bool:
 def _ensure_namespace(spec: SocketSpec) -> None:
     if not _is_namespace(spec):
         raise TypeError("Expose/rename/prefix require a namespace SocketSpec")
-
-
-def _extract_spec_from_annotated(tp: Any) -> Optional[SocketSpec]:
-    """Return a SocketSpec embedded in Annotated metadata, if present."""
-    if get_origin(tp) is Annotated:
-        for meta in get_args(tp)[1:]:
-            if isinstance(meta, SocketView):
-                return meta.to_spec()
-            if isinstance(meta, SocketSpec):
-                return meta
-    return None
 
 
 class SocketView:
@@ -438,6 +492,7 @@ class BaseSpecInferAPI:
         try:
             return get_type_hints(func, include_extras=True)
         except TypeError:
+            # python 3.9 using typing_extensions.get_type_hints
             return get_type_hints(func)
 
     @staticmethod
