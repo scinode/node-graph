@@ -43,87 +43,127 @@ def test_dynamic_namespace_and_item_view():
         _ = view.missing
 
 
-def test_expose_include_exclude_prefix_rename():
+def test_select_include_exclude_prefix_rename():
     base = ss.namespace(foo=int, bar=str, baz=int)
-    # include/only
-    inc = ss.expose(base, include=["foo", "baz"])
+
+    # include ("only") - keep a subset
+    inc_wrapper = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(include=["foo", "baz"])]
+    )
+    inc = inc_wrapper.fields["x"]
     assert set(inc.fields.keys()) == {"foo", "baz"}
 
-    only = base.only("bar")
-    assert set(only.fields.keys()) == {"bar"}
-
-    # exclude
-    exc = base.exclude("bar")
+    # exclude - drop a subset
+    exc_wrapper = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(exclude=["bar"])]
+    )
+    exc = exc_wrapper.fields["x"]
     assert set(exc.fields.keys()) == {"foo", "baz"}
 
-    exc = ss.expose(base, exclude=["bar"])
-    assert set(exc.fields.keys()) == {"foo", "baz"}
-
-    # prefix
-    pfx = base.prefix("inp_")
+    # prefix - rename all top-level keys with a prefix
+    pfx_wrapper = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(prefix="inp_")]
+    )
+    pfx = pfx_wrapper.fields["x"]
     assert set(pfx.fields.keys()) == {"inp_foo", "inp_bar", "inp_baz"}
 
-    exc = ss.expose(base, prefix="inp_")
-    assert set(exc.fields.keys()) == {"inp_foo", "inp_bar", "inp_baz"}
-
     # rename (no collision)
-    ren = base.rename({"foo": "x", "baz": "z"})
+    ren_wrapper = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(rename={"foo": "x", "baz": "z"})]
+    )
+    ren = ren_wrapper.fields["x"]
     assert set(ren.fields.keys()) == {"x", "bar", "z"}
 
-    exc = ss.expose(base, rename={"foo": "x", "baz": "z"})
-    assert set(exc.fields.keys()) == {"x", "bar", "z"}
 
-    # rename collision
+def test_select_rename_collision_raises():
+    base = ss.namespace(foo=int, bar=str)
     with pytest.raises(ValueError):
-        _ = base.rename({"foo": "bar"})  # would collide
+        _ = ss.namespace(
+            x=Annotated[dict, base, ss.SocketSpecSelect(rename={"foo": "bar"})]
+        )
 
 
-def test_socketview_transform_chaining():
-    base = ss.namespace(a=int, b=int, c=int)
-    v = ss.SocketView(base).exclude("b").prefix("p_")
-    spec = v.to_spec()
-    assert set(spec.fields.keys()) == {"p_a", "p_c"}
-
-
-def test_from_namespace_snapshot(monkeypatch):
-    """
-    Build a small live namespace shape and ensure `from_namespace` snapshots it.
-    """
-    from node_graph.socket import SocketMetadata
-
-    # Fake socket classes with minimal surface
-    class FakeLeaf:
-        def __init__(self, name, ident="node_graph.any"):
-            self._name = name
-            self._identifier = ident
-
-    class FakeNS:
-        def __init__(self, name, sockets=None):
-            self._name = name
-            self._sockets = sockets or {}
-            self._metadata = SocketMetadata()
-
-    # live shape: ns { x: leaf, inner: ns{ y: leaf } }
-    live = FakeNS(
-        "inputs",
-        sockets={
-            "x": FakeLeaf("x", ident=type_mapping[int]),
-            "inner": FakeNS(
-                "inner", sockets={"y": FakeLeaf("y", ident=type_mapping[str])}
-            ),
-        },
+def test_dotted_include_exclude():
+    base = ss.namespace(
+        pw=ss.namespace(structure=int, kpoints=int, parameters=int),
+        bands=ss.namespace(pw=ss.namespace(structure=int, kpoints=int)),
     )
 
-    # Monkeypatch NodeSocketNamespace type check expectation
-    monkeypatch.setattr(ss, "NodeSocketNamespace", FakeNS, raising=False)
-    monkeypatch.setattr(ss, "NodeSocket", FakeLeaf, raising=False)
+    # EXCLUDE a nested path
+    exc_wrapper = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(exclude="pw.structure")]
+    )
+    exc = exc_wrapper.fields["x"]
+    assert "structure" not in exc.fields["pw"].fields
+    assert "kpoints" in exc.fields["pw"].fields
+    assert "parameters" in exc.fields["pw"].fields
 
-    spec = ss.SocketSpec.from_namespace(live, role="input")
-    assert spec.identifier == type_mapping["namespace"]
-    assert set(spec.fields.keys()) == {"x", "inner"}
-    assert spec.fields["x"].identifier == type_mapping[int]
-    assert spec.fields["inner"].identifier == type_mapping["namespace"]
-    assert spec.fields["inner"].fields["y"].identifier == type_mapping[str]
+    # INCLUDE a nested path (keeps only the selected branches)
+    inc_wrapper = ss.namespace(
+        x=Annotated[
+            dict,
+            base,
+            ss.SocketSpecSelect(include=("pw.kpoints", "bands.pw.structure")),
+        ]
+    )
+    inc = inc_wrapper.fields["x"]
+    assert set(inc.fields.keys()) == {"pw", "bands"}
+    assert set(inc.fields["pw"].fields.keys()) == {"kpoints"}
+    assert set(inc.fields["bands"].fields.keys()) == {"pw"}
+    assert set(inc.fields["bands"].fields["pw"].fields.keys()) == {"structure"}
+
+
+def test_meta_overlay_required_is_metadata():
+    base = ss.namespace(foo=int, bar=int)
+
+    wrapped = ss.namespace(
+        x=Annotated[
+            dict,
+            base,
+            ss.SocketSpecMeta(required=True, is_metadata=True, help="top-level ns"),
+        ]
+    ).fields["x"]
+
+    assert wrapped.meta.required is True
+    assert wrapped.meta.is_metadata is True
+    assert wrapped.meta.help == "top-level ns"
+
+
+def test_include_prefix_exclude_prefix_top_level_only():
+    base = ss.namespace(alpha=int, beta=int, gamma=int, band_k=int, band_e=int)
+
+    # include all top-level fields starting with 'band_'
+    inc_pfx = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(include_prefix="band_")]
+    ).fields["x"]
+    assert set(inc_pfx.fields.keys()) == {"band_k", "band_e"}
+
+    # exclude all top-level fields starting with 'ba'
+    exc_pfx = ss.namespace(
+        x=Annotated[dict, base, ss.SocketSpecSelect(exclude_prefix="b")]
+    ).fields["x"]
+    # 'beta', 'band_k', 'band_e' removed; 'alpha', 'gamma' remain
+    assert set(exc_pfx.fields.keys()) == {"alpha", "gamma"}
+
+
+def test_socketview_traversal_only():
+    base = ss.namespace(a=int, b=ss.namespace(c=int), d=int)
+
+    v = ss.SocketView(base)
+    # traverse to nested namespace 'b' and its child 'c'
+    vb = v.b
+    assert isinstance(vb, ss.SocketView)
+    vb_spec = vb.to_spec()
+    assert isinstance(vb_spec, ss.SocketSpec)
+    assert set(vb_spec.fields.keys()) == {"c"}
+
+    # unknown attribute raises
+    with pytest.raises(AttributeError):
+        _ = v.unknown_field
+
+    # '.item' invalid on non-dynamic namespaces
+    with pytest.raises(AttributeError):
+        _ = v.item
 
 
 def test_merge_specs():

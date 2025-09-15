@@ -6,6 +6,7 @@ from typing import (
     Optional,
     Union,
     Iterable,
+    Tuple,
 )
 import inspect
 from copy import deepcopy
@@ -25,9 +26,9 @@ else:
 # Cache UnionType if available (3.10+), else None
 _UNION_TYPE = getattr(types, "UnionType", None)
 
-
 __all__ = [
     "SocketSpecMeta",
+    "SocketSpecSelect",
     "SocketSpec",
     "SocketView",
     "BaseSocketSpecAPI",
@@ -35,12 +36,14 @@ __all__ = [
     "socket",
     "namespace",
     "dynamic",
-    "expose",
+    "validate_socket_data",
     "infer_specs_from_callable",
     "set_default",
     "unset_default",
     "merge_specs",
+    "add_spec_field",
 ]
+
 
 WidgetConfig = Union[str, Dict[str, Any]]
 
@@ -61,7 +64,7 @@ def _is_annotated_type(tp: Any) -> bool:
 def _find_first_annotated(tp: Any) -> Optional[Any]:
     """
     Return the first Annotated[...] wrapper found in tp, searching inside Union/Optional.
-    (recurse into other generics does not support.)
+    (recurse into other generics is not supported.)
     """
     if _is_annotated_type(tp):
         return tp
@@ -84,7 +87,7 @@ def _annotated_parts(annot: Any) -> tuple[Any, tuple[Any, ...]]:
     return base, tuple(meta)
 
 
-def _unwrap_annotated(tp: Any) -> tuple[Any, Optional[SocketSpecMeta]]:
+def _unwrap_annotated(tp: Any) -> tuple[Any, Optional["SocketSpecMeta"]]:
     """Return (base_type, SocketSpecMeta|None) for Annotated types (incl. inside Optional/Union)."""
     annot = _find_first_annotated(tp)
     if annot is None:
@@ -94,7 +97,7 @@ def _unwrap_annotated(tp: Any) -> tuple[Any, Optional[SocketSpecMeta]]:
     return base, spec_meta
 
 
-def _extract_spec_from_annotated(tp: Any) -> Optional[SocketSpec]:
+def _extract_spec_from_annotated(tp: Any) -> Optional["SocketSpec"]:
     """
     Return a SocketSpec from Annotated metadata (preferring SocketView.to_spec()).
     Works when Annotated is nested in Optional/Union.
@@ -124,6 +127,197 @@ class SocketSpecMeta:
     widget: Optional[WidgetConfig] = None
 
 
+def _merge_meta(base: "SocketSpecMeta", over: "SocketSpecMeta") -> "SocketSpecMeta":
+    """Overlay non-None fields from `over` onto `base`."""
+    return SocketSpecMeta(
+        help=over.help if over.help is not None else base.help,
+        required=over.required if over.required is not None else base.required,
+        call_role=over.call_role if over.call_role is not None else base.call_role,
+        sub_socket_default_link_limit=(
+            over.sub_socket_default_link_limit
+            if over.sub_socket_default_link_limit is not None
+            else base.sub_socket_default_link_limit
+        ),
+        is_metadata=over.is_metadata
+        if over.is_metadata is not None
+        else base.is_metadata,
+        widget=over.widget if over.widget is not None else base.widget,
+    )
+
+
+@dataclass(frozen=True)
+class SocketSpecSelect:
+    """
+    Selection/transform directives used *only* inside Annotated metadata.
+
+    - include/exclude support dotted paths ("a.b.c"). When `include` is provided,
+      unspecified fields are dropped; `exclude` removes the specified fields.
+    - include_prefix/exclude_prefix match *top-level* field names only.
+    - rename maps top-level child names.
+    - prefix prepends a string to all top-level child names.
+    """
+
+    include: Optional[Union[str, Iterable[str]]] = None
+    exclude: Optional[Union[str, Iterable[str]]] = None
+    include_prefix: Optional[Union[str, Iterable[str]]] = None
+    exclude_prefix: Optional[Union[str, Iterable[str]]] = None
+    rename: Optional[Dict[str, str]] = None
+    prefix: Optional[str] = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "include", _normalize_names(self.include))
+        object.__setattr__(self, "exclude", _normalize_names(self.exclude))
+        object.__setattr__(
+            self, "include_prefix", _normalize_names(self.include_prefix)
+        )
+        object.__setattr__(
+            self, "exclude_prefix", _normalize_names(self.exclude_prefix)
+        )
+
+
+def _normalize_names(
+    x: Optional[Union[str, Iterable[str]]]
+) -> Optional[Tuple[str, ...]]:
+    if x is None:
+        return None
+    if isinstance(x, str):
+        return (x,)
+    return tuple(x)
+
+
+def _paths_to_tree(names: Iterable[str]) -> Dict[str, Optional[dict]]:
+    """
+    Convert ["a", "b.c", "b.d.e"] -> {"a": None, "b": {"c": None, "d": {"e": None}}}
+    None means "take/remove this entire field".
+    If a parent key is already marked None (whole subtree), deeper paths under it are ignored.
+    """
+    root: Dict[str, Optional[dict]] = {}
+    for raw in names or []:
+        parts = [p for p in str(raw).split(".") if p]
+        if not parts:
+            continue
+        node: Dict[str, Optional[dict]] = root
+        for i, seg in enumerate(parts):
+            last = i == len(parts) - 1
+            if last:
+                # Mark whole field at this level
+                node[seg] = None
+            else:
+                if seg not in node:
+                    node[seg] = {}
+                else:
+                    # If already selecting whole subtree, deeper spec is irrelevant
+                    if node[seg] is None:
+                        # parent marked as whole selection/removal: stop descending
+                        break
+                    # if it exists but isn't a dict (shouldn't happen), coerce to dict
+                    if not isinstance(node[seg], dict):
+                        node[seg] = {}
+                # descend
+                node = node[seg]
+    return root
+
+
+def _spec_include(spec: "SocketSpec", tree: Dict[str, Optional[dict]]) -> "SocketSpec":
+    if not spec.is_namespace():
+        return spec
+    keep: Dict[str, SocketSpec] = {}
+    for k, subtree in tree.items():
+        if k not in spec.fields:
+            continue
+        child = spec.fields[k]
+        keep[k] = (
+            child
+            if subtree is None
+            else (_spec_include(child, subtree) if child.is_namespace() else child)
+        )
+    return replace(spec, fields=keep)
+
+
+def _spec_exclude(spec: "SocketSpec", tree: Dict[str, Optional[dict]]) -> "SocketSpec":
+    if not spec.is_namespace():
+        return spec
+    new_fields = dict(spec.fields)
+    for k, subtree in tree.items():
+        if k not in new_fields:
+            continue
+        if subtree is None:
+            new_fields.pop(k, None)
+        else:
+            child = new_fields[k]
+            if child.is_namespace():
+                new_fields[k] = _spec_exclude(child, subtree)
+    return replace(spec, fields=new_fields)
+
+
+def _spec_rename(spec: "SocketSpec", mapping: Dict[str, str]) -> "SocketSpec":
+    if not spec.is_namespace():
+        raise TypeError("rename requires a namespace SocketSpec")
+    out: Dict[str, SocketSpec] = {}
+    for old, child in spec.fields.items():
+        new = mapping.get(old, old)
+        if new in out:
+            raise ValueError(f"rename collision: '{new}'")
+        out[new] = child
+    return replace(spec, fields=out)
+
+
+def _spec_prefix(spec: "SocketSpec", pfx: str) -> "SocketSpec":
+    if not spec.is_namespace():
+        raise TypeError("prefix requires a namespace SocketSpec")
+    return replace(spec, fields={f"{pfx}{k}": v for k, v in spec.fields.items()})
+
+
+def _expand_prefix_names(
+    spec: "SocketSpec", pfxs: Optional[Iterable[str]]
+) -> list[str]:
+    if not pfxs or not spec.is_namespace():
+        return []
+    pfxs = list(pfxs)
+    return [k for k in spec.fields.keys() if any(k.startswith(p) for p in pfxs)]
+
+
+def _apply_select_from_annotation(annot_like: Any, spec: "SocketSpec") -> "SocketSpec":
+    """Collect & apply all SocketSpecSelect objects found in Annotated metadata."""
+    annot = _find_first_annotated(annot_like)
+    if annot is None:
+        return spec
+    _, metas = _annotated_parts(annot)
+
+    s = spec
+    for m in metas:
+        if not isinstance(m, SocketSpecSelect):
+            continue
+        inc = list(m.include or [])
+        exc = list(m.exclude or [])
+        inc += _expand_prefix_names(s, m.include_prefix)
+        exc += _expand_prefix_names(s, m.exclude_prefix)
+        if inc:
+            s = _spec_include(s, _paths_to_tree(inc))
+        if exc:
+            s = _spec_exclude(s, _paths_to_tree(exc))
+        if m.rename:
+            s = _spec_rename(s, m.rename)
+        if m.prefix:
+            s = _spec_prefix(s, m.prefix)
+    return s
+
+
+def _merge_all_meta_from_annotation(
+    annot_like: Any, base: "SocketSpecMeta"
+) -> "SocketSpecMeta":
+    """Overlay every SocketSpecMeta present in Annotated metadata (order-respecting)."""
+    annot = _find_first_annotated(annot_like)
+    if annot is None:
+        return base
+    _, metas = _annotated_parts(annot)
+    out = base
+    for m in metas:
+        if isinstance(m, SocketSpecMeta):
+            out = _merge_meta(out, m)
+    return out
+
+
 @dataclass(frozen=True)
 class SocketSpec:
     """
@@ -134,7 +328,7 @@ class SocketSpec:
     - item: schema for each dynamic key (leaf or namespace)
     - fields: fixed fields for namespace (name -> schema)
     - default: leaf-only default value
-    - meta: optional meta (help/required/widget)
+    - meta: optional meta (help/required/widget/is_metadata/call_role/sub_socket_default_link_limit)
     """
 
     identifier: str
@@ -144,7 +338,7 @@ class SocketSpec:
     fields: Dict[str, "SocketSpec"] = field(default_factory=dict)
     meta: SocketSpecMeta = field(default_factory=SocketSpecMeta)
 
-    # --- structural predicate ---
+    # structural predicates
     def is_namespace(self) -> bool:
         if self.dynamic or self.fields:
             return True
@@ -161,11 +355,9 @@ class SocketSpec:
             d["item"] = self.item.to_dict()
         if self.fields:
             d["fields"] = {k: v.to_dict() for k, v in self.fields.items()}
-
-        # Serialize default only for leaves and only if not MISSING
+        # default only for leaves and only if not MISSING
         if not self.is_namespace() and not isinstance(self.default, type(MISSING)):
             d["default"] = deepcopy(self.default)
-
         if any(
             getattr(self.meta, k) is not None
             for k in (
@@ -174,6 +366,7 @@ class SocketSpec:
                 "widget",
                 "call_role",
                 "sub_socket_default_link_limit",
+                "is_metadata",  # ensure serialized
             )
         ):
             d["meta"] = {
@@ -184,6 +377,7 @@ class SocketSpec:
                     "widget",
                     "call_role",
                     "sub_socket_default_link_limit",
+                    "is_metadata",
                 )
                 if getattr(self.meta, k) is not None
             }
@@ -211,88 +405,6 @@ class SocketSpec:
             meta=meta,
         )
 
-    def include(self, *names: str) -> "SocketSpec":
-        _ensure_namespace(self)
-        wanted = set(names)
-        new_fields = {k: v for k, v in self.fields.items() if k in wanted}
-        return replace(self, fields=new_fields)
-
-    def exclude(self, *names: str) -> "SocketSpec":
-        _ensure_namespace(self)
-        banned = set(names)
-        new_fields = {k: v for k, v in self.fields.items() if k not in banned}
-        return replace(self, fields=new_fields)
-
-    def only(self, *names: str) -> "SocketSpec":
-        return self.include(*names)
-
-    def rename(self, mapping: Dict[str, str]) -> "SocketSpec":
-        _ensure_namespace(self)
-        new_fields: Dict[str, SocketSpec] = {}
-        for old, spec in self.fields.items():
-            new = mapping.get(old, old)
-            if new in new_fields:
-                raise ValueError(f"rename collision: '{new}' already exists")
-            new_fields[new] = spec
-        return replace(self, fields=new_fields)
-
-    def prefix(self, pfx: str) -> "SocketSpec":
-        _ensure_namespace(self)
-        new_fields = {f"{pfx}{k}": v for k, v in self.fields.items()}
-        return replace(self, fields=new_fields)
-
-    # --- snapshot from a live namespace (no graph dep) ---
-    @classmethod
-    def from_namespace(
-        cls, live_ns, *, role: str = "input", type_mapping: Optional[dict] = None
-    ) -> "SocketSpec":
-        """Snapshot a live NodeSocketNamespace (works without a graph).
-        Duck-typed to support tests (no hard import / isinstance on concrete classes).
-        """
-        tm = type_mapping or DEFAULT_TM
-
-        def _iter_ns_items(ns):
-            # Support both real NodeSocketNamespace (_sockets) and test fakes (sockets)
-            if hasattr(ns, "_sockets") and isinstance(getattr(ns, "_sockets"), dict):
-                return ns._sockets.items()
-            try:
-                return ns.items()  # if a raw mapping is passed
-            except Exception:
-                return []
-
-        def _is_ns(obj) -> bool:
-            return hasattr(obj, "_sockets") or hasattr(obj, "sockets")
-
-        def _leaf_spec(sock) -> "SocketSpec":
-            ident = (
-                getattr(sock, "_identifier", None)
-                or getattr(sock, "identifier", None)
-                or getattr(sock, "ident", None)
-                or tm.get("default", "node_graph.any")
-            )
-            return SocketSpec(identifier=ident)
-
-        def _ns_spec(ns) -> "SocketSpec":
-            fields: dict[str, SocketSpec] = {}
-            for name, child in _iter_ns_items(ns):
-                if _is_ns(child):
-                    fields[name] = _ns_spec(child)
-                else:
-                    fields[name] = _leaf_spec(child)
-            spec = SocketSpec(
-                identifier=tm.get("namespace", "node_graph.namespace"), fields=fields
-            )
-            # best-effort dynamic flag
-            md = getattr(ns, "_metadata", None)
-            if md is not None and getattr(md, "dynamic", False):
-                any_item = SocketSpec(
-                    identifier=tm.get("any", tm.get("default", "node_graph.any"))
-                )
-                spec = replace(spec, dynamic=True, item=any_item)
-            return spec
-
-        return _ns_spec(live_ns)
-
 
 def _is_namespace(spec: SocketSpec) -> bool:
     return spec.is_namespace()
@@ -300,38 +412,21 @@ def _is_namespace(spec: SocketSpec) -> bool:
 
 def _ensure_namespace(spec: SocketSpec) -> None:
     if not _is_namespace(spec):
-        raise TypeError("Expose/rename/prefix require a namespace SocketSpec")
+        raise TypeError("Operation requires a namespace SocketSpec")
 
 
 class SocketView:
-    """A lightweight, pure view over a SocketSpec to chain transforms fluently."""
+    """A lightweight, pure view over a SocketSpec for attribute traversal. No mutators."""
 
     __slots__ = ("_spec",)
 
     def __init__(self, spec: SocketSpec) -> None:
-        # Set without going through normal attribute logic
         object.__setattr__(self, "_spec", spec)
-
-    def include(self, *names: str) -> "SocketView":
-        return SocketView(object.__getattribute__(self, "_spec").include(*names))
-
-    def exclude(self, *names: str) -> "SocketView":
-        return SocketView(object.__getattribute__(self, "_spec").exclude(*names))
-
-    def only(self, *names: str) -> "SocketView":
-        return self.include(*names)
-
-    def rename(self, mapping: Dict[str, str]) -> "SocketView":
-        return SocketView(object.__getattribute__(self, "_spec").rename(mapping))
-
-    def prefix(self, pfx: str) -> "SocketView":
-        return SocketView(object.__getattribute__(self, "_spec").prefix(pfx))
 
     def to_spec(self) -> SocketSpec:
         return object.__getattribute__(self, "_spec")
 
     def __getattr__(self, name: str) -> "SocketView":
-        # Only called if normal attribute lookup fails
         spec: SocketSpec = object.__getattribute__(self, "_spec")
         if name == "item":
             if spec.dynamic and spec.item is not None:
@@ -351,21 +446,22 @@ class BaseSocketSpecAPI:
     Subclass and override TYPE_MAPPING (and optionally _map_identifier) downstream.
     """
 
-    TYPE_MAPPING: Dict[str | Any, str] = DEFAULT_TM
+    TYPE_MAPPING: Dict[Union[str, Any], str] = DEFAULT_TM
 
-    # Re-exports for convenience
+    # convenience re-exports
     SocketSpec = SocketSpec
     SocketSpecMeta = SocketSpecMeta
+    SocketSpecSelect = SocketSpecSelect
     SocketView = SocketView
     SocketNamespace = NodeSocketNamespace
 
     @classmethod
     def socket(cls, T: Any, **meta) -> Any:
-        """Wrap a type with optional metadata (help/required/widget)."""
+        """Wrap a type with optional metadata (help/required/widget/etc.)."""
         return Annotated[T, SocketSpecMeta(**meta)]
 
     @classmethod
-    def namespace(cls, _name: str | None = None, /, **fields) -> SocketSpec:
+    def namespace(cls, _name: Optional[str] = None, /, **fields) -> SocketSpec:
         tm = cls.TYPE_MAPPING
         spec = SocketSpec(identifier=tm["namespace"])
         new_fields: Dict[str, SocketSpec] = {}
@@ -373,17 +469,27 @@ class BaseSocketSpecAPI:
         for name, val in fields.items():
             has_default = isinstance(val, tuple) and len(val) == 2
             T, default_val = val if has_default else (val, MISSING)
-            base_T, meta = _unwrap_annotated(T)
-            s_meta = meta or SocketSpecMeta()
 
-            if isinstance(base_T, SocketSpec):
-                child = base_T
-            elif isinstance(base_T, SocketView):
-                child = base_T.to_spec()
+            annotated_spec = _extract_spec_from_annotated(T)
+            if annotated_spec is not None:
+                child = annotated_spec
             else:
-                child = SocketSpec(identifier=cls._map_identifier(base_T), meta=s_meta)
+                base_T, _ = _unwrap_annotated(T)
+                if isinstance(base_T, SocketSpec):
+                    child = base_T
+                elif isinstance(base_T, SocketView):
+                    child = base_T.to_spec()
+                else:
+                    child = SocketSpec(
+                        identifier=cls._map_identifier(base_T), meta=SocketSpecMeta()
+                    )
 
-            # Set default directly on leaf child
+            # Overlay *all* SocketSpecMeta present in Annotated metadata
+            child = replace(child, meta=_merge_all_meta_from_annotation(T, child.meta))
+            # Apply selection/transform directives
+            child = _apply_select_from_annotation(T, child)
+
+            # Scalar default only on leaves
             if has_default:
                 if child.is_namespace():
                     raise TypeError(
@@ -400,40 +506,13 @@ class BaseSocketSpecAPI:
     def dynamic(cls, item_type: Any, /, **fixed) -> SocketSpec:
         base = cls.namespace(**fixed)
         base = replace(base, dynamic=True)
-        T, meta = _unwrap_annotated(item_type)
-        s_meta = meta or SocketSpecMeta()
+        T, _ = _unwrap_annotated(item_type)
         item_spec = (
             T
             if isinstance(T, SocketSpec)
-            else SocketSpec(identifier=cls._map_identifier(T), meta=s_meta)
+            else SocketSpec(identifier=cls._map_identifier(T), meta=SocketSpecMeta())
         )
         return replace(base, item=item_spec)
-
-    @classmethod
-    def expose(
-        cls,
-        spec_or_view: SocketSpec | SocketView,
-        *,
-        include: Iterable[str] | None = None,
-        exclude: Iterable[str] | None = None,
-        rename: Dict[str, str] | None = None,
-        prefix: str | None = None,
-    ) -> SocketSpec:
-        spec = (
-            spec_or_view.to_spec()
-            if isinstance(spec_or_view, SocketView)
-            else spec_or_view
-        )
-        _ensure_namespace(spec)
-        if include:
-            spec = spec.include(*include)
-        if exclude:
-            spec = spec.exclude(*exclude)
-        if rename:
-            spec = spec.rename(rename)
-        if prefix:
-            spec = spec.prefix(prefix)
-        return spec
 
     @classmethod
     def _map_identifier(cls, tp: Any) -> str:
@@ -447,11 +526,7 @@ class BaseSocketSpecAPI:
 
     @classmethod
     def validate_socket_data(cls, data: SocketSpec | list | None) -> SocketSpec | None:
-        """Validate socket data and convert it to a dictionary.
-        If data is None, return an empty dictionary.
-        If data is a list, convert it to a dictionary with empty dictionaries as values.
-        """
-
+        """Validate socket data and convert it to a dictionary."""
         if data is None or isinstance(data, SocketSpec):
             return data
         elif isinstance(data, SocketView):
@@ -467,14 +542,9 @@ class BaseSocketSpecAPI:
 
 
 class BaseSpecInferAPI:
-    """Strict inference: no structural guessing into namespaces.
+    """Strict inference: no structural guessing into namespaces."""
 
-    - Only explicit SocketSpec / SocketView(.to_spec()) can create namespaces.
-    - VAR_POSITIONAL / VAR_KEYWORD produce dynamic namespaces (by signature),
-      with item type taken from Annotated[T, ...] if provided, else Any.
-    """
-
-    TYPE_MAPPING: Dict[str | Any, str] = DEFAULT_TM
+    TYPE_MAPPING: Dict[Union[str, Any], str] = DEFAULT_TM
     DEFAULT_OUTPUT_KEY: str = "result"  # allow downstream override
 
     @classmethod
@@ -503,13 +573,9 @@ class BaseSpecInferAPI:
     def _apply_structured_defaults_to_leaves(
         cls, ns_spec: SocketSpec, dv: dict[str, Any]
     ) -> SocketSpec:
-        """
-        Recursively apply dict defaults by setting defaults on leaf specs only.
-        """
+        """Recursively apply dict defaults by setting defaults on leaf specs only."""
         if not cls._is_namespace(ns_spec):
-            # If a dict was supplied but spec isn’t a namespace, ignore silently.
             return ns_spec
-
         new_fields: dict[str, SocketSpec] = {}
         for k, child in (ns_spec.fields or {}).items():
             if k not in dv:
@@ -517,10 +583,8 @@ class BaseSpecInferAPI:
                 continue
             val = dv[k]
             if isinstance(val, dict) and cls._is_namespace(child):
-                # Traverse deeper
                 new_fields[k] = cls._apply_structured_defaults_to_leaves(child, val)
             else:
-                # Scalar default -> must land on a leaf spec
                 if child.is_namespace():
                     raise TypeError(
                         f"Default for '{k}' is scalar, but the field is a namespace."
@@ -534,15 +598,12 @@ class BaseSpecInferAPI:
         if hasattr(T, "to_spec") and callable(getattr(T, "to_spec")):
             return T.to_spec()
 
-        base_T, meta = _unwrap_annotated(T)
-        meta = meta or SocketSpecMeta()
-
+        base_T, _meta_ignored = _unwrap_annotated(T)
         # Already a SocketSpec
         if isinstance(base_T, SocketSpec):
             return base_T
 
-        # No dataclass / TypedDict / __annotations__ expansion here anymore.
-        return SocketSpec(identifier=cls._map_identifier(base_T), meta=meta)
+        return SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketSpecMeta())
 
     @classmethod
     def build_inputs_from_signature(
@@ -573,8 +634,7 @@ class BaseSpecInferAPI:
 
         for name, param in sig.parameters.items():
             T = ann_map.get(name, param.annotation)
-            base_T, meta = _unwrap_annotated(T)
-            meta = meta or SocketSpecMeta()
+            base_T, _ = _unwrap_annotated(T)
 
             # Determine call_role
             if param.kind is inspect.Parameter.POSITIONAL_ONLY:
@@ -587,8 +647,6 @@ class BaseSpecInferAPI:
                 is_dyn = True
             else:
                 call_role = "kwargs"
-            if meta.call_role is None:
-                meta = replace(meta, call_role=call_role)
 
             # Determine required
             is_required = not (
@@ -596,7 +654,6 @@ class BaseSpecInferAPI:
                 or param.kind
                 in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             )
-            meta = replace(meta, required=is_required)
 
             # Prefer spec from Annotated metadata if present
             annotated_spec = _extract_spec_from_annotated(T)
@@ -605,20 +662,15 @@ class BaseSpecInferAPI:
             else:
                 spec = cls._spec_from_annotation(base_T)
 
-            # Merge meta (user's meta has priority over derived)
-            merged = SocketSpecMeta(
-                help=spec.meta.help if spec.meta.help is not None else meta.help,
-                required=meta.required
-                if meta.required is not None
-                else spec.meta.required,
-                widget=spec.meta.widget
-                if spec.meta.widget is not None
-                else meta.widget,
-                call_role=meta.call_role
-                if meta.call_role is not None
-                else spec.meta.call_role,
+            # Merge *all* SocketSpecMeta from annotation, overlaying required/call_role defaults
+            merged_meta = _merge_all_meta_from_annotation(
+                T,
+                SocketSpecMeta(
+                    required=is_required,
+                    call_role=call_role,
+                ),
             )
-            spec = replace(spec, meta=merged)
+            spec = replace(spec, meta=_merge_meta(spec.meta, merged_meta))
 
             # varargs/kwargs become dynamic namespaces
             if param.kind is inspect.Parameter.VAR_POSITIONAL:
@@ -643,6 +695,9 @@ class BaseSpecInferAPI:
                     item=item_spec,
                     meta=spec.meta,
                 )
+
+            # Apply selection/transform directives from Annotated
+            spec = _apply_select_from_annotation(T, spec)
 
             # Defaults: scalar -> leaf default; dict -> traverse into leaves
             if param.default is not inspect._empty and param.default is not None:
@@ -670,12 +725,11 @@ class BaseSpecInferAPI:
     def build_outputs_from_signature(
         cls, func, explicit: SocketSpec | None
     ) -> SocketSpec:
-        """Always return a NAMESPACE spec, but:
+        """Always return a NAMESPACE spec, with selection/meta applied.
         - If the function body never does `return <value>`, return an EMPTY namespace,
         regardless of annotations.
         - Otherwise, honor explicit, Annotated, or wrap leaf under DEFAULT_OUTPUT_KEY.
         """
-        import inspect
 
         def _wrap_leaf_as_ns(leaf: SocketSpec) -> SocketSpec:
             return SocketSpec(
@@ -691,10 +745,12 @@ class BaseSpecInferAPI:
                 raise TypeError("outputs must be a SocketSpec")
             # Respect namespaces (even empty) as-is; just set call_role
             if cls._is_namespace(explicit):
-                return replace(explicit, meta=SocketSpecMeta(call_role="return"))
+                return replace(
+                    explicit, meta=replace(explicit.meta, call_role="return")
+                )
             return _wrap_leaf_as_ns(explicit)
 
-        # If function body never returns a value -> EMPTY namespace (no 'result')
+        # If function body never returns a value -> EMPTY namespace
         if not _function_returns_value(func):
             return SocketSpec(
                 identifier=cls.TYPE_MAPPING["namespace"],
@@ -707,27 +763,43 @@ class BaseSpecInferAPI:
         ann_map = cls._safe_type_hints(func)
         ret = ann_map.get("return", None)
 
+        # Explicit spec from metadata
         spec_from_meta = _extract_spec_from_annotated(ret)
         if spec_from_meta is not None:
+            spec_from_meta = _apply_select_from_annotation(ret, spec_from_meta)
+            spec_from_meta = replace(
+                spec_from_meta,
+                meta=_merge_all_meta_from_annotation(ret, spec_from_meta.meta),
+            )
             return replace(
                 spec_from_meta, meta=replace(spec_from_meta.meta, call_role="return")
             )
 
+        # to_spec() on annotation object
         if hasattr(ret, "to_spec") and callable(getattr(ret, "to_spec")):
             base_spec = ret.to_spec()
+            base_spec = _apply_select_from_annotation(ret, base_spec)
+            base_spec = replace(
+                base_spec, meta=_merge_all_meta_from_annotation(ret, base_spec.meta)
+            )
             return replace(base_spec, meta=replace(base_spec.meta, call_role="return"))
 
+        # Fallback leaf under 'result'
         if ret is None or ret is inspect._empty:
-            # We already know a value *is* returned (from body), but annotation is None/missing:
-            # fallback to default leaf under 'result'
             leaf = SocketSpec(identifier=cls.TYPE_MAPPING["default"])
             return _wrap_leaf_as_ns(leaf)
 
-        base_T, _meta = _unwrap_annotated(ret)
+        base_T, _ = _unwrap_annotated(ret)
         if isinstance(base_T, SocketSpec):
+            base_T = _apply_select_from_annotation(ret, base_T)
+            base_T = replace(
+                base_T, meta=_merge_all_meta_from_annotation(ret, base_T.meta)
+            )
             return replace(base_T, meta=replace(base_T.meta, call_role="return"))
 
         leaf = cls._spec_from_annotation(base_T)
+        leaf = _apply_select_from_annotation(ret, leaf)
+        leaf = replace(leaf, meta=_merge_all_meta_from_annotation(ret, leaf.meta))
         return _wrap_leaf_as_ns(leaf)
 
     @classmethod
@@ -779,7 +851,6 @@ def _function_returns_value(func) -> bool:
     except (OSError, TypeError):
         # No source (e.g., builtins). Be conservative: assume it DOES return a value
         return True
-
     src = textwrap.dedent(src)
     try:
         tree = ast.parse(src)
@@ -804,8 +875,7 @@ def _function_returns_value(func) -> bool:
         def __init__(self):
             self.returns_value = False
 
-        # Don’t descend into nested defs/classes
-        def visit_FunctionDef(self, node):  # nested defs: skip
+        def visit_FunctionDef(self, node):  # skip nested
             pass
 
         def visit_AsyncFunctionDef(self, node):
@@ -850,8 +920,6 @@ def set_default(spec: SocketSpec | SocketView, dotted: str, value: Any) -> Socke
 
 
 def unset_default(spec: SocketSpec | SocketView, dotted: str) -> SocketSpec:
-    from dataclasses import MISSING
-
     root = spec.to_spec() if hasattr(spec, "to_spec") else spec
     return _set_leaf_default(root, tuple(dotted.split(".")), MISSING)
 
@@ -860,6 +928,5 @@ def unset_default(spec: SocketSpec | SocketView, dotted: str) -> SocketSpec:
 socket = BaseSocketSpecAPI.socket
 namespace = BaseSocketSpecAPI.namespace
 dynamic = BaseSocketSpecAPI.dynamic
-expose = BaseSocketSpecAPI.expose
 validate_socket_data = BaseSocketSpecAPI.validate_socket_data
 infer_specs_from_callable = BaseSpecInferAPI.infer_specs_from_callable
