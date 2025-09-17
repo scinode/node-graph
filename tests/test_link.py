@@ -1,4 +1,23 @@
 import pytest
+from node_graph import NodeGraph, node
+
+
+@node()
+def add(x: int, y: int) -> int:
+    return x + y
+
+
+@node()
+def multiply(x: float, y: float) -> float:
+    return x * y
+
+
+@pytest.fixture
+def add_multiply_ng():
+    ng = NodeGraph()
+    ng.add_node(add, "add1")
+    ng.add_node(multiply, "multiply1")
+    return ng
 
 
 def test_link_another_node_graph(ng, ng_decorator):
@@ -40,3 +59,14 @@ def test_delete_link(ng):
     assert len(ng.links) == nlink - 2
     with pytest.raises(ValueError, match="Invalid index type for __delitem__: "):
         del ng.links[sum]
+
+
+def test_equal_types_link_ok(add_multiply_ng):
+    ng = add_multiply_ng
+    ng.add_link(
+        ng.nodes.add1.outputs.result, ng.nodes.multiply1.inputs.x
+    )  # int -> float OK
+    with pytest.raises(TypeError, match="Socket type mismatch:"):
+        ng.add_link(
+            ng.nodes.multiply1.outputs.result, ng.nodes.add1.inputs.x
+        )  # float -> int NOK

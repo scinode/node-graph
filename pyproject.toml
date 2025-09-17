@@ -89,3 +89,9 @@ tests = [
 "node_graph.float_matrix" = "node_graph.properties.builtins:PropertyFloatMatrix"
 "node_graph.base_dict" = "node_graph.properties.builtins:PropertyBaseDict"
 "node_graph.base_list" = "node_graph.properties.builtins:PropertyBaseList"
+
+[project.entry-points."node_graph.type_mapping"]
+"workgraph.builtins_mapping" = "node_graph.orm.mapping:type_mapping"
+
+[project.entry-points."node_graph.type_promotion"]
+"workgraph.builtins_mapping" = "node_graph.link:TYPE_PROMOTIONS"
