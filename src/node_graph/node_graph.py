@@ -79,7 +79,7 @@ class NodeGraph:
         self.SocketPool = self.registry.socket_pool
         self.PropertyPool = self.registry.property_pool
         self.type_mapping = dict(self.registry.type_mapping)
-        self.type_promotions = set(self.registry.type_promotions)
+        self.type_promotions = set(self.registry.type_promotion)
         self.nodes = NodeCollection(graph=self, pool=self.NodePool)
         self.links = LinkCollection(self)
         self.state = state

@@ -81,7 +81,7 @@ class NodeLink:
             "  • If this conversion is intentional, register an identifier-level promotion \n",
         ]
 
-        raise Exception("\n".join(lines))
+        raise TypeError("\n".join(lines))
 
     def mount(self) -> None:
         """Create a link trigger the update action for the sockets."""
