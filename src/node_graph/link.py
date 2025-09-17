@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 
+TYPE_PROMOTIONS: set[tuple[str, str]] = {
+    ("node_graph.bool", "node_graph.int"),
+    ("node_graph.bool", "node_graph.float"),
+    ("node_graph.int", "node_graph.float"),
+}
+
+
 class NodeLink:
     """Link connect two sockets."""
 
@@ -27,6 +34,16 @@ class NodeLink:
             self.to_socket._scoped_name,
         )
 
+    def _lower_id(self, sock: "Socket") -> str:
+        return sock._identifier.lower()
+
+    def _is_any(self, sock: "Socket") -> bool:
+        return self._lower_id(sock).split(".")[-1] == "any"
+
+    def _graph_type_promotions(self) -> set[tuple[str, str]]:
+        """Optional, user-registered identifier-level promotions on the graph."""
+        return getattr(self.from_node.graph, "type_promotions", set())
+
     def check_socket_match(self) -> None:
         """Check if the socket type match, and belong to the same node graph."""
         if self.from_node.graph != self.to_node.graph:
@@ -37,18 +54,34 @@ class NodeLink:
                 )
             )
 
-        if (
-            self.from_socket._identifier.lower().split(".")[-1] == "any"
-            or self.to_socket._identifier.lower().split(".")[-1] == "any"
-        ):
+        from_id = self._lower_id(self.from_socket)
+        to_id = self._lower_id(self.to_socket)
+
+        # "any" accepts anything
+        if self._is_any(self.from_socket) or self._is_any(self.to_socket):
             return
-        if self.from_socket._identifier.lower() != self.to_socket._identifier.lower():
-            raise Exception(
-                "Socket type do not match. Socket {} can not connect to socket {}".format(
-                    self.from_socket._identifier,
-                    self.to_socket._identifier,
-                )
-            )
+
+        # exact match
+        if from_id == to_id:
+            return
+
+        # graph-level promotions (identifier-level)
+        if (from_id, to_id) in self._graph_type_promotions():
+            return
+
+        src = f"{self.from_node.name}.{self.from_socket._scoped_name}"
+        dst = f"{self.to_node.name}.{self.to_socket._scoped_name}"
+
+        lines = [
+            "Socket type mismatch:",
+            f"  {src} [{from_id}] -> {dst} [{to_id}] is not allowed.",
+            "",
+            "Suggestions:",
+            "  • Double-check you are linking the intended sockets \n"
+            "  • If this conversion is intentional, register an identifier-level promotion \n",
+        ]
+
+        raise Exception("\n".join(lines))
 
     def mount(self) -> None:
         """Create a link trigger the update action for the sockets."""

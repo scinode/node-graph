@@ -1,6 +1,9 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import entry_points, EntryPoint
+from typing import Dict, Set, Tuple, Any
+
+TypePromotionPair = Tuple[str, str]
 
 
 class Namespace:
@@ -164,10 +167,11 @@ class RegistryHub:
         - optional: "{prefix}.type_mapping" (dict providers)
     """
 
-    node_pool: EntryPointPool
-    socket_pool: EntryPointPool
-    property_pool: EntryPointPool
-    type_mapping: dict
+    node_pool: Any
+    socket_pool: Any
+    property_pool: Any
+    type_mapping: Dict[Any, str]
+    type_promotions: Set[TypePromotionPair] = field(default_factory=set)
 
     def resolve(self, tp: type) -> str:
         return self.type_mapping.get(tp, self.type_mapping.get("default"))
@@ -179,6 +183,7 @@ class RegistryHub:
         socket_group: str = "node_graph.socket",
         property_group: str = "node_graph.property",
         type_mapping_group: str = "node_graph.type_mapping",
+        type_promotion_group: str = "node_graph.type_promotion",
         identifier_prefix: str = "node_graph",
     ) -> "RegistryHub":
         node_pool = EntryPointPool(entry_point_group=node_group, name="NodePool")
@@ -194,24 +199,36 @@ class RegistryHub:
         # Merge type mappings from EP providers (optional group)
         tm: dict = {}
         eps = entry_points()
-        group = (
-            eps.select(group=f"{type_mapping_group}.type_mapping")
-            if hasattr(eps, "select")
-            else eps.get(f"{type_mapping_group}.type_mapping", [])
-        )
-        for ep in group:
+
+        def load_group(group_name: str):
+            return (
+                eps.select(group=group_name)
+                if hasattr(eps, "select")
+                else eps.get(group_name, [])
+            )
+
+        for ep in load_group(type_mapping_group):
             try:
                 d = ep.load()
                 if isinstance(d, dict):
                     tm.update(d)
             except Exception:
-                # Silently ignore faulty EPs, keep core robust
                 pass
-        # Sensible defaults
         tm.setdefault("default", f"{identifier_prefix}.any")
         tm.setdefault("namespace", f"{identifier_prefix}.namespace")
 
-        return cls(node_pool, socket_pool, property_pool, tm)
+        tp: Set[TypePromotionPair] = set()
+        for ep in load_group(type_promotion_group):
+            try:
+                seq = ep.load()  # expect iterable of (src_id, dst_id)
+                for p in seq:
+                    if isinstance(p, (list, tuple)) and len(p) == 2:
+                        tp.add((p[0].lower(), p[1].lower()))
+            except Exception:
+                pass
+
+        hub = cls(node_pool, socket_pool, property_pool, tm, tp)
+        return hub
 
 
 registry_hub = RegistryHub.from_prefix()
