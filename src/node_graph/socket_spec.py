@@ -930,3 +930,6 @@ namespace = BaseSocketSpecAPI.namespace
 dynamic = BaseSocketSpecAPI.dynamic
 validate_socket_data = BaseSocketSpecAPI.validate_socket_data
 infer_specs_from_callable = BaseSpecInferAPI.infer_specs_from_callable
+# shorter aliases
+select = SocketSpecSelect
+meta = SocketSpecMeta
