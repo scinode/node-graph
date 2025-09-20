@@ -200,11 +200,13 @@ def test_build_outputs_from_signature():
     with pytest.raises(TypeError, match="outputs must be a SocketSpec"):
         ss.BaseSpecInferAPI.build_outputs_from_signature(add, explicit=int)
 
+    # if user provides a namespace explicitly, we use it directly
+    # do NOT add a 'result' field
     spec = ss.BaseSpecInferAPI.build_outputs_from_signature(
         add, explicit=ss.namespace()
     )
-    assert "result" in spec.fields
-
+    assert "result" not in spec.fields
+    # will wrap the spec into a namespace with 'result' field
     spec = ss.BaseSpecInferAPI.build_outputs_from_signature(
         add, explicit=ss.SocketSpec("any")
     )
@@ -220,8 +222,8 @@ def test_validate_socket_data():
 
 
 def test_is_namespace():
-    assert ss._is_namespace(ss.namespace())
-    assert not ss._is_namespace(ss.SocketSpec("any"))
+    assert ss.namespace().is_namespace()
+    assert not ss.SocketSpec("any").is_namespace()
 
 
 def test_expose_node_spec():
