@@ -340,10 +340,7 @@ class SocketSpec:
 
     # structural predicates
     def is_namespace(self) -> bool:
-        if self.dynamic or self.fields:
-            return True
-        ident = self.identifier or ""
-        return "namespace" in ident
+        return self.identifier.endswith("namespace")
 
     def has_default(self) -> bool:
         # only check against MISSING, and only for leaves
@@ -404,15 +401,6 @@ class SocketSpec:
             default=default,
             meta=meta,
         )
-
-
-def _is_namespace(spec: SocketSpec) -> bool:
-    return spec.is_namespace()
-
-
-def _ensure_namespace(spec: SocketSpec) -> None:
-    if not _is_namespace(spec):
-        raise TypeError("Operation requires a namespace SocketSpec")
 
 
 class SocketView:
@@ -565,16 +553,12 @@ class BaseSpecInferAPI:
             # python 3.9 using typing_extensions.get_type_hints
             return get_type_hints(func)
 
-    @staticmethod
-    def _is_namespace(spec: SocketSpec) -> bool:
-        return bool(spec.dynamic or spec.fields)
-
     @classmethod
     def _apply_structured_defaults_to_leaves(
         cls, ns_spec: SocketSpec, dv: dict[str, Any]
     ) -> SocketSpec:
         """Recursively apply dict defaults by setting defaults on leaf specs only."""
-        if not cls._is_namespace(ns_spec):
+        if not ns_spec.is_namespace():
             return ns_spec
         new_fields: dict[str, SocketSpec] = {}
         for k, child in (ns_spec.fields or {}).items():
@@ -582,7 +566,7 @@ class BaseSpecInferAPI:
                 new_fields[k] = child
                 continue
             val = dv[k]
-            if isinstance(val, dict) and cls._is_namespace(child):
+            if isinstance(val, dict) and child.is_namespace():
                 new_fields[k] = cls._apply_structured_defaults_to_leaves(child, val)
             else:
                 if child.is_namespace():
@@ -619,7 +603,7 @@ class BaseSpecInferAPI:
         if explicit is not None:
             if not isinstance(explicit, SocketSpec):
                 raise TypeError("inputs must be a SocketSpec (namespace/dynamic)")
-            if not cls._is_namespace(explicit):
+            if not explicit.is_namespace():
                 # wrap a leaf into a namespace field named after the parameter is ambiguous;
                 # require explicit namespaces for inputs to avoid surprises
                 raise TypeError("inputs must be a namespace (use `namespace(...)`).")
@@ -701,7 +685,7 @@ class BaseSpecInferAPI:
 
             # Defaults: scalar -> leaf default; dict -> traverse into leaves
             if param.default is not inspect._empty and param.default is not None:
-                if isinstance(param.default, dict) and cls._is_namespace(spec):
+                if isinstance(param.default, dict) and spec.is_namespace():
                     spec = cls._apply_structured_defaults_to_leaves(spec, param.default)
                 else:
                     if spec.is_namespace():
@@ -744,7 +728,7 @@ class BaseSpecInferAPI:
             if not isinstance(explicit, SocketSpec):
                 raise TypeError("outputs must be a SocketSpec")
             # Respect namespaces (even empty) as-is; just set call_role
-            if cls._is_namespace(explicit):
+            if explicit.is_namespace():
                 return replace(
                     explicit, meta=replace(explicit.meta, call_role="return")
                 )
