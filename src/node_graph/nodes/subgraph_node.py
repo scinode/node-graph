@@ -1,9 +1,9 @@
 from __future__ import annotations
-from node_graph.spec_node import SpecNode
+from node_graph.node import Node
 from node_graph.node_spec import NodeSpec
 
 
-class SubGraphNode(SpecNode):
+class SubGraphNode(Node):
     """Wrap a NodeGraph instance so it can be used as a Node in a parent graph.
 
     - Inputs mirror the child graph's *graph_inputs* namespace

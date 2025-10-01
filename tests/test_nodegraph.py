@@ -1,6 +1,7 @@
-from node_graph import NodeGraph, node, NodePool, namespace
+from node_graph import NodeGraph, node, namespace
 import pytest
 from typing import Any
+from node_graph.nodes.tests import test_float, test_add
 
 
 @pytest.fixture
@@ -38,8 +39,8 @@ def test_from_dict(ng_decorator):
 def test_new_node(ng):
     """Test new node."""
     ng = NodeGraph(name="test_nodegraph")
-    n1 = ng.add_node(NodePool.node_graph.test_add)
-    n2 = ng.add_node(NodePool.node_graph.test_add)
+    n1 = ng.add_node(test_add)
+    n2 = ng.add_node(test_add)
     assert n1.name == "test_add"
     assert n2.name == "test_add1"
     assert len(ng.nodes) == 5
@@ -49,7 +50,7 @@ def test_new_node(ng):
         ValueError,
         match=f"Name {name} can not be used, it is reserved.",
     ):
-        ng.add_node(NodePool.node_graph.test_add, name=name)
+        ng.add_node(test_add, name=name)
 
 
 def test_set_inputs(decorated_myadd):
@@ -71,7 +72,7 @@ def test_delete_node(ng):
     """Test delete node."""
     n = len(ng.nodes)
     nlink = len(ng.links)
-    ng.add_node(NodePool.node_graph.test_add, name="add3")
+    ng.add_node(test_add, name="add3")
     ng.add_link(ng.nodes["add1"].outputs[0], ng.nodes["add3"].inputs["y"])
     assert len(ng.nodes) == n + 1
     assert len(ng.links) == nlink + 1
@@ -89,13 +90,13 @@ def test_copy(ng):
     assert len(ng1.links) == nlink
 
 
-def test_add(ng):
+def test_add_another_nodegraph(ng):
     """Test add another nodegraph."""
     n = len(ng.nodes)
     nlink = len(ng.links)
     ng1 = NodeGraph(name="test_add")
-    ng1.add_node(NodePool.node_graph.test_float, "float3", value=4.0, t=3)
-    ng1.add_node(NodePool.node_graph.test_float, "float4", value=3.0)
+    ng1.add_node(test_float, "float3", value=4.0, t=3)
+    ng1.add_node(test_float, "float4", value=3.0)
     ng = ng + ng1
     assert len(ng.nodes) == n + 2
     assert len(ng.links) == nlink
@@ -200,17 +201,6 @@ def test_expose_outputs_names_invalid(test_ng):
         match="The following named nodes do not exist:",
     ):
         test_ng.expose_outputs(names=[name])
-
-
-def test_expose_inputs_outputs() -> None:
-    """Test the group inputs and outputs of a node graph."""
-    ng = NodeGraph(name="test_inputs_outputs")
-    ng.add_node(NodePool.node_graph.test_add, "add1")
-    with pytest.raises(
-        ValueError,
-        match="Node add1 does not have inputs spec, cannot expose",
-    ):
-        ng.expose_inputs()
 
 
 def test_build_inputs_outputs(ng):

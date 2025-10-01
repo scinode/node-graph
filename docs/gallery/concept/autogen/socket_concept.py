@@ -59,7 +59,7 @@ class SymbolNode(Node):
     identifier = "SymbolNode"
     name = "SymbolNode"
 
-    def update_sockets(self):
+    def update_spec(self):
         # create an Any type socket
         inp = self.add_input("node_graph.any", "symbols")
         # add a string property to the socket with default value "H"

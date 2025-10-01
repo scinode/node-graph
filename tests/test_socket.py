@@ -4,16 +4,17 @@ from node_graph import NodeGraph
 from node_graph.collection import group
 from node_graph.node import Node
 from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace, TaggedValue
-from node_graph.nodes import NodePool
+from node_graph.nodes.tests import test_add
 import operator as op
 from node_graph.errors import GraphDeferredIllegalOperationError
+from node_graph.nodes.tests import test_string
 
 
 @pytest.fixture
 def future_socket():
     """A future (result) socket from a node; value only known at runtime."""
     ng = NodeGraph(name="illegal_ops")
-    add = ng.add_node(NodePool.node_graph.test_add, "add")
+    add = ng.add_node(test_add, "add")
     # We only need the future socket object; no need to set inputs
     return add.outputs.result
 
@@ -176,7 +177,7 @@ def test_base_socket_type(id, data):
     Should be able to set the correct value to socket's property."""
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(NodePool.node_graph.test_add, "test")
+    n = ng.add_node(test_add, "test")
     socket = n.add_input(id, "test")
     socket.property.value = data
     assert socket.property.value == data
@@ -204,7 +205,7 @@ def test_base_socket_type_validation(id, data):
     the same type as the socket."""
 
     ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(NodePool.node_graph.test_add, "test")
+    n = ng.add_node(test_add, "test")
     socket = n.add_input(id, "test")
     try:
         socket.property.value = data
@@ -229,13 +230,10 @@ def test_socket_match(ng):
     """Test simple math."""
 
     ng = NodeGraph(name="test_socket_match")
-    str1 = ng.add_node("node_graph.test_string", "str1", value="abc")
-    math1 = ng.add_node(NodePool.node_graph.test_add, "math")
-    try:
+    str1 = ng.add_node(test_string, "str1", value="abc")
+    math1 = ng.add_node(test_add, "math")
+    with pytest.raises(TypeError, match="Socket type mismatch"):
         ng.add_link(str1.outputs[0], math1.inputs[1])
-    except Exception as e:
-        print(e)
-    # the link will fails.
     assert len(ng.links) == 0
 
 
@@ -531,11 +529,11 @@ def test_socket_waiting_on():
     """Test socket waiting_on."""
 
     ng = NodeGraph(name="test_socket_waiting_on")
-    n1 = ng.add_node(NodePool.node_graph.test_add)
-    n2 = ng.add_node(NodePool.node_graph.test_add)
-    n3 = ng.add_node(NodePool.node_graph.test_add)
-    n4 = ng.add_node(NodePool.node_graph.test_add)
-    n5 = ng.add_node(NodePool.node_graph.test_add)
+    n1 = ng.add_node(test_add)
+    n2 = ng.add_node(test_add)
+    n3 = ng.add_node(test_add)
+    n4 = ng.add_node(test_add)
+    n5 = ng.add_node(test_add)
     # left shift
     # wait for socket
     n1.outputs.result >> n5.inputs.x
@@ -546,16 +544,16 @@ def test_socket_waiting_on():
     n5 << n4
     assert len(n5.inputs._wait._links) == 4
     # chaining dependency
-    n6 = ng.add_node(NodePool.node_graph.test_add)
-    n7 = ng.add_node(NodePool.node_graph.test_add)
-    n8 = ng.add_node(NodePool.node_graph.test_add)
+    n6 = ng.add_node(test_add)
+    n7 = ng.add_node(test_add)
+    n8 = ng.add_node(test_add)
     n6 >> n7 >> n8
     assert n8.inputs._wait._links[0].from_node.name == n7.name
     assert n7.inputs._wait._links[0].from_node.name == n6.name
     # chaining dependency
-    n9 = ng.add_node(NodePool.node_graph.test_add)
-    n10 = ng.add_node(NodePool.node_graph.test_add)
-    n11 = ng.add_node(NodePool.node_graph.test_add)
+    n9 = ng.add_node(test_add)
+    n10 = ng.add_node(test_add)
+    n11 = ng.add_node(test_add)
     n11 << n10 << n9
     assert n11.inputs._wait._links[0].from_node.name == n10.name
     assert n10.inputs._wait._links[0].from_node.name == n9.name
@@ -565,9 +563,9 @@ def test_socket_group_waiting_on():
     """Test socket group waiting_on."""
 
     ng = NodeGraph(name="test_socket_group_waiting_on")
-    n1 = ng.add_node(NodePool.node_graph.test_add)
-    n2 = ng.add_node(NodePool.node_graph.test_add)
-    n3 = ng.add_node(NodePool.node_graph.test_add)
+    n1 = ng.add_node(test_add)
+    n2 = ng.add_node(test_add)
+    n3 = ng.add_node(test_add)
 
     # Test sockets 2 and 3 wait on socket 1
     n1.outputs.result >> group(n2.outputs.result, n3.outputs.result)

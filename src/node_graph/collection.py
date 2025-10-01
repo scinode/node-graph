@@ -324,8 +324,7 @@ class NodeCollection(Collection):
         identifier: Union[str, type],
         name: Optional[str] = None,
         uuid: Optional[str] = None,
-        _metadata: Optional[dict] = None,
-        _executor: Optional[dict] = None,
+        metadata: Optional[dict] = None,
         **kwargs,
     ) -> Node:
         from node_graph.node import Node
@@ -351,8 +350,7 @@ class NodeCollection(Collection):
                     name=name,
                     uuid=uuid,
                     graph=self.graph,
-                    metadata=_metadata,
-                    executor=_executor,
+                    metadata=metadata,
                 )
         self._append(node)
         node.set_inputs(kwargs)

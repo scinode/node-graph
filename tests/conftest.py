@@ -1,7 +1,8 @@
 import pytest
-from node_graph import NodeGraph, Node, NodePool, node
+from node_graph import NodeGraph, Node, node
 from node_graph.socket_spec import namespace as ns
 from typing import Any
+from node_graph.nodes.tests import test_add, test_float
 
 
 @pytest.fixture
@@ -42,9 +43,9 @@ def func_with_namespace_socket():
 def ng():
     """A test node_graph."""
     ng = NodeGraph(name="test_nodegraph")
-    float1 = ng.add_node("node_graph.test_float", "float1", value=3.0)
-    add1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=2)
-    add2 = ng.add_node(NodePool.node_graph.test_add, "add2", x=2)
+    float1 = ng.add_node(test_float, "float1", value=3.0)
+    add1 = ng.add_node(test_add, "add1", x=2)
+    add2 = ng.add_node(test_add, "add2", x=2)
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
     return ng
@@ -91,13 +92,13 @@ def ng_with_zone() -> NodeGraph:
     """
 
     ng = NodeGraph(name="test_graph")
-    zone1 = ng.add_node(NodePool.node_graph.test_add, name="zone1")
-    zone2 = ng.add_node(NodePool.node_graph.test_add, name="zone2")
-    n1 = ng.add_node(NodePool.node_graph.test_add, name="n1")
-    n2 = ng.add_node(NodePool.node_graph.test_add, name="n2")
-    n3 = ng.add_node(NodePool.node_graph.test_add, name="n3")
-    n4 = ng.add_node(NodePool.node_graph.test_add, name="n4")
-    n5 = ng.add_node(NodePool.node_graph.test_add, name="n5")
+    zone1 = ng.add_node(test_add, name="zone1")
+    zone2 = ng.add_node(test_add, name="zone2")
+    n1 = ng.add_node(test_add, name="n1")
+    n2 = ng.add_node(test_add, name="n2")
+    n3 = ng.add_node(test_add, name="n3")
+    n4 = ng.add_node(test_add, name="n4")
+    n5 = ng.add_node(test_add, name="n5")
     zone1.children = [n2, n3]
     zone2.children = [n3, n4]
     ng.add_link(n1.outputs.result, n2.inputs.x)
@@ -112,12 +113,12 @@ def ng_with_zone() -> NodeGraph:
 def ng_group():
     ng = NodeGraph(name="test_node_group")
     # auto generate name for the node
-    float1 = ng.add_node("node_graph.test_float", "float1", value=4.0, t=3)
-    float2 = ng.add_node("node_graph.test_float", "float2", value=3.0)
+    float1 = ng.add_node(test_float, "float1", value=4.0, t=3)
+    float2 = ng.add_node(test_float, "float2", value=3.0)
     sqrt_power_add1 = ng.add_node(
         "TestSqrtPowerAdd", "sqrt_power_add1", t1=3, t2=2, y=3
     )
-    add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
+    add1 = ng.add_node(test_add, "add1")
     ng.add_link(float1.outputs[0], sqrt_power_add1.inputs[0])
     ng.add_link(float2.outputs[0], sqrt_power_add1.inputs[1])
     ng.add_link(sqrt_power_add1.outputs[0], add1.inputs[1])
@@ -175,10 +176,10 @@ def node_with_decorated_node(decorated_myadd):
 def ng_decorator(decorated_myadd):
     """A test node_graph."""
     ng = NodeGraph(name="test_decorator_node")
-    float1 = ng.add_node("node_graph.test_float", "float1", value=3.0)
+    float1 = ng.add_node(test_float, "float1", value=3.0)
     add1 = ng.add_node(decorated_myadd, "add1", x=2)
     add2 = ng.add_node(decorated_myadd, "add2", x=2)
-    add3 = ng.add_node(NodePool.node_graph.test_add, "add3")
+    add3 = ng.add_node(test_add, "add3")
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
     ng.add_link(add2.outputs[0], add3.inputs[0])

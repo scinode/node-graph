@@ -822,6 +822,19 @@ def add_spec_field(ns: SocketSpec, name: str, spec: SocketSpec) -> SocketSpec:
     return replace(ns, fields=new_fields)
 
 
+def remove_spec_field(ns: SocketSpec, name: str) -> SocketSpec:
+    """
+    Remove a field from a namespace spec.
+    """
+    if not ns.is_namespace():
+        raise TypeError("remove_spec_field expects a namespace SocketSpec.")
+    if name not in (ns.fields or {}):
+        return ns  # Field doesn't exist, do nothing
+    new_fields = dict(ns.fields or {})
+    del new_fields[name]
+    return replace(ns, fields=new_fields)
+
+
 def _function_returns_value(func) -> bool:
     """
     True iff the *top-level* function body contains `return <non-None>`.

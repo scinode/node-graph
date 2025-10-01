@@ -92,7 +92,7 @@ class TestAdd(Node):
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
 
-    def update_sockets(self):
+    def update_spec(self):
         self.inputs._clear()
         self.outputs._clear()
         self.add_input("node_graph.float", "x")

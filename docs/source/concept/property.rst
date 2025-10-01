@@ -54,7 +54,7 @@ Add properties to a input socket
 
 .. code:: Python
 
-      def update_sockets(self):
+      def update_spec(self):
          inp = self.add_input("node_graph.any", "x")
          inp.add_property("FloatVector", size=3, default=[0, 0, 0])
 
@@ -82,7 +82,7 @@ It can be useful to create a dynamic socket based on a property's value.
                         options=[["cos", "cos", "cos function"],
                                  ["sin", "sin", "sin function"],
                                  ["pow", "pow", "pow function"]],
-                        update=self.update_sockets,
+                        update=self.update_spec,
                         )
 
 

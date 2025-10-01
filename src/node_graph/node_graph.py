@@ -200,14 +200,8 @@ class NodeGraph:
             socket._name = node.name
             self.inputs._append(socket)
             # update the _inputs spec
-            if hasattr(node, "_spec") and node._spec.inputs is not None:
-                self._inputs = add_spec_field(
-                    self._inputs, node.name, node._spec.inputs
-                )
-            else:
-                raise ValueError(
-                    f"Node {node.name} does not have inputs spec, cannot expose inputs."
-                )
+            if node.spec.inputs is not None:
+                self._inputs = add_spec_field(self._inputs, node.name, node.spec.inputs)
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -235,13 +229,9 @@ class NodeGraph:
             socket._name = node.name
             self.outputs._append(socket)
             # update the _outputs spec
-            if hasattr(node, "_spec") and node._spec.outputs is not None:
+            if node.spec.outputs is not None:
                 self._outputs = add_spec_field(
-                    self._outputs, node.name, node._spec.outputs
-                )
-            else:
-                raise ValueError(
-                    f"Node {node.name} does not have outputs spec, cannot expose outputs."
+                    self._outputs, node.name, node.spec.outputs
                 )
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()
@@ -523,34 +513,13 @@ class NodeGraph:
         Returns:
             Node: The added node.
         """
-        import importlib
 
-        md = ndata.get("metadata", {}) or {}
         name = ndata["name"]
         if name in BUILTIN_NODES:
             self.nodes[name].update_from_dict(ndata)
             return self.nodes[name]
         else:
-            if md.get("is_dynamic", False):
-                node_class = ndata.get("metadata", {}).get("node_class", None)
-                node_class = getattr(
-                    importlib.import_module(node_class["module_path"]),
-                    node_class["callable_name"],
-                )
-                node = node_class.from_dict(ndata, graph=self)
-                self.nodes._append(node)
-            else:
-                identifier = md["identifier"]
-                node = self.add_node(
-                    identifier,
-                    name=name,
-                    uuid=ndata.pop("uuid", None),
-                    _metadata=ndata.get("metadata", None),
-                    _executor=ndata.get("executor", None),
-                    include_builtins=ndata["name"] in BUILTIN_NODES,
-                )
-                node.update_from_dict(ndata)
-        return node
+            return Node.from_dict(ndata, graph=self)
 
     @classmethod
     def from_yaml(

@@ -1,6 +1,7 @@
 import pytest
-from node_graph import NodeGraph, NodePool
+from node_graph import NodeGraph
 from node_graph.socket_spec import namespace as ns
+from node_graph.nodes.tests import test_add
 
 
 def test_builtin_nodes() -> None:
@@ -21,11 +22,9 @@ def test_ctx() -> None:
 
     ng = NodeGraph(name="test_ctx")
     ng.ctx = {"x": 1.0, "y": 2.0}
-    node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=1, y=ng.ctx.y)
+    node1 = ng.add_node(test_add, "add1", x=1, y=ng.ctx.y)
     ng.ctx.sum = node1.outputs.result
-    node2 = ng.add_node(
-        NodePool.node_graph.test_add, "add2", x=2, y=node1.outputs.result
-    )
+    node2 = ng.add_node(test_add, "add2", x=2, y=node1.outputs.result)
     ng.ctx.sum = node2.outputs.result
     assert len(ng.ctx.sum._links) == 2
     # assign a namespace socket to the ctx
@@ -37,9 +36,9 @@ def test_link() -> None:
     """Test the group inputs and outputs of a node graph."""
     ng = NodeGraph(name="test_inputs_outputs")
     ng.inputs = {"x": 1.0, "y": 2.0}
-    node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=ng.inputs.x)
+    node1 = ng.add_node(test_add, "add1", x=ng.inputs.x)
     ng.add_node(
-        NodePool.node_graph.test_add,
+        test_add,
         "add2",
         x=ng.inputs.y,
         y=node1.outputs.result,
@@ -58,11 +57,11 @@ def test_from_dict() -> None:
     )
     ng.inputs = {"x": 1.0}
     ng.ctx = {"y": 2.0}
-    node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=ng.inputs.x)
+    node1 = ng.add_node(test_add, "add1", x=ng.inputs.x)
     ng.ctx.sum1 = node1.outputs.result
     ng.outputs.sum1 = ng.ctx.sum1
     ng.add_node(
-        NodePool.node_graph.test_add,
+        test_add,
         "add2",
         x=ng.ctx.y,
         y=node1.outputs.result,
@@ -84,11 +83,11 @@ def test_from_dict_dynamic_inputs_outputs() -> None:
     ng = NodeGraph(name="test_inputs_outputs")
     ng.inputs = {"x": 1.0}
     ng.ctx = {"y": 2.0}
-    node1 = ng.add_node(NodePool.node_graph.test_add, "add1", x=ng.inputs.x)
+    node1 = ng.add_node(test_add, "add1", x=ng.inputs.x)
     ng.ctx.sum1 = node1.outputs.result
     ng.outputs.sum1 = ng.ctx.sum1
     ng.add_node(
-        NodePool.node_graph.test_add,
+        test_add,
         "add2",
         x=ng.ctx.y,
         y=node1.outputs.result,

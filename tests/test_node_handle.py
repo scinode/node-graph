@@ -1,8 +1,8 @@
 from node_graph.socket_spec import namespace as ns
-from node_graph.node_spec import NodeSpec
+from node_graph.node_spec import NodeSpec, NodeHandle
 from node_graph.executor import RuntimeExecutor
 from node_graph import socket_spec as ss
-from node_graph.node_spec import NodeHandle
+from node_graph.node import Node
 
 
 def test_nodehandle_inputs_outputs_view():
@@ -13,6 +13,7 @@ def test_nodehandle_inputs_outputs_view():
         executor=RuntimeExecutor(
             mode="module", module_path="math", callable_name="hypot"
         ),
+        base_class=Node,
     )
     h = NodeHandle(spec)
     # views exist
@@ -36,6 +37,7 @@ def test_nodehandle_call_flow():
         inputs=ns(x=int, y=int),
         outputs=ns(sum=int),
         executor=RuntimeExecutor.from_callable(add),
+        base_class=Node,
     )
     h = NodeHandle(spec)
 
