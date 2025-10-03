@@ -53,9 +53,9 @@ def test_enum_type():
 
     ng = NodeGraph(name="test_enum_type")
     nd = ng.add_node("node_graph.test_enum")
-    assert nd.properties["function"].content == "test_add"
+    assert nd.properties["function"].content == "pow"
     nd.properties["function"].value = "sqrt"
-    assert nd.properties["function"].content == "test_sqrt"
+    assert nd.properties["function"].content == "sqrt"
 
 
 def test_enum_update_type():
@@ -63,7 +63,7 @@ def test_enum_update_type():
 
     ng = NodeGraph(name="test_enum_update_type")
     nd = ng.add_node("node_graph.test_enum_update")
-    assert nd.properties["function"].content == "test_add"
+    assert nd.properties["function"].content == "pow"
     print("inputs: ", nd.inputs)
     assert len(nd.inputs) == 3
     nd.properties["function"].value = "sqrt"

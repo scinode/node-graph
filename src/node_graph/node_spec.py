@@ -1,45 +1,55 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, Type, Callable
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Dict, Any, Optional, Callable
 from node_graph.socket_spec import SocketSpec, SocketView
 from node_graph.executor import BaseExecutor, SafeExecutor
-from node_graph.node import Node
 from .error_handler import ErrorHandlerSpec
 import importlib
+from enum import Enum
+
+if TYPE_CHECKING:
+    from node_graph.node import Node
+
+
+class SchemaSource(str, Enum):
+    """Defines how a node's schema is stored and reconstructed."""
+
+    EMBEDDED = "embedded"
+    HANDLE = "handle"
+    CALLABLE = "callable"
+    CLASS = "class"
 
 
 @dataclass(frozen=True)
 class NodeSpec:
     identifier: str
-    mode: str = "embedded"  # 'embedded', 'module_handle', 'decorator_build'
+    schema_source: str = SchemaSource.EMBEDDED
     node_type: str = "Normal"
     catalog: str = "Others"
     inputs: Optional[SocketSpec] = None
     outputs: Optional[SocketSpec] = None
     executor: Optional[BaseExecutor] = None
     error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=dict)
+    attached_error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     base_class_path: Optional[str] = None
     # not persisted directly; used at runtime
-    base_class: Optional[Type[Node]] = None
+    base_class: Optional["Node"] = None
     version: Optional[str] = None
-    decorator: Optional[Callable] = None  # if created from a decorator
-    decorator_path: Optional[str] = None  # import path of the decorator
 
-    def is_importable(self) -> bool:
-        try:
-            mode = getattr(self.executor, "mode", None)
-            return mode == "module"
-        except Exception:
-            return False
-
-    def is_module_handle(self) -> str:
-        """Return one of: 'embedded', 'module_handle', 'decorator_build'."""
-
-        try:
-            return isinstance(self.executor.callable, BaseHandle)
-        except Exception:
-            return False
+    def __post_init__(self):
+        # Validate at least one of the base_class_path and base_class is provided
+        if self.base_class is None and self.base_class_path is None:
+            raise ValueError("Either base_class or base_class_path must be provided.")
+        if self.base_class is not None and self.base_class_path is None:
+            object.__setattr__(
+                self,
+                "base_class_path",
+                f"{self.base_class.__module__}.{self.base_class.__name__}",
+            )
+        # if callable is not importable, we must embed the schema
+        if self.executor and self.executor.mode != "module":
+            object.__setattr__(self, "schema_source", SchemaSource.EMBEDDED)
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -48,112 +58,115 @@ class NodeSpec:
           - embedded: store full spec under 'spec_schema'
           - module_handle: store only 'executor' (callable is a decorated handle)
         """
-        importable = self.is_importable()
 
-        # if not importable, we always embed (ignore any user-provided mode)
-        if not importable:
-            mode = "embedded"
-        else:
-            # Importable: pick the most specific compact mode we can support
-            if self.is_module_handle():
-                mode = "module_handle"
-            elif (self.decorator is not None) or (self.decorator_path is not None):
-                mode = "decorator_build"
-            else:
-                # Safe default if nothing else applies
-                mode = "embedded"
-        d: Dict[str, Any] = {
-            "mode": mode,
+        data: Dict[str, Any] = {
+            "schema_source": self.schema_source.value,
             "identifier": self.identifier,
+            "node_type": self.node_type,
             "catalog": self.catalog,
             "metadata": dict(self.metadata),
+            "base_class_path": self.base_class_path,
         }
         if self.executor is not None:
-            d["executor"] = self.executor.to_dict()
+            data["executor"] = self.executor.to_dict()
         if self.version:
-            d["version"] = self.version
-        # prefer explicit path; otherwise derive from class
-        path = self.base_class_path
-        if path is None and self.base_class is not None:
-            path = f"{self.base_class.__module__}.{self.base_class.__qualname__}"
-        if path:
-            d["base_class_path"] = path
-        # decorator path
-        dec_path = self.decorator_path
-        if dec_path is None and self.decorator is not None:
-            dec_path = f"{self.decorator.__module__}.{self.decorator.__qualname__}"
-        if dec_path:
-            d["decorator_path"] = dec_path
+            data["version"] = self.version
 
-        if mode == "embedded":
+        if self.schema_source == SchemaSource.EMBEDDED:
             if self.inputs is not None:
-                d["inputs"] = self.inputs.to_dict()
+                data["inputs"] = self.inputs.to_dict()
             if self.outputs is not None:
-                d["outputs"] = self.outputs.to_dict()
+                data["outputs"] = self.outputs.to_dict()
             if self.error_handlers:
-                d["error_handlers"] = {
+                data["error_handlers"] = {
                     name: eh.to_dict() for name, eh in self.error_handlers.items()
                 }
+        if self.attached_error_handlers:
+            data["attached_error_handlers"] = {
+                name: eh.to_dict() for name, eh in self.attached_error_handlers.items()
+            }
 
-        return d
+        return data
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> NodeSpec:
+    def from_dict(cls, data: Dict[str, Any]) -> NodeSpec:
         """
         Rebuild a NodeSpec from a DB-ready representation produced by to_dict.
         """
         from node_graph.socket_spec import SocketSpec
 
-        mode = d.get("mode", "embedded")
-        executor = SafeExecutor(**d["executor"]) if "executor" in d else None
+        schema_source = SchemaSource(data.get("schema_source", SchemaSource.EMBEDDED))
+        executor = SafeExecutor(**data["executor"]) if "executor" in data else None
         error_handlers = {
             name: ErrorHandlerSpec.from_dict(eh)
-            for name, eh in d.get("error_handlers", {}).items()
+            for name, eh in data.get("error_handlers", {}).items()
         }
-        if mode == "embedded":
-            inputs = SocketSpec.from_dict(d["inputs"]) if "inputs" in d else None
-            outputs = SocketSpec.from_dict(d["outputs"]) if "outputs" in d else None
-            return cls(
-                identifier=d["identifier"],
-                catalog=d.get("catalog", "Others"),
+        attached_error_handlers = {
+            name: ErrorHandlerSpec.from_dict(eh)
+            for name, eh in data.get("attached_error_handlers", {}).items()
+        }
+        base_class = cls.get_base_class(data.get("base_class_path"))
+        if schema_source == SchemaSource.EMBEDDED:
+            inputs = SocketSpec.from_dict(data["inputs"]) if "inputs" in data else None
+            outputs = (
+                SocketSpec.from_dict(data["outputs"]) if "outputs" in data else None
+            )
+            spec = cls(
+                identifier=data["identifier"],
+                catalog=data.get("catalog", "Others"),
+                node_type=data.get("node_type", "Normal"),
+                schema_source=schema_source,
                 inputs=inputs,
                 outputs=outputs,
                 executor=executor,
                 error_handlers=error_handlers,
-                metadata=d.get("metadata", {}),
-                base_class_path=d.get("base_class_path"),
-                version=d.get("version"),
+                metadata=data.get("metadata", {}),
+                base_class_path=data.get("base_class_path"),
+                version=data.get("version"),
             )
-        if executor is None:
-            raise ValueError(f"persistence_mode '{mode}' requires an executor")
-        func_or_handle = executor.callable
-        if mode == "module_handle":
-            # Directly reuse the spec from the decorated handle
-            from node_graph.node_spec import BaseHandle
-
-            if not isinstance(func_or_handle, BaseHandle):
-                raise TypeError(
-                    "persistence_mode 'module_handle' requires a decorated handle"
+        elif schema_source == SchemaSource.CLASS:
+            # Rebuild by calling the static method on the class
+            spec = base_class._default_spec
+        elif schema_source == SchemaSource.HANDLE:
+            if executor is None:
+                raise ValueError(
+                    f"schema_source '{schema_source}' requires an executor"
                 )
-            spec = func_or_handle._spec
-            return spec
-        elif mode == "decorator_build":
-            decorator = cls._resolve_decorator(decorator_path=d.get("decorator_path"))
-            return decorator()(func_or_handle)._spec
 
-        raise ValueError(f"unrecognized persistence_mode '{mode}'")
+            func_or_handle = executor.callable
+            if isinstance(func_or_handle, BaseHandle):
+                spec = func_or_handle._spec
+            else:
+                raise RuntimeError(
+                    "The executor.callable is not a BaseHandle; cannot reconstruct spec."
+                )
+        elif schema_source == SchemaSource.CALLABLE:
+            if executor is None:
+                raise ValueError(
+                    f"schema_source '{schema_source}' requires an executor"
+                )
+            func_or_handle = executor.callable
+            if isinstance(func_or_handle, BaseHandle):
+                callable = func_or_handle._callable
+            else:
+                callable = func_or_handle
+            spec = base_class.build(callable)
+        else:
+            raise ValueError(f"unrecognized schema_source '{schema_source}'")
+        if attached_error_handlers:
+            spec = replace(spec, attached_error_handlers=attached_error_handlers)
+        return spec
 
-    def _resolve_base_class(self):
+    @staticmethod
+    def get_base_class(base_class_path: str):
         """Return the concrete Node subclass to instantiate."""
-        from node_graph.spec_node import SpecNode
+        from node_graph.node import Node
 
-        if self.base_class is not None:
-            return self.base_class
-        if self.base_class_path:
-            module_name, class_name = self.base_class_path.rsplit(".", 1)
+        if base_class_path:
+            module_name, class_name = base_class_path.rsplit(".", 1)
             return getattr(importlib.import_module(module_name), class_name)
 
-        return SpecNode
+        return Node
 
     @staticmethod
     def _resolve_decorator(decorator_path: Optional[str] = None) -> Callable:
@@ -179,7 +192,7 @@ class NodeSpec:
           - If importable, default to compact persistence modes.
           - Otherwise, embed the schema to guarantee lossless restore.
         """
-        Base = self._resolve_base_class()
+        Base = self.get_base_class(self.base_class_path)
         node = Base(
             name=name or self.identifier,
             uuid=uuid,
@@ -187,8 +200,6 @@ class NodeSpec:
             parent=parent,
             metadata=metadata,
             spec=self,
-            executor=self.executor,
-            error_handlers=self.error_handlers,
         )
         return node
 
@@ -229,8 +240,8 @@ class BaseHandle:
         if zone:
             zone.children.add(node)
         exec_obj = self._spec.executor.callable if self._spec.executor else None
-        if isinstance(exec_obj, BaseHandle) and hasattr(exec_obj, "_func"):
-            exec_obj = exec_obj._func
+        if isinstance(exec_obj, BaseHandle) and hasattr(exec_obj, "_callable"):
+            exec_obj = exec_obj._callable
 
         if is_function_like(exec_obj):
             prepared_inputs = prepare_function_inputs(exec_obj, *args, **kwargs)
@@ -248,13 +259,13 @@ class BaseHandle:
     def build(self, /, *args, **kwargs):
         from node_graph.utils.graph import materialize_graph
 
-        if self._spec.metadata.get("node_type", "").upper() != "GRAPH":
+        if self._spec.node_type.upper() != "GRAPH":
             raise TypeError(".build() is only available on graph specs")
         if self._spec.executor is None:
             raise RuntimeError("Spec has no executor")
         func = self._spec.executor.callable
-        if isinstance(func, BaseHandle) and hasattr(func, "_func"):
-            func = func._func
+        if isinstance(func, BaseHandle) and hasattr(func, "_callable"):
+            func = func._callable
         if hasattr(func, "__globals__"):
             func.__globals__[func.__name__] = self
 

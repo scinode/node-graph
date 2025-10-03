@@ -1,11 +1,10 @@
 from __future__ import annotations
 from typing import Any, Optional, Callable, List, Dict
 import inspect
-from .executor import RuntimeExecutor
-from .error_handler import ErrorHandlerSpec, normalize_error_handlers
+from .error_handler import ErrorHandlerSpec
 from .node import Node
-from .node_spec import NodeSpec, NodeHandle, BaseHandle
-from .socket_spec import infer_specs_from_callable, SocketSpec
+from .node_spec import NodeHandle, BaseHandle
+from .socket_spec import SocketSpec
 
 
 def set_node_arguments(call_args, call_kwargs, node):
@@ -58,7 +57,6 @@ def decorator_node(
     outputs: Optional[SocketSpec | List[str]] = None,
     error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
     catalog: str = "Others",
-    base_class: type | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Generate a decorator that register a function as a NodeGraph node.
     After decoration, calling that function `func(x, y, ...)`
@@ -73,24 +71,16 @@ def decorator_node(
     """
 
     def wrap(func) -> NodeHandle:
-        ident = identifier or func.__name__
-        in_spec, out_spec = infer_specs_from_callable(func, inputs, outputs)
-        handlers = normalize_error_handlers(error_handlers)
-        spec = NodeSpec(
-            identifier=ident,
+        from node_graph.nodes.function_node import FunctionNode
+
+        return FunctionNode.build(
+            obj=func,
+            identifier=identifier or func.__name__,
             catalog=catalog,
-            inputs=in_spec,
-            outputs=out_spec,
-            executor=RuntimeExecutor.from_callable(func),
-            error_handlers=handlers or {},
-            base_class_path=f"{base_class.__module__}.{base_class.__name__}"
-            if base_class
-            else None,
-            metadata={"node_type": "Normal", "is_dynamic": True},
+            input_spec=inputs,
+            output_spec=outputs,
+            error_handlers=error_handlers,
         )
-        handle = NodeHandle(spec)
-        handle._func = func
-        return handle
 
     return wrap
 
@@ -111,21 +101,16 @@ def decorator_graph(
     """
 
     def wrap(func) -> NodeHandle:
-        ident = identifier or func.__name__
+        from node_graph.nodes.function_node import FunctionNode
 
-        in_spec, out_spec = infer_specs_from_callable(func, inputs, outputs)
-
-        spec = NodeSpec(
-            identifier=ident,
+        return FunctionNode.build(
+            obj=func,
+            identifier=identifier or func.__name__,
+            node_type="graph",
             catalog=catalog,
-            inputs=in_spec,
-            outputs=out_spec,
-            executor=RuntimeExecutor.from_callable(func),
-            metadata={"node_type": "Graph", "is_dynamic": True, "graph_callable": True},
+            input_spec=inputs,
+            output_spec=outputs,
         )
-        handle = NodeHandle(spec)
-        handle._func = func
-        return handle
 
     return wrap
 

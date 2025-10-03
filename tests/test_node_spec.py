@@ -3,32 +3,40 @@ import pytest
 from types import SimpleNamespace
 
 from node_graph.socket_spec import namespace as ns
-from node_graph.node_spec import NodeSpec, BaseHandle
+from node_graph.node_spec import (
+    NodeSpec,
+    BaseHandle,
+    SchemaSource,
+)
 from node_graph.executor import RuntimeExecutor, SafeExecutor
+from node_graph.node import Node
 
 
 def test_nodespec_serialize_roundtrip_embedded():
     """Importable callable without decorator_path falls back to 'embedded' (safe)."""
     inp = ns(x=int, y=(int, 2))
     out = ns(sum=int)
-    ex = RuntimeExecutor(mode="module", module_path="math", callable_name="hypot")
+    ex = RuntimeExecutor(mode="module", module_path="math", callable_name="sqrt")
 
     spec = NodeSpec(
         identifier="pkg.add",
         catalog="Math",
+        node_type="MyType",
         inputs=inp,
         outputs=out,
         executor=ex,
         metadata={"k": "v"},
         version="1.0",
+        base_class=Node,
     )
     d = spec.to_dict()
-    assert d["mode"] == "embedded"
+    assert d["schema_source"] == SchemaSource.EMBEDDED
     assert "inputs" in d and "outputs" in d
 
     spec2 = NodeSpec.from_dict(copy.deepcopy(d))
     assert spec2.identifier == spec.identifier
     assert spec2.catalog == spec.catalog
+    assert spec2.node_type == spec.node_type
     assert spec2.inputs == spec.inputs
     assert spec2.outputs == spec.outputs
     assert spec2.metadata == spec.metadata
@@ -36,8 +44,8 @@ def test_nodespec_serialize_roundtrip_embedded():
     assert isinstance(spec2.executor, SafeExecutor)
     assert spec2.executor.mode == "module"
     assert spec2.executor.module_path == "math"
-    assert spec2.executor.callable_name == "hypot"
-    assert spec2.mode == "embedded"
+    assert spec2.executor.callable_name == "sqrt"
+    assert spec2.schema_source == SchemaSource.EMBEDDED
 
 
 def test_nodespec_to_dict_module_handle_strips_schema():
@@ -48,6 +56,7 @@ def test_nodespec_to_dict_module_handle_strips_schema():
         inputs=ns(a=int),
         outputs=ns(b=int),
         metadata={"inner": True},
+        base_class=Node,
     )
 
     class DummyHandle(BaseHandle):
@@ -63,61 +72,53 @@ def test_nodespec_to_dict_module_handle_strips_schema():
 
         def to_dict(self):
             return {
-                "mode": "module"
+                "schema_source": "module"
             }  # shape consistent with SafeExecutor/RuntimeExecutor
 
     outer = NodeSpec(
         identifier="outer.node",
+        schema_source=SchemaSource.HANDLE,
         catalog="Test",
         inputs=ns(x=int),
         outputs=ns(y=int),
         executor=FakeExec(handle),
         metadata={"k": "v"},
+        base_class=Node,
     )
 
     d = outer.to_dict()
-    assert d["mode"] == "module_handle"
+    assert d["schema_source"] == SchemaSource.HANDLE
     assert "inputs" not in d and "outputs" not in d
     assert "executor" in d
 
 
-def test_nodespec_resolve_base_class_default():
-    # Default should be SpecNode (importable)
-    s = NodeSpec(identifier="demo.id")
-    bc = s._resolve_base_class()
-    assert bc.__name__ == "SpecNode"
+def test_validate_base_class_path_required():
+
+    with pytest.raises(
+        ValueError, match="Either base_class or base_class_path must be provided."
+    ):
+        NodeSpec(identifier="demo.id")
 
 
-def test_nodespec_resolve_base_class_custom():
+def test_nodespecget_base_class_custom():
     s = NodeSpec(identifier="demo.id", base_class_path="builtins.object")
-    bc = s._resolve_base_class()
+    bc = s.get_base_class(s.base_class_path)
     assert bc is object
 
 
-def test_from_dict_module_handle_requires_executor_raises():
+def test_from_dict_callable_requires_executor_raises():
     d = {
-        "mode": "module_handle",
+        "schema_source": "callable",
         "identifier": "x.y",
         "catalog": "Test",
         # executor intentionally omitted
+        "base_class_path": "node_graph.node.Node",
     }
     with pytest.raises(ValueError, match="requires an executor"):
         NodeSpec.from_dict(copy.deepcopy(d))
 
 
-def test_from_dict_module_handle_with_non_handle_raises():
-    # SafeExecutor will resolve to math.hypot (a normal function, not a BaseHandle)
-    d = {
-        "mode": "module_handle",
-        "identifier": "x.y",
-        "catalog": "Test",
-        "executor": {"mode": "module", "module_path": "math", "callable_name": "hypot"},
-    }
-    with pytest.raises(TypeError, match="requires a decorated handle"):
-        NodeSpec.from_dict(copy.deepcopy(d))
-
-
-def test_from_dict_module_handle_with_handle_returns_inner_spec(monkeypatch):
+def test_from_dict_callable_basehandler(monkeypatch):
     # Build the inner spec that the handle should return
     inner = NodeSpec(
         identifier="inner.node",
@@ -125,6 +126,7 @@ def test_from_dict_module_handle_with_handle_returns_inner_spec(monkeypatch):
         inputs=ns(a=int),
         outputs=ns(b=int),
         metadata={"inner": True},
+        base_class=Node,
     )
 
     class DummyHandle(BaseHandle):
@@ -140,10 +142,11 @@ def test_from_dict_module_handle_with_handle_returns_inner_spec(monkeypatch):
     monkeypatch.setattr("node_graph.node_spec.SafeExecutor", _dummy_safe_executor)
 
     d = {
-        "mode": "module_handle",
+        "schema_source": SchemaSource.HANDLE,
         "identifier": "outer.node",
         "catalog": "Test",
-        "executor": {"mode": "module"},  # contents ignored by our dummy
+        "executor": {},  # contents ignored by our dummy
+        "base_class_path": "node_graph.node.Node",
     }
 
     spec = NodeSpec.from_dict(copy.deepcopy(d))
@@ -151,162 +154,11 @@ def test_from_dict_module_handle_with_handle_returns_inner_spec(monkeypatch):
     assert spec.identifier == "inner.node"
 
 
-def test_nodespec_resolve_decorator():
-    from node_graph.decorator import node
-
-    decorator = NodeSpec._resolve_decorator()
-    assert decorator is node
-    decorator = NodeSpec._resolve_decorator(decorator_path="builtins.object")
-    assert decorator is object
-
-
-def test_nodespec_to_dict_sets_decorator_build_when_importable_and_decorator_present():
-    """If callable is importable and a decorator is provided, default to 'decorator_build'."""
-    ex = RuntimeExecutor(mode="module", module_path="math", callable_name="hypot")
-    spec = NodeSpec(
-        identifier="decor.built",
-        catalog="Math",
-        executor=ex,
-        decorator_path="dummy.module.node",  # presence triggers decorator_build
-    )
-
-    d = spec.to_dict()
-    assert d["mode"] == "decorator_build"
-    assert d.get("decorator_path") == "dummy.module.node"
-    assert "inputs" not in d and "outputs" not in d
-
-
-def test_from_dict_decorator_build_requires_executor_raises():
-    d = {
-        "mode": "decorator_build",
-        "identifier": "x.y",
-        "catalog": "Test",
-        # no executor
-    }
-    with pytest.raises(ValueError, match="requires an executor"):
-        NodeSpec.from_dict(copy.deepcopy(d))
-
-
-def test_from_dict_decorator_build_rebuilds_via_decorator(monkeypatch):
-    """Rebuild the spec using a decorator and an importable callable."""
-    built = NodeSpec(
-        identifier="built.via.decorator",
-        catalog="Test",
-        inputs=ns(a=int),
-        outputs=ns(b=int),
-        metadata={"rebuilt": True},
-    )
-
-    def dummy_decorator():
-        def _apply(func):
-            class H:
-                def __init__(self, spec):
-                    self._spec = spec
-
-            return H(built)
-
-        return _apply
-
-    monkeypatch.setattr(
-        NodeSpec,
-        "_resolve_decorator",
-        staticmethod(lambda decorator_path: dummy_decorator),
-    )
-
-    d = {
-        "mode": "decorator_build",
-        "identifier": "outer.node",
-        "catalog": "Test",
-        "decorator_path": "some.module.node",
-        "executor": {"mode": "module", "module_path": "math", "callable_name": "hypot"},
-    }
-
-    spec = NodeSpec.from_dict(copy.deepcopy(d))
-    assert isinstance(spec, NodeSpec)
-    assert spec.identifier == "built.via.decorator"
-    assert spec.inputs.fields.keys() == built.inputs.fields.keys()
-    assert spec.outputs.fields.keys() == built.outputs.fields.keys()
-    assert spec.metadata.get("rebuilt") is True
-
-
 def test_from_dict_unrecognized_mode_raises():
     d = {
-        "mode": "weird_mode",
+        "schema_source": "weird_mode",
         "identifier": "x.y",
-        "catalog": "Test",
-        "executor": {"mode": "module", "module_path": "math", "callable_name": "hypot"},
+        "base_class_path": "node_graph.node.Node",
     }
-    with pytest.raises(ValueError, match="unrecognized persistence_mode 'weird_mode'"):
+    with pytest.raises(ValueError, match="'weird_mode' is not a valid SchemaSource"):
         NodeSpec.from_dict(copy.deepcopy(d))
-
-
-def test_is_module_handle_truth_table():
-    inner = NodeSpec(identifier="inner", catalog="Test")
-
-    class DummyHandle(BaseHandle):
-        def __init__(self, _spec):
-            super().__init__(_spec, get_current_graph=lambda: None)
-
-    handle = DummyHandle(inner)
-
-    class FakeExec:
-        def __init__(self, callable):
-            self.callable = callable
-
-    spec_handle = NodeSpec(identifier="H", executor=FakeExec(handle))
-    spec_func = NodeSpec(
-        identifier="F",
-        executor=RuntimeExecutor(
-            mode="module", module_path="math", callable_name="hypot"
-        ),
-    )
-
-    assert spec_handle.is_module_handle() is True
-    assert spec_func.is_module_handle() is False
-
-
-def test_to_dict_overrides_user_mode_to_embedded_when_not_importable():
-    from node_graph.socket_spec import namespace as ns
-
-    class FakeExec:
-        def __init__(self):
-            self.mode = "graph"  # not "module" -> not importable
-            self.callable = lambda x: x
-
-        def to_dict(self):
-            return {"mode": "graph"}
-
-    spec = NodeSpec(
-        identifier="non.importable",
-        inputs=ns(a=int),
-        outputs=ns(b=int),
-        executor=FakeExec(),
-        metadata={"m": 1},
-        mode="module_handle",  # user tries to force a compact mode
-    )
-    d = spec.to_dict()
-    assert d["mode"] == "embedded"  # OVERRIDDEN
-    assert "inputs" in d and "outputs" in d  # schema embedded
-
-
-def test_to_dict_embedded_even_if_decorator_present_but_not_importable():
-    from node_graph.socket_spec import namespace as ns
-
-    class FakeExec:
-        def __init__(self):
-            self.mode = "graph"  # not importable
-            self.callable = lambda x: x
-
-        def to_dict(self):
-            return {"mode": "graph"}
-
-    spec = NodeSpec(
-        identifier="non.importable.decorated",
-        inputs=ns(a=int),
-        outputs=ns(b=int),
-        executor=FakeExec(),
-        decorator_path="some.module.node",  # would suggest decorator_build, but not importable
-    )
-    d = spec.to_dict()
-    assert d["mode"] == "embedded"
-    assert "inputs" in d and "outputs" in d

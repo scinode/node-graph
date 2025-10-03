@@ -42,10 +42,11 @@ class NodeGraph:
         >>> ng.to_dict()
     """
 
-    registry: Optional[RegistryHub] = registry_hub
+    _REGISTRY: Optional[RegistryHub] = registry_hub
+    _BUILTINS_POLICY = BuiltinPolicy()
+    _SOCKET_SPEC_API = BaseSocketSpecAPI
+
     platform: str = "node_graph"
-    _socket_spec = BaseSocketSpecAPI
-    Builtins: BuiltinPolicy = BuiltinPolicy()
 
     def __init__(
         self,
@@ -56,9 +57,6 @@ class NodeGraph:
         graph_type: str = "NORMAL",
         graph: Optional[NodeGraph] = None,
         parent: Optional[Node] = None,
-        state: str = "CREATED",
-        action: str = "NONE",
-        description: str = "",
         interactive_widget: bool = False,
         init_graph_level_nodes: bool = True,
     ) -> None:
@@ -75,16 +73,10 @@ class NodeGraph:
         self.graph_type = graph_type
         self.graph = graph
         self.parent = parent
-        self.NodePool = self.registry.node_pool
-        self.SocketPool = self.registry.socket_pool
-        self.PropertyPool = self.registry.property_pool
-        self.type_mapping = dict(self.registry.type_mapping)
-        self.type_promotions = set(self.registry.type_promotion)
-        self.nodes = NodeCollection(graph=self, pool=self.NodePool)
+        self.type_mapping = dict(self._REGISTRY.type_mapping)
+        self.type_promotions = set(self._REGISTRY.type_promotion)
+        self.nodes = NodeCollection(graph=self, pool=self._REGISTRY.node_pool)
         self.links = LinkCollection(self)
-        self.state = state
-        self.action = action
-        self.description = description
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
@@ -93,16 +85,20 @@ class NodeGraph:
         if init_graph_level_nodes:
             self._init_graph_level_nodes(inputs, outputs)
 
+        self.state = "CREATED"
+        self.action = "NONE"
+        self.description = ""
+
     def _init_graph_level_nodes(self, inputs, outputs):
         from dataclasses import replace
 
-        inputs = self._socket_spec.validate_socket_data(inputs)
-        outputs = self._socket_spec.validate_socket_data(outputs)
+        inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
+        outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
 
-        base_class = self.NodePool["graph_level"].load()
+        base_class = self._REGISTRY.node_pool["graph_level"].load()
 
         # if inputs is None, we assume it's a dynamic inputs
-        inputs = self._socket_spec.dynamic(Any) if inputs is None else inputs
+        inputs = self._SOCKET_SPEC_API.dynamic(Any) if inputs is None else inputs
         meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
         self._inputs = inputs
@@ -113,7 +109,7 @@ class NodeGraph:
         )
         self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
         # if outputs is None, we assume it's a dynamic outputs
-        outputs = self._socket_spec.dynamic(Any) if outputs is None else outputs
+        outputs = self._SOCKET_SPEC_API.dynamic(Any) if outputs is None else outputs
         self._outputs = outputs
         self.graph_outputs_spec = NodeSpec(
             identifier="graph_outputs",
@@ -123,7 +119,7 @@ class NodeGraph:
         graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
         graph_outputs.inputs._name = "outputs"
         # graph context
-        ctx = self._socket_spec.dynamic(Any)
+        ctx = self._SOCKET_SPEC_API.dynamic(Any)
         meta = replace(ctx.meta, sub_socket_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
         self.graph_ctx_spec = NodeSpec(
@@ -200,14 +196,8 @@ class NodeGraph:
             socket._name = node.name
             self.inputs._append(socket)
             # update the _inputs spec
-            if hasattr(node, "_spec") and node._spec.inputs is not None:
-                self._inputs = add_spec_field(
-                    self._inputs, node.name, node._spec.inputs
-                )
-            else:
-                raise ValueError(
-                    f"Node {node.name} does not have inputs spec, cannot expose inputs."
-                )
+            if node.spec.inputs is not None:
+                self._inputs = add_spec_field(self._inputs, node.name, node.spec.inputs)
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -235,13 +225,9 @@ class NodeGraph:
             socket._name = node.name
             self.outputs._append(socket)
             # update the _outputs spec
-            if hasattr(node, "_spec") and node._spec.outputs is not None:
+            if node.spec.outputs is not None:
                 self._outputs = add_spec_field(
-                    self._outputs, node.name, node._spec.outputs
-                )
-            else:
-                raise ValueError(
-                    f"Node {node.name} does not have outputs spec, cannot expose outputs."
+                    self._outputs, node.name, node.spec.outputs
                 )
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()
@@ -490,11 +476,12 @@ class NodeGraph:
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
             graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
-            state=ngdata.get("state", "CREATED"),
-            action=ngdata.get("action", "NONE"),
-            description=ngdata.get("description", ""),
             init_graph_level_nodes=False,
         )
+        ng.state = ngdata.get("state", "CREATED")
+        ng.action = ngdata.get("action", "NONE")
+        ng.description = ngdata.get("description", "")
+
         # built-in graph level nodes
         inputs_spec = (
             SocketSpec.from_dict(md["inputs_spec"], type_mapping=ng.type_mapping)
@@ -523,34 +510,13 @@ class NodeGraph:
         Returns:
             Node: The added node.
         """
-        import importlib
 
-        md = ndata.get("metadata", {}) or {}
         name = ndata["name"]
         if name in BUILTIN_NODES:
             self.nodes[name].update_from_dict(ndata)
             return self.nodes[name]
         else:
-            if md.get("is_dynamic", False):
-                node_class = ndata.get("metadata", {}).get("node_class", None)
-                node_class = getattr(
-                    importlib.import_module(node_class["module_path"]),
-                    node_class["callable_name"],
-                )
-                node = node_class.from_dict(ndata, graph=self)
-                self.nodes._append(node)
-            else:
-                identifier = md["identifier"]
-                node = self.add_node(
-                    identifier,
-                    name=name,
-                    uuid=ndata.pop("uuid", None),
-                    _metadata=ndata.get("metadata", None),
-                    _executor=ndata.get("executor", None),
-                    include_builtins=ndata["name"] in BUILTIN_NODES,
-                )
-                node.update_from_dict(ndata)
-        return node
+            return Node.from_dict(ndata, graph=self)
 
     @classmethod
     def from_yaml(

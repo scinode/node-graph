@@ -1,8 +1,10 @@
 from node_graph.decorator import build_node_from_callable
 from node_graph.manager import get_current_graph, set_current_graph
-from node_graph import NodeGraph, NodePool, node
+from node_graph import NodeGraph, node
 from node_graph.socket_spec import namespace
+from node_graph.node_spec import SchemaSource
 import pytest
+from node_graph.nodes.tests import test_add
 
 
 def test_build_node():
@@ -12,7 +14,9 @@ def test_build_node():
     NodeCls = build_node_from_callable(sqrt)
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
-    assert task1.to_dict()["metadata"]["spec_schema"]["executor"]["mode"] == "module"
+    ndata = task1.to_dict()
+    assert ndata["spec"]["schema_source"] == SchemaSource.HANDLE
+    assert "inputs" not in task1.to_dict()["spec"]
     assert len(ng.nodes) == 4
     "x" in ng.nodes[-1].inputs
 
@@ -106,9 +110,9 @@ def test_socket():
 
 def create_test_node_group():
     ng = NodeGraph()
-    add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
-    add2 = ng.add_node(NodePool.node_graph.test_add, "add2")
-    add3 = ng.add_node(NodePool.node_graph.test_add, "add3")
+    add1 = ng.add_node(test_add, "add1")
+    add2 = ng.add_node(test_add, "add2")
+    add3 = ng.add_node(test_add, "add3")
     ng.add_link(add1.outputs[0], add3.inputs[0])
     ng.add_link(add2.outputs[0], add3.inputs[1])
     ng.inputs.x = add1.inputs.x

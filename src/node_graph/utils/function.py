@@ -20,7 +20,7 @@ def prepare_function_inputs(func, *call_args, **call_kwargs):
     inputs = dict(call_kwargs or {})
     if func is not None:
         arguments = list(call_args)
-        orginal_func = func._func if hasattr(func, "_func") else func
+        orginal_func = func._callable if hasattr(func, "_callable") else func
         for name, parameter in inspect.signature(orginal_func).parameters.items():
             if parameter.kind in [
                 parameter.POSITIONAL_ONLY,

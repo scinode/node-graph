@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 
-from node_graph.node import BuiltinPolicy
-from node_graph.spec_node import SpecNode
+from node_graph.node import BuiltinPolicy, Node
+from node_graph.node_spec import NodeSpec
 
 
 class _GraphIOSharedMixin:
@@ -14,7 +14,9 @@ class _GraphIOSharedMixin:
     """
 
     # turn off framework builtins for these graph-level nodes
-    Builtins = BuiltinPolicy(input_wait=False, output_wait=False, default_output=False)
+    _BUILTINS_POLICY = BuiltinPolicy(
+        input_wait=False, output_wait=False, default_output=False
+    )
 
     def _unify_io(self) -> None:
         """Point outputs to the exact same object as inputs."""
@@ -22,8 +24,8 @@ class _GraphIOSharedMixin:
         self.outputs = self.inputs
 
     # ensure the alias is kept
-    def update_sockets(self) -> None:
-        super().update_sockets()
+    def update_spec(self) -> None:
+        super().update_spec()
         self._unify_io()
 
     # make sure copying preserves the alias
@@ -42,11 +44,18 @@ class _GraphIOSharedMixin:
         return obj
 
 
-class GraphLevelNode(_GraphIOSharedMixin, SpecNode):
+class GraphLevelNode(_GraphIOSharedMixin, Node):
     """Graph level node where inputs and outputs are the same sockets."""
 
-    catalog = "Builtins"
+    identifier: str = "node_graph.graph_level"
+    catalog: str = "Builtins"
     is_dynamic: bool = True
+
+    _default_spec = NodeSpec(
+        identifier="node_graph.graph_level",
+        catalog="Builtins",
+        base_class_path="node_graph.nodes.builtins.GraphLevelNode",
+    )
 
     def __init__(self, *args, **kwargs):
         # SpecNode handles spec application and may rebuild inputs/outputs

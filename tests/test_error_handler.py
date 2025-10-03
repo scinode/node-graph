@@ -3,6 +3,7 @@ from node_graph.error_handler import ErrorHandlerSpec, normalize_error_handlers
 from node_graph.executor import RuntimeExecutor, SafeExecutor, BaseExecutor
 from node_graph.node_spec import NodeSpec
 from node_graph.socket_spec import infer_specs_from_callable
+from node_graph.node import Node
 
 
 def sample_handler(task):
@@ -119,6 +120,7 @@ def test_nodespec_roundtrip_preserves_error_handlers():
         error_handlers=handlers,
         metadata={"node_type": "Normal"},
         version="1.0.0",
+        base_class=Node,
     )
 
     d = spec.to_dict()
@@ -152,12 +154,13 @@ def test_node_roundtrip_preserves_error_handlers():
         outputs=out_spec,
         executor=RuntimeExecutor.from_callable(lambda x: x),
         error_handlers=handlers,
+        base_class=Node,
     )
 
     node = spec.to_node(name="n1")
     data = node.to_dict()
-    assert "error_handlers" in data["metadata"]["spec_schema"]
-    assert len(data["metadata"]["spec_schema"]["error_handlers"]) == 1
+    assert "error_handlers" in data["spec"]
+    assert len(data["spec"]["error_handlers"]) == 1
 
     # mutate copy, then update_from_dict into a fresh node
     # data2 = copy.deepcopy(data)

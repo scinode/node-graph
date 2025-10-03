@@ -1,4 +1,5 @@
-from node_graph import NodeGraph, NodePool
+from node_graph import NodeGraph
+from node_graph.nodes.tests import test_add
 from node_graph.node import Node
 from node_graph.socket_spec import namespace
 import pytest
@@ -9,7 +10,7 @@ def test_base_node():
     Append it to a nodegraph.
     """
     ng = NodeGraph(name="test_base_node")
-    n = Node.new(NodePool.node_graph.test_float)
+    n = Node()
     # added to nodegraph
     ng.append_node(n)
     assert n.graph == ng
@@ -23,19 +24,19 @@ def test_id_name():
 
     ng = NodeGraph(name="test_id_name")
     # auto generate name for the node
-    math1 = ng.add_node(NodePool.node_graph.test_add)
+    math1 = ng.add_node(test_add)
     assert math1.name == "test_add"
-    math2 = ng.add_node(NodePool.node_graph.test_add)
+    math2 = ng.add_node(test_add)
     assert math2.name == "test_add1"
     # set node name manually
-    math3 = ng.add_node(NodePool.node_graph.test_add, name="Math3")
+    math3 = ng.add_node(test_add, name="Math3")
     assert math3.name == "Math3"
 
 
 def test_set_node_as_input():
     ng = NodeGraph(name="test_set_inputs")
-    add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
-    add2 = ng.add_node(NodePool.node_graph.test_add, "add2")
+    add1 = ng.add_node(test_add, "add1")
+    add2 = ng.add_node(test_add, "add2")
     add2.set_inputs({"x": add1})
     assert len(ng.links) == 1
     assert add2.inputs["x"].property.value is None
@@ -43,8 +44,8 @@ def test_set_node_as_input():
 
 def test_set_link_as_input():
     ng = NodeGraph(name="test_set_inputs")
-    add1 = ng.add_node(NodePool.node_graph.test_add, "add1")
-    add2 = ng.add_node(NodePool.node_graph.test_add, "add2")
+    add1 = ng.add_node(test_add, "add1")
+    add2 = ng.add_node(test_add, "add2")
     add2.set_inputs({"x": add1.outputs["result"]})
     assert len(ng.links) == 1
     assert add2.inputs["x"].property.value is None
@@ -60,7 +61,7 @@ def test_set_non_exit_input_for_dynamic_input():
 def test_set_property():
 
     ng = NodeGraph(name="test_set_property")
-    math = ng.add_node(NodePool.node_graph.test_add, "Math")
+    math = ng.add_node(test_add, "Math")
     math.inputs["x"].property.value = 2
     assert math.inputs["x"].property.value == 2
 
@@ -68,10 +69,11 @@ def test_set_property():
 def test_to_dict():
 
     ng = NodeGraph(name="test_to_dict")
-    math = ng.add_node(NodePool.node_graph.test_add, "Math")
+    math = ng.add_node(test_add, "Math")
     math.inputs["x"].property.value = 2
     data = math.to_dict()
-    assert data["metadata"]["identifier"] == "node_graph.test_add"
+    assert "spec" in data
+    assert data["spec"]["identifier"] == "test_add"
 
 
 def test_copy():
@@ -82,10 +84,10 @@ def test_copy():
     """
 
     ng = NodeGraph(name="test_copy")
-    math = ng.add_node(NodePool.node_graph.test_add, "Math", t=5, x=2)
+    math = ng.add_node(test_add, "Math", t=5, x=2)
     assert len(ng.nodes) == 4
     math1 = math.copy()
-    assert math1.properties["t"].value == 5
+    assert math1.inputs["t"].value == 5
     assert math1.inputs["x"].property.value == 2
     assert math1.graph.uuid == ng.uuid
     assert math1.name == f"{math.name}_copy"
@@ -97,10 +99,10 @@ def test_copy():
 def test_check_name():
     """Check name when creating a node."""
     ng = NodeGraph(name="test_check_name")
-    ng.add_node(NodePool.node_graph.test_add, "add1")
+    ng.add_node(test_add, "add1")
     # check if it raises an error if the name is already taken
     try:
-        ng.add_node(NodePool.node_graph.test_add, "add1")
+        ng.add_node(test_add, "add1")
     except ValueError as e:
         assert str(e) == "add1 already exists, please choose another name."
     else:
@@ -110,7 +112,7 @@ def test_check_name():
         ng.add_node("node_graph.test_ad", "add2")
     except ValueError as e:
         assert (
-            "Identifier: node_graph.test_ad is not defined. Did you mean node_graph.test_add"
+            "Identifier: node_graph.test_ad is not defined. Did you mean node_graph"
             in str(e)
         )
     else:
@@ -120,13 +122,13 @@ def test_check_name():
         ValueError,
         match="spaces are not allowed",
     ):
-        ng.add_node(NodePool.node_graph.test_add, key)
+        ng.add_node(test_add, key)
 
 
 def test_repr():
     """Test __repr__ method."""
     ng = NodeGraph(name="test_repr")
-    ng.add_node(NodePool.node_graph.test_add, "add1")
+    ng.add_node(test_add, "add1")
     assert (
         repr(ng.nodes)
         == 'NodeCollection(parent = "test_repr", nodes = ["graph_inputs", "graph_outputs", "graph_ctx", "add1"])'
@@ -140,10 +142,8 @@ def test_nodegraph_node():
         inputs=namespace(x=int, y=int),
         outputs=namespace(result=int),
     )
-    sub_ng.add_node(NodePool.node_graph.test_add, "add1")
-    sub_ng.add_node(
-        NodePool.node_graph.test_add, "add2", x=sub_ng.nodes.add1.outputs.result
-    )
+    sub_ng.add_node(test_add, "add1")
+    sub_ng.add_node(test_add, "add2", x=sub_ng.nodes.add1.outputs.result)
     ng.add_node(sub_ng, "sub_ng")
     assert len(ng.nodes) == 4
     assert len(ng.nodes.sub_ng.nodes) == 5
@@ -184,3 +184,13 @@ def test_add_error_handler():
         {"test": {"executor": sample_handler, "exit_codes": [1, 2], "max_retries": 3}}
     )
     assert len(node.error_handlers) == 1
+
+
+def test_add_input_outputs_spec():
+    node = Node()
+    node.add_input_spec("node_graph.int", "a")
+    node.add_input_spec("node_graph.int", "b")
+    node.add_output_spec("node_graph.int", "result")
+    assert "a" in node.inputs
+    assert "b" in node.inputs
+    assert "result" in node.outputs
