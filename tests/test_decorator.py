@@ -2,7 +2,7 @@ from node_graph.decorator import build_node_from_callable
 from node_graph.manager import get_current_graph, set_current_graph
 from node_graph import NodeGraph, node
 from node_graph.socket_spec import namespace
-from node_graph.node_spec import SCHEMA_SOURCE_HANDLE
+from node_graph.node_spec import SchemaSource
 import pytest
 from node_graph.nodes.tests import test_add
 
@@ -15,7 +15,7 @@ def test_build_node():
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
     ndata = task1.to_dict()
-    assert ndata["spec"]["schema_source"] == SCHEMA_SOURCE_HANDLE
+    assert ndata["spec"]["schema_source"] == SchemaSource.HANDLE
     assert "inputs" not in task1.to_dict()["spec"]
     assert len(ng.nodes) == 4
     "x" in ng.nodes[-1].inputs

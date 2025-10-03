@@ -14,7 +14,9 @@ class _GraphIOSharedMixin:
     """
 
     # turn off framework builtins for these graph-level nodes
-    Builtins = BuiltinPolicy(input_wait=False, output_wait=False, default_output=False)
+    _BUILTINS_POLICY = BuiltinPolicy(
+        input_wait=False, output_wait=False, default_output=False
+    )
 
     def _unify_io(self) -> None:
         """Point outputs to the exact same object as inputs."""

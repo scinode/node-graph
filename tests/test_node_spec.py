@@ -6,8 +6,7 @@ from node_graph.socket_spec import namespace as ns
 from node_graph.node_spec import (
     NodeSpec,
     BaseHandle,
-    SCHEMA_SOURCE_EMBEDDED,
-    SCHEMA_SOURCE_HANDLE,
+    SchemaSource,
 )
 from node_graph.executor import RuntimeExecutor, SafeExecutor
 from node_graph.node import Node
@@ -31,7 +30,7 @@ def test_nodespec_serialize_roundtrip_embedded():
         base_class=Node,
     )
     d = spec.to_dict()
-    assert d["schema_source"] == SCHEMA_SOURCE_EMBEDDED
+    assert d["schema_source"] == SchemaSource.EMBEDDED
     assert "inputs" in d and "outputs" in d
 
     spec2 = NodeSpec.from_dict(copy.deepcopy(d))
@@ -46,7 +45,7 @@ def test_nodespec_serialize_roundtrip_embedded():
     assert spec2.executor.mode == "module"
     assert spec2.executor.module_path == "math"
     assert spec2.executor.callable_name == "sqrt"
-    assert spec2.schema_source == SCHEMA_SOURCE_EMBEDDED
+    assert spec2.schema_source == SchemaSource.EMBEDDED
 
 
 def test_nodespec_to_dict_module_handle_strips_schema():
@@ -78,7 +77,7 @@ def test_nodespec_to_dict_module_handle_strips_schema():
 
     outer = NodeSpec(
         identifier="outer.node",
-        schema_source=SCHEMA_SOURCE_HANDLE,
+        schema_source=SchemaSource.HANDLE,
         catalog="Test",
         inputs=ns(x=int),
         outputs=ns(y=int),
@@ -88,7 +87,7 @@ def test_nodespec_to_dict_module_handle_strips_schema():
     )
 
     d = outer.to_dict()
-    assert d["schema_source"] == SCHEMA_SOURCE_HANDLE
+    assert d["schema_source"] == SchemaSource.HANDLE
     assert "inputs" not in d and "outputs" not in d
     assert "executor" in d
 
@@ -143,7 +142,7 @@ def test_from_dict_callable_basehandler(monkeypatch):
     monkeypatch.setattr("node_graph.node_spec.SafeExecutor", _dummy_safe_executor)
 
     d = {
-        "schema_source": SCHEMA_SOURCE_HANDLE,
+        "schema_source": SchemaSource.HANDLE,
         "identifier": "outer.node",
         "catalog": "Test",
         "executor": {},  # contents ignored by our dummy
@@ -161,5 +160,5 @@ def test_from_dict_unrecognized_mode_raises():
         "identifier": "x.y",
         "base_class_path": "node_graph.node.Node",
     }
-    with pytest.raises(ValueError, match="unrecognized schema_source 'weird_mode'"):
+    with pytest.raises(ValueError, match="'weird_mode' is not a valid SchemaSource"):
         NodeSpec.from_dict(copy.deepcopy(d))

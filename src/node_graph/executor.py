@@ -4,6 +4,17 @@ import inspect
 import base64
 import importlib
 import cloudpickle
+from enum import Enum
+
+
+class ExecutorMode(str, Enum):
+    """
+    Defines the strategy for locating and executing code.
+    """
+
+    MODULE = "module"  # A callable that can be imported from a module path.
+    GRAPH = "graph"  # A nested computational graph.
+    PICKLED_CALLABLE = "pickled_callable"  # A callable serialized using cloudpickle.
 
 
 def serialize_callable(
@@ -34,7 +45,7 @@ def serialize_callable(
     source_code = ""
     callable_name = func.__name__
     if func.__module__ == "__main__" or "." in func.__qualname__.split(".", 1)[-1]:
-        mode = "pickled_callable"
+        mode = ExecutorMode.PICKLED_CALLABLE
         pickled_data = cloudpickle.dumps(func)
         # Base64 encode the pickled callable
         pickled_callable = base64.b64encode(pickled_data).decode("utf-8")
@@ -54,11 +65,11 @@ def serialize_callable(
             pickled_data = cloudpickle.dumps(func)
             # Unregister after pickling
             cloudpickle.unregister_pickle_by_value(module)
-            mode = "pickled_callable"
+            mode = ExecutorMode.PICKLED_CALLABLE
             pickled_callable = base64.b64encode(pickled_data).decode("utf-8")
         else:
             # Global callable (function/class), store its module and name for reference
-            mode = "module"
+            mode = ExecutorMode.MODULE
             module_path = func.__module__
             pickled_callable = None
 
@@ -78,7 +89,7 @@ class BaseExecutor:
     a callable or computational graph.
     """
 
-    mode: Optional[str] = None  # "module", "graph", "pickled_callable"
+    mode: Optional[ExecutorMode] = None  # "module", "graph", "pickled_callable"
     module_path: Optional[str] = None
     callable_name: Optional[str] = None
     callable_kind: Optional[str] = None
@@ -101,7 +112,7 @@ class BaseExecutor:
         can be converted to a dictionary.
         """
         graph_data = graph.to_dict(should_serialize=True)
-        return cls(mode="graph", graph_data=graph_data)
+        return cls(mode=ExecutorMode.GRAPH, graph_data=graph_data)
 
     def _normalize_module_mode(self) -> None:
         """
@@ -109,10 +120,20 @@ class BaseExecutor:
         `module_path` is set. Automatically splits the module_path to extract
         the callable name if `callable_name` is None.
         """
-        if self.module_path is not None and self.mode is None:
-            self.mode = "module"
+        if self.mode and isinstance(self.mode, str):
+            try:
+                self.mode = ExecutorMode(self.mode)
+            except ValueError:
+                # Provide a helpful error if the string is not a valid mode
+                valid_modes = [e.value for e in ExecutorMode]
+                raise ValueError(
+                    f"'{self.mode}' is not a valid ExecutorMode. Use one of {valid_modes}."
+                )
 
-        if self.mode != "module":
+        if self.module_path is not None and self.mode is None:
+            self.mode = ExecutorMode.MODULE
+
+        if self.mode != ExecutorMode.MODULE:
             return
 
         if self.module_path is None:
@@ -132,14 +153,16 @@ class BaseExecutor:
         """
         Convert this Executor instance to a dictionary.
         """
-        return dataclasses.asdict(self)
+        data = dataclasses.asdict(self)
+        data["mode"] = self.mode.value if self.mode else None
+        return data
 
     @property
     def callable(self) -> Union[Callable, None]:
         """
         Dynamically retrieve the actual callable based on the mode.
         """
-        if self.mode == "module":
+        if self.mode == ExecutorMode.MODULE:
             try:
                 module = importlib.import_module(self.module_path)
                 return getattr(module, self.callable_name)
@@ -196,7 +219,7 @@ class RuntimeExecutor(BaseExecutor):
         if c is not None:
             return c
 
-        if self.mode == "pickled_callable":
+        if self.mode == ExecutorMode.PICKLED_CALLABLE:
             if not self.pickled_callable:
                 return None
             pickled_data = base64.b64decode(self.pickled_callable.encode("utf-8"))

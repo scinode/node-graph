@@ -16,6 +16,7 @@ import ast
 import textwrap
 import types
 import sys
+from enum import Enum
 
 if sys.version_info < (3, 10):
     # Python 3.9 -> need typing_extensions for include_extras
@@ -46,6 +47,16 @@ __all__ = [
 
 
 WidgetConfig = Union[str, Dict[str, Any]]
+
+
+class CallRole(str, Enum):
+    """Defines how a socket's value is used in a function call."""
+
+    ARGS = "args"
+    KWARGS = "kwargs"
+    VAR_ARGS = "var_args"
+    VAR_KWARGS = "var_kwargs"
+    RETURN = "return"
 
 
 def _is_union_origin(origin: Any) -> bool:
@@ -120,8 +131,7 @@ class SocketSpecMeta:
     help: Optional[str] = None
     # by default all sockets are required
     required: Optional[bool] = True
-    # "args" | "kwargs" | "var_args" | "var_kwargs" | "return"
-    call_role: Optional[str] = None
+    call_role: Optional[CallRole] = None
     sub_socket_default_link_limit: Optional[int] = 1
     is_metadata: Optional[bool] = False
     widget: Optional[WidgetConfig] = None
@@ -625,15 +635,15 @@ class BaseSpecInferAPI:
 
             # Determine call_role
             if param.kind is inspect.Parameter.POSITIONAL_ONLY:
-                call_role = "args"
+                call_role = CallRole.ARGS
             elif param.kind is inspect.Parameter.VAR_POSITIONAL:
-                call_role = "var_args"
+                call_role = CallRole.VAR_ARGS
                 is_dyn = True
             elif param.kind is inspect.Parameter.VAR_KEYWORD:
-                call_role = "var_kwargs"
+                call_role = CallRole.VAR_KWARGS
                 is_dyn = True
             else:
-                call_role = "kwargs"
+                call_role = CallRole.KWARGS
 
             # Determine required
             is_required = not (
@@ -722,7 +732,7 @@ class BaseSpecInferAPI:
             return SocketSpec(
                 identifier=cls.TYPE_MAPPING["namespace"],
                 fields={cls.DEFAULT_OUTPUT_KEY: leaf},
-                meta=SocketSpecMeta(call_role="return"),
+                meta=SocketSpecMeta(call_role=CallRole.RETURN),
             )
 
         if explicit is not None:
@@ -733,7 +743,7 @@ class BaseSpecInferAPI:
             # Respect namespaces (even empty) as-is; just set call_role
             if explicit.is_namespace():
                 return replace(
-                    explicit, meta=replace(explicit.meta, call_role="return")
+                    explicit, meta=replace(explicit.meta, call_role=CallRole.RETURN)
                 )
             return _wrap_leaf_as_ns(explicit)
 
@@ -743,7 +753,7 @@ class BaseSpecInferAPI:
                 identifier=cls.TYPE_MAPPING["namespace"],
                 fields={},  # empty
                 dynamic=False,
-                meta=SocketSpecMeta(call_role="return"),
+                meta=SocketSpecMeta(call_role=CallRole.RETURN),
             )
 
         # Otherwise, infer from return annotation / metadata
@@ -759,7 +769,8 @@ class BaseSpecInferAPI:
                 meta=_merge_all_meta_from_annotation(ret, spec_from_meta.meta),
             )
             return replace(
-                spec_from_meta, meta=replace(spec_from_meta.meta, call_role="return")
+                spec_from_meta,
+                meta=replace(spec_from_meta.meta, call_role=CallRole.RETURN),
             )
 
         # to_spec() on annotation object
@@ -769,7 +780,9 @@ class BaseSpecInferAPI:
             base_spec = replace(
                 base_spec, meta=_merge_all_meta_from_annotation(ret, base_spec.meta)
             )
-            return replace(base_spec, meta=replace(base_spec.meta, call_role="return"))
+            return replace(
+                base_spec, meta=replace(base_spec.meta, call_role=CallRole.RETURN)
+            )
 
         # Fallback leaf under 'result'
         if ret is None or ret is inspect._empty:
@@ -782,7 +795,7 @@ class BaseSpecInferAPI:
             base_T = replace(
                 base_T, meta=_merge_all_meta_from_annotation(ret, base_T.meta)
             )
-            return replace(base_T, meta=replace(base_T.meta, call_role="return"))
+            return replace(base_T, meta=replace(base_T.meta, call_role=CallRole.RETURN))
 
         leaf = cls._spec_from_annotation(base_T)
         leaf = _apply_select_from_annotation(ret, leaf)

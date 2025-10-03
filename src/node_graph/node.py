@@ -11,10 +11,9 @@ from node_graph.collection import (
 )
 from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
-from node_graph.socket_spec import BaseSocketSpecAPI
+from node_graph.socket_spec import BaseSocketSpecAPI, SocketSpec, add_spec_field
 from .config import BuiltinPolicy
-from .node_spec import NodeSpec
-from .socket_spec import SocketSpec, add_spec_field
+from .node_spec import NodeSpec, SchemaSource
 from dataclasses import replace
 
 
@@ -38,19 +37,17 @@ class Node:
 
     """
 
-    # This is the entry point for the socket and property pool
-    registry: Optional[RegistryHub] = registry_hub
-    _PropertyClass = PropertyCollection
-    _socket_spec = BaseSocketSpecAPI
+    _REGISTRY: Optional[RegistryHub] = registry_hub
+    _PROPERTY_CLASS = PropertyCollection
+    _SOCKET_SPEC_API = BaseSocketSpecAPI
+    _BUILTINS_POLICY = BuiltinPolicy()
 
     default_name: str = None
-    Builtins: BuiltinPolicy = BuiltinPolicy()
-    # Default spec for a bare node. Subclasses should override or provide a spec.
     _default_spec = NodeSpec(
         identifier="node_graph.node",
         node_type="Normal",
-        inputs=_socket_spec.namespace(),
-        outputs=_socket_spec.namespace(),
+        inputs=_SOCKET_SPEC_API.namespace(),
+        outputs=_SOCKET_SPEC_API.namespace(),
         catalog="Base",
         base_class_path="node_graph.node.Node",
     )
@@ -74,7 +71,7 @@ class Node:
 
         self.spec = spec or self._default_spec
         self.identifier = self.spec.identifier
-        self.node_type = self.spec.node_type or self.node_type
+        self.node_type = self.spec.node_type
         self._base_spec = self.spec  # Store original spec to track modifications
 
         self.name = name or self.spec.identifier
@@ -82,10 +79,10 @@ class Node:
         self.graph = graph
         self.parent = parent
         self._metadata = metadata or {}
-        self.SocketPool = self.registry.socket_pool
-        self.PropertyPool = self.registry.property_pool
+        self.SocketPool = self._REGISTRY.socket_pool
+        self.PropertyPool = self._REGISTRY.property_pool
 
-        self.properties = self._PropertyClass(self, pool=self.PropertyPool)
+        self.properties = self._PROPERTY_CLASS(self, pool=self.PropertyPool)
 
         self.state = "CREATED"
         self.action = "NONE"
@@ -102,24 +99,20 @@ class Node:
         self._widget = None
         self._waiting_on = WaitingOn(node=self, graph=self.graph)
 
-    def _is_modified(self) -> bool:
-        """A node is only modified if its persistent spec has been explicitly changed."""
-        return self.spec != self._base_spec
-
     def _materialize_from_spec(self) -> None:
         """
         Builds the runtime properties and sockets from the current self.spec.
         This is the bridge between the static definition (spec) and the live object.
         """
         # Materialize IO from spec
-        input_spec = self.spec.inputs or self._socket_spec.namespace()
-        output_spec = self.spec.outputs or self._socket_spec.namespace()
+        input_spec = self.spec.inputs or self._SOCKET_SPEC_API.namespace()
+        output_spec = self.spec.outputs or self._SOCKET_SPEC_API.namespace()
         if input_spec is not None:
-            self.inputs = self._socket_spec.SocketNamespace._from_spec(
+            self.inputs = self._SOCKET_SPEC_API.SocketNamespace._from_spec(
                 "inputs", input_spec, node=self, graph=self.graph, role="input"
             )
         if output_spec is not None:
-            self.outputs = self._socket_spec.SocketNamespace._from_spec(
+            self.outputs = self._SOCKET_SPEC_API.SocketNamespace._from_spec(
                 "outputs", output_spec, node=self, graph=self.graph, role="output"
             )
 
@@ -133,20 +126,23 @@ class Node:
             MAX_LINK_LIMIT,
         )
 
-        if self.Builtins.input_wait and WAIT_SOCKET_NAME not in self.inputs:
+        if self._BUILTINS_POLICY.input_wait and WAIT_SOCKET_NAME not in self.inputs:
             self.add_input(
                 self.SocketPool.any,
                 WAIT_SOCKET_NAME,
                 link_limit=MAX_LINK_LIMIT,
                 metadata={"arg_type": "none", "builtin_socket": True},
             )
-        if self.Builtins.default_output and OUTPUT_SOCKET_NAME not in self.outputs:
+        if (
+            self._BUILTINS_POLICY.default_output
+            and OUTPUT_SOCKET_NAME not in self.outputs
+        ):
             self.add_output(
                 self.SocketPool.any,
                 OUTPUT_SOCKET_NAME,
                 metadata={"builtin_socket": True},
             )
-        if self.Builtins.output_wait and WAIT_SOCKET_NAME not in self.outputs:
+        if self._BUILTINS_POLICY.output_wait and WAIT_SOCKET_NAME not in self.outputs:
             self.add_output(
                 self.SocketPool.any,
                 WAIT_SOCKET_NAME,
@@ -177,27 +173,31 @@ class Node:
         output = self.outputs._new(identifier, name, **kwargs)
         return output
 
-    def add_input_spec(self, identifier: str, name: str) -> NodeSocket:
+    def add_input_spec(self, identifier: str, name: str, **kwargs) -> NodeSocket:
         """
         Permanently adds an input socket to the node's spec.
         This marks the node as modified and will be persisted.
         """
-        new_socket_spec = SocketSpec(identifier=identifier)
+        new_socket_spec = SocketSpec(identifier=identifier, **kwargs)
         new_inputs_spec = add_spec_field(self.spec.inputs, name, new_socket_spec)
         # This is an explicit, permanent modification
-        self.spec = replace(self.spec, inputs=new_inputs_spec)
+        self.spec = replace(
+            self.spec, schema_source=SchemaSource.EMBEDDED, inputs=new_inputs_spec
+        )
         self._materialize_from_spec()
         return self.inputs[name]
 
-    def add_output_spec(self, identifier: str, name: str) -> NodeSocket:
+    def add_output_spec(self, identifier: str, name: str, **kwargs) -> NodeSocket:
         """
         Permanently adds an output socket to the node's spec.
         This marks the node as modified and will be persisted.
         """
-        new_socket_spec = SocketSpec(identifier=identifier)
+        new_socket_spec = SocketSpec(identifier=identifier, **kwargs)
         new_outputs_spec = add_spec_field(self.spec.outputs, name, new_socket_spec)
         # This is an explicit, permanent modification
-        self.spec = replace(self.spec, outputs=new_outputs_spec)
+        self.spec = replace(
+            self.spec, schema_source=SchemaSource.EMBEDDED, outputs=new_outputs_spec
+        )
         self._materialize_from_spec()
         return self.outputs[name]
 

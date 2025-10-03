@@ -5,22 +5,25 @@ from node_graph.socket_spec import SocketSpec, SocketView
 from node_graph.executor import BaseExecutor, SafeExecutor
 from .error_handler import ErrorHandlerSpec
 import importlib
-
-# if type checking:
+from enum import Enum
 
 if TYPE_CHECKING:
     from node_graph.node import Node
 
-SCHEMA_SOURCE_EMBEDDED = "embedded"
-SCHEMA_SOURCE_HANDLE = "handle"
-SCHEMA_SOURCE_CALLABLE = "callable"
-SCHEMA_SOURCE_CLASS = "class"
+
+class SchemaSource(str, Enum):
+    """Defines how a node's schema is stored and reconstructed."""
+
+    EMBEDDED = "embedded"
+    HANDLE = "handle"
+    CALLABLE = "callable"
+    CLASS = "class"
 
 
 @dataclass(frozen=True)
 class NodeSpec:
     identifier: str
-    schema_source: str = SCHEMA_SOURCE_EMBEDDED
+    schema_source: str = SchemaSource.EMBEDDED
     node_type: str = "Normal"
     catalog: str = "Others"
     inputs: Optional[SocketSpec] = None
@@ -46,7 +49,7 @@ class NodeSpec:
             )
         # if callable is not importable, we must embed the schema
         if self.executor and self.executor.mode != "module":
-            object.__setattr__(self, "schema_source", SCHEMA_SOURCE_EMBEDDED)
+            object.__setattr__(self, "schema_source", SchemaSource.EMBEDDED)
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -57,7 +60,7 @@ class NodeSpec:
         """
 
         data: Dict[str, Any] = {
-            "schema_source": self.schema_source,
+            "schema_source": self.schema_source.value,
             "identifier": self.identifier,
             "node_type": self.node_type,
             "catalog": self.catalog,
@@ -69,7 +72,7 @@ class NodeSpec:
         if self.version:
             data["version"] = self.version
 
-        if self.schema_source == SCHEMA_SOURCE_EMBEDDED:
+        if self.schema_source == SchemaSource.EMBEDDED:
             if self.inputs is not None:
                 data["inputs"] = self.inputs.to_dict()
             if self.outputs is not None:
@@ -92,7 +95,7 @@ class NodeSpec:
         """
         from node_graph.socket_spec import SocketSpec
 
-        schema_source = data.get("schema_source", SCHEMA_SOURCE_EMBEDDED)
+        schema_source = SchemaSource(data.get("schema_source", SchemaSource.EMBEDDED))
         executor = SafeExecutor(**data["executor"]) if "executor" in data else None
         error_handlers = {
             name: ErrorHandlerSpec.from_dict(eh)
@@ -103,7 +106,7 @@ class NodeSpec:
             for name, eh in data.get("attached_error_handlers", {}).items()
         }
         base_class = cls.get_base_class(data.get("base_class_path"))
-        if schema_source == SCHEMA_SOURCE_EMBEDDED:
+        if schema_source == SchemaSource.EMBEDDED:
             inputs = SocketSpec.from_dict(data["inputs"]) if "inputs" in data else None
             outputs = (
                 SocketSpec.from_dict(data["outputs"]) if "outputs" in data else None
@@ -121,10 +124,10 @@ class NodeSpec:
                 base_class_path=data.get("base_class_path"),
                 version=data.get("version"),
             )
-        elif schema_source == SCHEMA_SOURCE_CLASS:
+        elif schema_source == SchemaSource.CLASS:
             # Rebuild by calling the static method on the class
             spec = base_class._default_spec
-        elif schema_source == SCHEMA_SOURCE_HANDLE:
+        elif schema_source == SchemaSource.HANDLE:
             if executor is None:
                 raise ValueError(
                     f"schema_source '{schema_source}' requires an executor"
@@ -137,7 +140,7 @@ class NodeSpec:
                 raise RuntimeError(
                     "The executor.callable is not a BaseHandle; cannot reconstruct spec."
                 )
-        elif schema_source == SCHEMA_SOURCE_CALLABLE:
+        elif schema_source == SchemaSource.CALLABLE:
             if executor is None:
                 raise ValueError(
                     f"schema_source '{schema_source}' requires an executor"

@@ -42,10 +42,11 @@ class NodeGraph:
         >>> ng.to_dict()
     """
 
-    registry: Optional[RegistryHub] = registry_hub
+    _REGISTRY: Optional[RegistryHub] = registry_hub
+    _BUILTINS_POLICY = BuiltinPolicy()
+    _SOCKET_SPEC_API = BaseSocketSpecAPI
+
     platform: str = "node_graph"
-    _socket_spec = BaseSocketSpecAPI
-    Builtins: BuiltinPolicy = BuiltinPolicy()
 
     def __init__(
         self,
@@ -75,11 +76,11 @@ class NodeGraph:
         self.graph_type = graph_type
         self.graph = graph
         self.parent = parent
-        self.NodePool = self.registry.node_pool
-        self.SocketPool = self.registry.socket_pool
-        self.PropertyPool = self.registry.property_pool
-        self.type_mapping = dict(self.registry.type_mapping)
-        self.type_promotions = set(self.registry.type_promotion)
+        self.NodePool = self._REGISTRY.node_pool
+        self.SocketPool = self._REGISTRY.socket_pool
+        self.PropertyPool = self._REGISTRY.property_pool
+        self.type_mapping = dict(self._REGISTRY.type_mapping)
+        self.type_promotions = set(self._REGISTRY.type_promotion)
         self.nodes = NodeCollection(graph=self, pool=self.NodePool)
         self.links = LinkCollection(self)
         self.state = state
@@ -96,13 +97,13 @@ class NodeGraph:
     def _init_graph_level_nodes(self, inputs, outputs):
         from dataclasses import replace
 
-        inputs = self._socket_spec.validate_socket_data(inputs)
-        outputs = self._socket_spec.validate_socket_data(outputs)
+        inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
+        outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
 
         base_class = self.NodePool["graph_level"].load()
 
         # if inputs is None, we assume it's a dynamic inputs
-        inputs = self._socket_spec.dynamic(Any) if inputs is None else inputs
+        inputs = self._SOCKET_SPEC_API.dynamic(Any) if inputs is None else inputs
         meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
         self._inputs = inputs
@@ -113,7 +114,7 @@ class NodeGraph:
         )
         self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
         # if outputs is None, we assume it's a dynamic outputs
-        outputs = self._socket_spec.dynamic(Any) if outputs is None else outputs
+        outputs = self._SOCKET_SPEC_API.dynamic(Any) if outputs is None else outputs
         self._outputs = outputs
         self.graph_outputs_spec = NodeSpec(
             identifier="graph_outputs",
@@ -123,7 +124,7 @@ class NodeGraph:
         graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
         graph_outputs.inputs._name = "outputs"
         # graph context
-        ctx = self._socket_spec.dynamic(Any)
+        ctx = self._SOCKET_SPEC_API.dynamic(Any)
         meta = replace(ctx.meta, sub_socket_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
         self.graph_ctx_spec = NodeSpec(
