@@ -7,7 +7,7 @@ from node_graph.node_spec import (
     NodeSpec,
     BaseHandle,
     SCHEMA_SOURCE_EMBEDDED,
-    SCHEMA_SOURCE_CALLABLE,
+    SCHEMA_SOURCE_HANDLE,
 )
 from node_graph.executor import RuntimeExecutor, SafeExecutor
 from node_graph.node import Node
@@ -22,6 +22,7 @@ def test_nodespec_serialize_roundtrip_embedded():
     spec = NodeSpec(
         identifier="pkg.add",
         catalog="Math",
+        node_type="MyType",
         inputs=inp,
         outputs=out,
         executor=ex,
@@ -36,6 +37,7 @@ def test_nodespec_serialize_roundtrip_embedded():
     spec2 = NodeSpec.from_dict(copy.deepcopy(d))
     assert spec2.identifier == spec.identifier
     assert spec2.catalog == spec.catalog
+    assert spec2.node_type == spec.node_type
     assert spec2.inputs == spec.inputs
     assert spec2.outputs == spec.outputs
     assert spec2.metadata == spec.metadata
@@ -76,7 +78,7 @@ def test_nodespec_to_dict_module_handle_strips_schema():
 
     outer = NodeSpec(
         identifier="outer.node",
-        schema_source=SCHEMA_SOURCE_CALLABLE,
+        schema_source=SCHEMA_SOURCE_HANDLE,
         catalog="Test",
         inputs=ns(x=int),
         outputs=ns(y=int),
@@ -86,7 +88,7 @@ def test_nodespec_to_dict_module_handle_strips_schema():
     )
 
     d = outer.to_dict()
-    assert d["schema_source"] == SCHEMA_SOURCE_CALLABLE
+    assert d["schema_source"] == SCHEMA_SOURCE_HANDLE
     assert "inputs" not in d and "outputs" not in d
     assert "executor" in d
 
@@ -141,7 +143,7 @@ def test_from_dict_callable_basehandler(monkeypatch):
     monkeypatch.setattr("node_graph.node_spec.SafeExecutor", _dummy_safe_executor)
 
     d = {
-        "schema_source": SCHEMA_SOURCE_CALLABLE,
+        "schema_source": SCHEMA_SOURCE_HANDLE,
         "identifier": "outer.node",
         "catalog": "Test",
         "executor": {},  # contents ignored by our dummy

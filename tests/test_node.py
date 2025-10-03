@@ -72,7 +72,8 @@ def test_to_dict():
     math = ng.add_node(test_add, "Math")
     math.inputs["x"].property.value = 2
     data = math.to_dict()
-    assert data["metadata"]["identifier"] == "test_add"
+    assert "spec" in data
+    assert data["spec"]["identifier"] == "test_add"
 
 
 def test_copy():
@@ -183,3 +184,13 @@ def test_add_error_handler():
         {"test": {"executor": sample_handler, "exit_codes": [1, 2], "max_retries": 3}}
     )
     assert len(node.error_handlers) == 1
+
+
+def test_add_input_outputs_spec():
+    node = Node()
+    node.add_input_spec("node_graph.int", "a")
+    node.add_input_spec("node_graph.int", "b")
+    node.add_output_spec("node_graph.int", "result")
+    assert "a" in node.inputs
+    assert "b" in node.inputs
+    assert "result" in node.outputs

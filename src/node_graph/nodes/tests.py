@@ -31,12 +31,9 @@ def test_sqrt(x: float, t=1) -> float:
 
 class TestEnum(Node):
 
-    identifier: str = "node_graph.test_enum"
-    name = "Enum"
-    catalog = "Test"
-
     _default_spec = NodeSpec(
-        identifier=identifier,
+        identifier="node_graph.test_enum",
+        catalog="Test",
         inputs=namespace(),
         outputs=namespace(
             result=object,
@@ -60,12 +57,9 @@ class TestEnum(Node):
 
 class TestEnumUpdate(Node):
 
-    identifier: str = "node_graph.test_enum_update"
-    name = "EnumUpdate"
-    catalog = "Test"
-
     _default_spec = NodeSpec(
-        identifier=identifier,
+        identifier="node_graph.test_enum_update",
+        catalog="Test",
         inputs=namespace(),
         outputs=namespace(
             result=object,

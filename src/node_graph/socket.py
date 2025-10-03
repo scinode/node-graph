@@ -1232,6 +1232,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             node=node,
             parent=parent,
             graph=graph,
+            link_limit=spec.link_limit or 1,
             metadata=ns_meta,
             pool=pool or (node.SocketPool if node else None),
         )

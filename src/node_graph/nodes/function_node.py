@@ -4,7 +4,7 @@ from node_graph.socket_spec import infer_specs_from_callable, SocketSpec
 from node_graph.node_spec import (
     NodeSpec,
     NodeHandle,
-    SCHEMA_SOURCE_CALLABLE,
+    SCHEMA_SOURCE_HANDLE,
     SCHEMA_SOURCE_EMBEDDED,
 )
 from node_graph.executor import RuntimeExecutor
@@ -48,7 +48,7 @@ class FunctionNode(Node):
         executor = RuntimeExecutor.from_callable(obj)
         # if not importable, embed schema
         schema_source = (
-            SCHEMA_SOURCE_CALLABLE
+            SCHEMA_SOURCE_HANDLE
             if executor.mode == "module"
             else SCHEMA_SOURCE_EMBEDDED
         )

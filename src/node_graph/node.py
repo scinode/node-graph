@@ -24,7 +24,6 @@ class Node:
     Attributes:
         identifier (str): The identifier is used for loading the Node.
         node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
-        graph_uuid (str): UUID of the node graph this node belongs to.
 
     Examples:
         Add nodes:
@@ -44,15 +43,14 @@ class Node:
     _PropertyClass = PropertyCollection
     _socket_spec = BaseSocketSpecAPI
 
-    identifier: str = "node_graph.node"
     default_name: str = None
-    node_type: str = "Normal"
-    graph_uuid: str = ""
-    catalog: str = "Node"
     Builtins: BuiltinPolicy = BuiltinPolicy()
-    # Default spec for a bare node. Subclasses should override this in __init__.
+    # Default spec for a bare node. Subclasses should override or provide a spec.
     _default_spec = NodeSpec(
         identifier="node_graph.node",
+        node_type="Normal",
+        inputs=_socket_spec.namespace(),
+        outputs=_socket_spec.namespace(),
         catalog="Base",
         base_class_path="node_graph.node.Node",
     )
@@ -76,7 +74,7 @@ class Node:
 
         self.spec = spec or self._default_spec
         self.identifier = self.spec.identifier
-        self.node_type = self.spec.metadata.get("node_type", self.node_type)
+        self.node_type = self.spec.node_type or self.node_type
         self._base_spec = self.spec  # Store original spec to track modifications
 
         self.name = name or self.spec.identifier
@@ -87,7 +85,6 @@ class Node:
         self.SocketPool = self.registry.socket_pool
         self.PropertyPool = self.registry.property_pool
 
-        # Runtime collections that will be built from the spec
         self.properties = self._PropertyClass(self, pool=self.PropertyPool)
 
         self.state = "CREATED"
@@ -180,7 +177,7 @@ class Node:
         output = self.outputs._new(identifier, name, **kwargs)
         return output
 
-    def add_input_to_spec(self, identifier: str, name: str) -> NodeSocket:
+    def add_input_spec(self, identifier: str, name: str) -> NodeSocket:
         """
         Permanently adds an input socket to the node's spec.
         This marks the node as modified and will be persisted.
@@ -192,7 +189,7 @@ class Node:
         self._materialize_from_spec()
         return self.inputs[name]
 
-    def add_output_to_spec(self, identifier: str, name: str) -> NodeSocket:
+    def add_output_spec(self, identifier: str, name: str) -> NodeSocket:
         """
         Permanently adds an output socket to the node's spec.
         This marks the node as modified and will be persisted.
@@ -238,7 +235,6 @@ class Node:
         data = {
             "identifier": self.identifier,
             "uuid": self.uuid,
-            "graph_uuid": self.graph.uuid if self.graph else self.graph_uuid,
             "name": self.name,
             "state": self.state,
             "action": self.action,
@@ -275,17 +271,6 @@ class Node:
     def get_metadata(self) -> Dict[str, Any]:
         """Export metadata to a dictionary."""
         metadata = self._metadata.copy()
-        metadata.update(
-            {
-                "identifier": self.identifier,
-                "node_type": self.node_type,
-                "catalog": self.catalog,
-            }
-        )
-        metadata["node_class"] = {
-            "callable_name": self.__class__.__name__,
-            "module_path": self.__class__.__module__,
-        }
         return metadata
 
     @property
@@ -366,13 +351,6 @@ class Node:
         for key in ["uuid", "state", "action", "description", "hash", "position"]:
             if data.get(key):
                 setattr(self, key, data.get(key))
-        # read all the metadata
-        for key in [
-            "parent",
-            "graph_uuid",
-        ]:
-            if data["metadata"].get(key):
-                setattr(self, key, data["metadata"].get(key))
         # properties first, because the socket may be dynamic
         for name, prop in data.get("properties", {}).items():
             self.properties[name].value = prop["value"]
@@ -454,15 +432,18 @@ class Node:
 
     def get_error_handlers(self) -> Dict[str, ErrorHandlerSpec]:
         """Get the error handlers."""
-        return self.spec.error_handlers
+        error_handlers = self.spec.error_handlers or {}
+        error_handlers.update(self.spec.attached_error_handlers or {})
+        return error_handlers
 
     def add_error_handler(self, error_handler: ErrorHandlerSpec | dict) -> None:
         """Add an error handler to this node."""
         from node_graph.error_handler import normalize_error_handlers
 
         error_handlers = normalize_error_handlers(error_handler)
-        self.spec.error_handlers.update(error_handlers)
-        self.spec = replace(self.spec, error_handlers=self.spec.error_handlers)
+        attached_error_handlers = self.spec.attached_error_handlers or {}
+        attached_error_handlers.update(error_handlers)
+        self.spec = replace(self.spec, attached_error_handlers=attached_error_handlers)
 
     def execute(self):
         """Execute the node."""

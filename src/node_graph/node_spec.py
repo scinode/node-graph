@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Dict, Any, Optional, Callable
 from node_graph.socket_spec import SocketSpec, SocketView
 from node_graph.executor import BaseExecutor, SafeExecutor
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from node_graph.node import Node
 
 SCHEMA_SOURCE_EMBEDDED = "embedded"
+SCHEMA_SOURCE_HANDLE = "handle"
 SCHEMA_SOURCE_CALLABLE = "callable"
 SCHEMA_SOURCE_CLASS = "class"
 
@@ -26,6 +27,7 @@ class NodeSpec:
     outputs: Optional[SocketSpec] = None
     executor: Optional[BaseExecutor] = None
     error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=dict)
+    attached_error_handlers: Dict[str, ErrorHandlerSpec] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     base_class_path: Optional[str] = None
     # not persisted directly; used at runtime
@@ -42,6 +44,9 @@ class NodeSpec:
                 "base_class_path",
                 f"{self.base_class.__module__}.{self.base_class.__name__}",
             )
+        # if callable is not importable, we must embed the schema
+        if self.executor and self.executor.mode != "module":
+            object.__setattr__(self, "schema_source", SCHEMA_SOURCE_EMBEDDED)
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -54,6 +59,7 @@ class NodeSpec:
         data: Dict[str, Any] = {
             "schema_source": self.schema_source,
             "identifier": self.identifier,
+            "node_type": self.node_type,
             "catalog": self.catalog,
             "metadata": dict(self.metadata),
             "base_class_path": self.base_class_path,
@@ -72,6 +78,10 @@ class NodeSpec:
                 data["error_handlers"] = {
                     name: eh.to_dict() for name, eh in self.error_handlers.items()
                 }
+        if self.attached_error_handlers:
+            data["attached_error_handlers"] = {
+                name: eh.to_dict() for name, eh in self.attached_error_handlers.items()
+            }
 
         return data
 
@@ -88,15 +98,21 @@ class NodeSpec:
             name: ErrorHandlerSpec.from_dict(eh)
             for name, eh in data.get("error_handlers", {}).items()
         }
+        attached_error_handlers = {
+            name: ErrorHandlerSpec.from_dict(eh)
+            for name, eh in data.get("attached_error_handlers", {}).items()
+        }
         base_class = cls.get_base_class(data.get("base_class_path"))
         if schema_source == SCHEMA_SOURCE_EMBEDDED:
             inputs = SocketSpec.from_dict(data["inputs"]) if "inputs" in data else None
             outputs = (
                 SocketSpec.from_dict(data["outputs"]) if "outputs" in data else None
             )
-            return cls(
+            spec = cls(
                 identifier=data["identifier"],
                 catalog=data.get("catalog", "Others"),
+                node_type=data.get("node_type", "Normal"),
+                schema_source=schema_source,
                 inputs=inputs,
                 outputs=outputs,
                 executor=executor,
@@ -107,8 +123,8 @@ class NodeSpec:
             )
         elif schema_source == SCHEMA_SOURCE_CLASS:
             # Rebuild by calling the static method on the class
-            return base_class.define_spec()
-        elif schema_source == SCHEMA_SOURCE_CALLABLE:
+            spec = base_class._default_spec
+        elif schema_source == SCHEMA_SOURCE_HANDLE:
             if executor is None:
                 raise ValueError(
                     f"schema_source '{schema_source}' requires an executor"
@@ -116,13 +132,27 @@ class NodeSpec:
 
             func_or_handle = executor.callable
             if isinstance(func_or_handle, BaseHandle):
-                return func_or_handle._spec
+                spec = func_or_handle._spec
             else:
                 raise RuntimeError(
                     "The executor.callable is not a BaseHandle; cannot reconstruct spec."
                 )
-
-        raise ValueError(f"unrecognized schema_source '{schema_source}'")
+        elif schema_source == SCHEMA_SOURCE_CALLABLE:
+            if executor is None:
+                raise ValueError(
+                    f"schema_source '{schema_source}' requires an executor"
+                )
+            func_or_handle = executor.callable
+            if isinstance(func_or_handle, BaseHandle):
+                callable = func_or_handle._callable
+            else:
+                callable = func_or_handle
+            spec = base_class.build(callable)
+        else:
+            raise ValueError(f"unrecognized schema_source '{schema_source}'")
+        if attached_error_handlers:
+            spec = replace(spec, attached_error_handlers=attached_error_handlers)
+        return spec
 
     @staticmethod
     def get_base_class(base_class_path: str):

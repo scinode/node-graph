@@ -317,3 +317,23 @@ def test_set_default_from_annotation():
         TypeError, match="Default for 'y' is scalar, but the field is a namespace."
     ):
         ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+
+
+def test_add_spec_field():
+    from node_graph.socket_spec import add_spec_field
+
+    ns = ss.namespace(a=int, b=(int, 5))
+    ns1 = add_spec_field(ns, "c", ss.namespace(d=str))
+    assert "c" in ns1.fields
+
+
+def test_remove_spec_field():
+    from node_graph.socket_spec import remove_spec_field
+
+    ns = ss.namespace(
+        a=int,
+        b=(int, 5),
+        c=ss.namespace(d=str),
+    )
+    ns1 = remove_spec_field(ns, "b")
+    assert "b" not in ns1.fields

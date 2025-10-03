@@ -48,7 +48,7 @@ def nodegaph_to_short_json(
 
         ngdata_short["nodes"][name] = {
             "label": node["name"],
-            "node_type": node["metadata"]["node_type"].upper(),
+            "node_type": node["spec"]["node_type"].upper(),
             "inputs": inputs,
             "properties": {},
             "outputs": [],

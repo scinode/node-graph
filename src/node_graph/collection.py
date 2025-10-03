@@ -91,6 +91,22 @@ class Collection:
         elif isinstance(index, str):
             return self._items[index]
 
+    def __getattr__(self, name: str) -> object:
+        """Get item by name
+
+        Args:
+            name (str): _description_
+
+        Returns:
+            object: _description_
+        """
+        if name in self._items:
+            return self._items[name]
+        raise AttributeError(
+            f""""{name}" is not in the {self.__class__.__name__}.
+Acceptable names are {self._get_keys()}. This collection belongs to {self.parent}."""
+        )
+
     def __dir__(self):
         return sorted(set(self._get_keys()))
 
@@ -111,7 +127,7 @@ class Collection:
         """
         if item_class is not None:
             if item_class.default_name is None:
-                name = item_class.identifier.split(".")[-1]
+                name = item_class._default_spec.identifier.split(".")[-1]
             else:
                 name = item_class.default_name
         elif identifier is not None:
@@ -136,9 +152,6 @@ class Collection:
         if item.name in self._items:
             raise Exception(f"{item.name} already exists, please choose another name.")
         self._items[item.name] = item
-        # Set the item as an attribute on the instance
-        setattr(self, item.name, item)
-        setattr(item, "_coll", self)
 
     def _extend(self, items: List[object]) -> None:
         new_names = set([item.name for item in items])
@@ -324,7 +337,7 @@ class NodeCollection(Collection):
         identifier: Union[str, type],
         name: Optional[str] = None,
         uuid: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        _metadata: Optional[dict] = None,
         **kwargs,
     ) -> Node:
         from node_graph.node import Node
@@ -350,7 +363,7 @@ class NodeCollection(Collection):
                     name=name,
                     uuid=uuid,
                     graph=self.graph,
-                    metadata=metadata,
+                    metadata=_metadata,
                 )
         self._append(node)
         node.set_inputs(kwargs)

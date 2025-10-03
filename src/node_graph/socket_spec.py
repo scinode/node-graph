@@ -335,6 +335,7 @@ class SocketSpec:
     dynamic: bool = False
     item: Optional["SocketSpec"] = None
     default: Any = field(default_factory=lambda: MISSING)
+    link_limit: Optional[int] = None
     fields: Dict[str, "SocketSpec"] = field(default_factory=dict)
     meta: SocketSpecMeta = field(default_factory=SocketSpecMeta)
 
@@ -362,6 +363,7 @@ class SocketSpec:
                 "required",
                 "widget",
                 "call_role",
+                "link_limit",
                 "sub_socket_default_link_limit",
                 "is_metadata",  # ensure serialized
             )
@@ -397,6 +399,7 @@ class SocketSpec:
             identifier=d["identifier"],
             dynamic=bool(d.get("dynamic", False)),
             item=item,
+            link_limit=d.get("link_limit", None),
             fields=fields,
             default=default,
             meta=meta,
