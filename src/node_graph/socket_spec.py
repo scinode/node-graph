@@ -7,6 +7,7 @@ from typing import (
     Union,
     Iterable,
     Tuple,
+    Type,
 )
 import inspect
 from copy import deepcopy
@@ -24,16 +25,20 @@ if sys.version_info < (3, 10):
 else:
     from typing import Annotated, get_args, get_origin, get_type_hints
 
+from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
+
 # Cache UnionType if available (3.10+), else None
 _UNION_TYPE = getattr(types, "UnionType", None)
 
 __all__ = [
+    # Core datatypes / API
     "SocketSpecMeta",
     "SocketSpecSelect",
     "SocketSpec",
     "SocketView",
-    "BaseSocketSpecAPI",
-    "BaseSpecInferAPI",
+    "SocketSpecAPI",
+    # Helpers
     "socket",
     "namespace",
     "dynamic",
@@ -43,8 +48,11 @@ __all__ = [
     "unset_default",
     "merge_specs",
     "add_spec_field",
+    "remove_spec_field",
+    # Pydantic helpers
+    "Leaf",
+    "from_model",
 ]
-
 
 WidgetConfig = Union[str, Dict[str, Any]]
 
@@ -375,7 +383,7 @@ class SocketSpec:
                 "call_role",
                 "link_limit",
                 "sub_socket_default_link_limit",
-                "is_metadata",  # ensure serialized
+                "is_metadata",
             )
         ):
             d["meta"] = {
@@ -441,13 +449,82 @@ class SocketView:
         return self.__getattr__(name)
 
 
-class BaseSocketSpecAPI:
-    """
-    Class-based authoring helpers using @classmethod.
-    Subclass and override TYPE_MAPPING (and optionally _map_identifier) downstream.
-    """
+# ---------- Pydantic helpers ----------
+class LeafMeta(type):
+    pass
 
-    TYPE_MAPPING: Dict[Union[str, Any], str] = DEFAULT_TM
+
+class Leaf(metaclass=LeafMeta):
+    """Marker generic: Leaf[MyModel] forces a Pydantic model to be treated as a leaf blob."""
+
+    def __class_getitem__(cls, item):
+        return Annotated[item, "__wg_leaf_marker__"]
+
+
+def _is_pydantic_model_type(tp: Any) -> bool:
+    return isinstance(tp, type) and issubclass(tp, BaseModel)
+
+
+def _model_cfg(model_cls: type[BaseModel]) -> dict:
+    return getattr(model_cls, "model_config", {}) or {}
+
+
+def _model_is_dynamic(model_cls: type[BaseModel]) -> bool:
+    return _model_cfg(model_cls).get("extra", None) == "allow"
+
+
+def _model_is_leaf(model_or_ann: Any) -> bool:
+    """True if:
+    - annotation is Leaf[SomePydModel]   (our explicit per-use leaf marker), or
+    - model class has model_config['leaf'] = True
+    """
+    # Leaf[...] marker on an annotation (we encode it via Annotated[..., '__wg_leaf_marker__'])
+    if _annot_is_leaf_marker(model_or_ann) is not None:
+        return True
+
+    # Direct Pydantic model class with config leaf = True
+    if _is_pydantic_model_type(model_or_ann):
+        return bool(_model_cfg(model_or_ann).get("leaf", False))
+
+    return False
+
+
+def _model_dynamic_item_type(model_cls: type[BaseModel]) -> Any:
+    cfg = _model_cfg(model_cls)
+    if "item_type" in cfg:
+        return cfg["item_type"] or Any
+    return Any
+
+
+def _annot_is_leaf_marker(ann_like: Any) -> Optional[Any]:
+    """Detect our Leaf[...] synthetic marker which we encoded via Annotated[..., '__wg_leaf_marker__']."""
+    annot = _find_first_annotated(ann_like)
+    if annot is None:
+        return None
+    base, metas = _annotated_parts(annot)
+    for m in metas:
+        if m == "__wg_leaf_marker__":
+            return base
+    return None
+
+
+def _normalize_explicit_spec(explicit: Any) -> SocketSpec:
+    """Accept SocketSpec | SocketView | BaseModel subclass and return a SocketSpec."""
+    if isinstance(explicit, SocketView):
+        return explicit.to_spec()
+    if isinstance(explicit, SocketSpec):
+        return explicit
+    if isinstance(explicit, type) and _is_pydantic_model_type(explicit):
+        return SocketSpecAPI.from_model(explicit)
+    raise TypeError(
+        "Unsupported explicit spec. Use SocketSpec, SocketView, or a Pydantic BaseModel subclass."
+    )
+
+
+class SocketSpecAPI:
+    MAP: Dict[Any, str] = DEFAULT_TM
+    NAMESPACE: str = "node_graph.namespace"
+    DEFAULT: str = "node_graph.any"
 
     # convenience re-exports
     SocketSpec = SocketSpec
@@ -456,6 +533,30 @@ class BaseSocketSpecAPI:
     SocketView = SocketView
     SocketNamespace = NodeSocketNamespace
 
+    DEFAULT_OUTPUT_KEY: str = "result"  # downstream override allowed
+
+    @classmethod
+    def resolve_type(cls, py_type: Any) -> str:
+        tm = cls.MAP
+        if py_type in tm:
+            return tm[py_type]
+        origin = get_origin(py_type)
+        if origin in (list, tuple, set):
+            return tm.get(list, cls.DEFAULT)
+        return cls.DEFAULT
+
+    @classmethod
+    def resolve_type_name(cls, name: str) -> str:
+        return cls.MAP.get(name, cls.DEFAULT)
+
+    @classmethod
+    def _ns_identifier(cls) -> str:
+        return cls.NAMESPACE
+
+    @classmethod
+    def _map_identifier(cls, tp: Any) -> str:
+        return cls.resolve_type(tp)
+
     @classmethod
     def socket(cls, T: Any, **meta) -> Any:
         """Wrap a type with optional metadata (help/required/widget/etc.)."""
@@ -463,8 +564,7 @@ class BaseSocketSpecAPI:
 
     @classmethod
     def namespace(cls, _name: Optional[str] = None, /, **fields) -> SocketSpec:
-        tm = cls.TYPE_MAPPING
-        spec = SocketSpec(identifier=tm["namespace"])
+        spec = SocketSpec(identifier=cls.NAMESPACE)
         new_fields: Dict[str, SocketSpec] = {}
 
         for name, val in fields.items():
@@ -476,7 +576,13 @@ class BaseSocketSpecAPI:
                 child = annotated_spec
             else:
                 base_T, _ = _unwrap_annotated(T)
-                if isinstance(base_T, SocketSpec):
+                # Pydantic model
+                leaf_override = _annot_is_leaf_marker(T)
+                if leaf_override is not None and _is_pydantic_model_type(leaf_override):
+                    child = cls._leaf_from_type(dict)
+                elif _is_pydantic_model_type(base_T):
+                    child = cls.from_model(base_T)
+                elif isinstance(base_T, SocketSpec):
                     child = base_T
                 elif isinstance(base_T, SocketView):
                     child = base_T.to_spec()
@@ -485,12 +591,12 @@ class BaseSocketSpecAPI:
                         identifier=cls._map_identifier(base_T), meta=SocketSpecMeta()
                     )
 
-            # Overlay *all* SocketSpecMeta present in Annotated metadata
+            # overlay all meta from Annotated
             child = replace(child, meta=_merge_all_meta_from_annotation(T, child.meta))
-            # Apply selection/transform directives
+            # selection transforms
             child = _apply_select_from_annotation(T, child)
 
-            # Scalar default only on leaves
+            # scalar default only on leaves
             if has_default:
                 if child.is_namespace():
                     raise TypeError(
@@ -508,25 +614,26 @@ class BaseSocketSpecAPI:
         base = cls.namespace(**fixed)
         base = replace(base, dynamic=True)
         T, _ = _unwrap_annotated(item_type)
-        item_spec = (
-            T
-            if isinstance(T, SocketSpec)
-            else SocketSpec(identifier=cls._map_identifier(T), meta=SocketSpecMeta())
-        )
+        # Pydantic model
+        leaf_override = _annot_is_leaf_marker(item_type)
+        if leaf_override is not None and _is_pydantic_model_type(leaf_override):
+            item_spec = cls._leaf_from_type(dict)
+        elif _is_pydantic_model_type(T):
+            item_spec = cls.from_model(T)
+        else:
+            item_spec = (
+                T
+                if isinstance(T, SocketSpec)
+                else SocketSpec(
+                    identifier=cls._map_identifier(T), meta=SocketSpecMeta()
+                )
+            )
         return replace(base, item=item_spec)
 
     @classmethod
-    def _map_identifier(cls, tp: Any) -> str:
-        tm = cls.TYPE_MAPPING
-        if tp in tm:
-            return tm[tp]
-        origin = get_origin(tp)
-        if origin in (list, tuple, set):
-            return tm.get(list, tm["default"])  # list used as generic sequence
-        return tm.get("default", "node_graph.any")
-
-    @classmethod
-    def validate_socket_data(cls, data: SocketSpec | list | None) -> SocketSpec | None:
+    def validate_socket_data(
+        cls, data: SocketSpec | SocketView | list | Type[BaseModel] | None
+    ) -> SocketSpec | None:
         """Validate socket data and convert it to a dictionary."""
         if data is None or isinstance(data, SocketSpec):
             return data
@@ -536,27 +643,87 @@ class BaseSocketSpecAPI:
             if not all(isinstance(d, str) for d in data):
                 raise TypeError("All elements in the list must be strings")
             return cls.namespace(**{d: Any for d in data})
+        elif isinstance(data, type) and _is_pydantic_model_type(data):
+            return cls.from_model(data)
         else:
             raise TypeError(
-                f"Expected list or namespace type, got {type(data).__name__}"
+                f"Unsupported spec input type: {type(data).__name__}."
+                " Expected list of str, BaseModel subclass, SocketSpec, SocketView or None"
             )
 
+    @classmethod
+    def from_model(cls, model_cls: Type[BaseModel]) -> SocketSpec:
+        """Expand a Pydantic BaseModel into a namespace spec. Honors model_config:
+        - extra='allow'  -> dynamic namespace
+        - item_type      -> dynamic item type (default Any)
+        - leaf=True      -> force leaf blob (dict)
+        """
+        if _model_is_leaf(model_cls):
+            return cls._leaf_from_type(dict)
 
-class BaseSpecInferAPI:
-    """Strict inference: no structural guessing into namespaces."""
+        if _model_is_dynamic(model_cls):
+            # dynamic + fixed fields + item spec
+            ns = SocketSpec(identifier=cls._ns_identifier(), fields={}, dynamic=True)
+            for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
+                child = cls._child_spec_from_type(model_field.annotation or Any)
+                if (
+                    getattr(model_field, "default", PydanticUndefined)
+                    is not PydanticUndefined
+                    and not child.is_namespace()
+                ):
+                    child = replace(child, default=getattr(model_field, "default"))
+                ns.fields[name] = child
+            item_t = _model_dynamic_item_type(model_cls)
+            ns = replace(ns, item=cls._child_spec_from_type(item_t))
+            return ns
 
-    TYPE_MAPPING: Dict[Union[str, Any], str] = DEFAULT_TM
-    DEFAULT_OUTPUT_KEY: str = "result"  # allow downstream override
+        # regular (non-dynamic) namespace expansion
+        ns = SocketSpec(identifier=cls._ns_identifier(), fields={})
+        for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
+            child = cls._child_spec_from_type(model_field.annotation or Any)
+            if (
+                getattr(model_field, "default", PydanticUndefined)
+                is not PydanticUndefined
+                and not child.is_namespace()
+            ):
+                child = replace(child, default=getattr(model_field, "default"))
+            ns.fields[name] = child
+        return ns
 
     @classmethod
-    def _map_identifier(cls, tp: Any) -> str:
-        tm = cls.TYPE_MAPPING
-        if tp in tm:
-            return tm[tp]
-        origin = get_origin(tp)
+    def _leaf_from_type(cls, T: Any) -> SocketSpec:
+        return SocketSpec(identifier=cls._map_identifier(T), meta=SocketSpecMeta())
+
+    @classmethod
+    def _child_spec_from_type(cls, ann: Any) -> SocketSpec:
+        # Leaf[...] override
+        leaf_target = _annot_is_leaf_marker(ann)
+        if leaf_target is not None:
+            return cls._leaf_from_type(dict)
+
+        base_T, _ = _unwrap_annotated(ann)
+
+        # embedded SocketSpec/SocketView
+        if isinstance(base_T, SocketSpec):
+            return base_T
+        if isinstance(base_T, SocketView):
+            return base_T.to_spec()
+
+        # Pydantic model types
+        if _is_pydantic_model_type(base_T):
+            return cls.from_model(base_T)
+
+        # sequences -> map to list identifier (leaf)
+        origin = get_origin(base_T)
         if origin in (list, tuple, set):
-            return tm.get(list, tm["default"])
-        return tm.get("default", "node_graph.any")
+            return cls._leaf_from_type(list)
+
+        # dict/Mapping -> leaf dict (no implicit dynamic unless user chose pydantic dynamic)
+        if origin in (dict,):
+            return cls._leaf_from_type(dict)
+
+        # primitives / anything else -> leaf
+        return cls._leaf_from_type(base_T)
 
     @staticmethod
     def _safe_type_hints(func):
@@ -592,6 +759,7 @@ class BaseSpecInferAPI:
     @classmethod
     def _spec_from_annotation(cls, T: Any) -> SocketSpec:
         """Only returns a leaf (or passes through explicit SocketSpec/.to_spec())."""
+        # prefer explicit spec in Annotated
         if hasattr(T, "to_spec") and callable(getattr(T, "to_spec")):
             return T.to_spec()
 
@@ -600,33 +768,40 @@ class BaseSpecInferAPI:
         if isinstance(base_T, SocketSpec):
             return base_T
 
+        # Pydantic model?
+        leaf_override = _annot_is_leaf_marker(T)
+        if leaf_override is not None and _is_pydantic_model_type(leaf_override):
+            return SocketSpecAPI._leaf_from_type(dict)
+        if _is_pydantic_model_type(base_T):
+            return SocketSpecAPI.from_model(base_T)
+
         return SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketSpecMeta())
 
     @classmethod
     def build_inputs_from_signature(
-        cls, func, explicit: SocketSpec | None = None
+        cls, func, explicit: SocketSpec | SocketView | type[BaseModel] | None = None
     ) -> SocketSpec:
         """Always return a NAMESPACE spec (possibly empty).
         - POSITIONAL_ONLY -> call_role="args"
         - POSITIONAL_OR_KEYWORD / KEYWORD_ONLY -> call_role="kwargs"
         - *args -> dynamic namespace of item T, call_role="var_args"
         - **kwargs -> dynamic namespace of item T, call_role="var_kwargs"
-
         """
         if explicit is not None:
-            if not isinstance(explicit, SocketSpec):
-                raise TypeError("inputs must be a SocketSpec (namespace/dynamic)")
-            if not explicit.is_namespace():
-                # wrap a leaf into a namespace field named after the parameter is ambiguous;
-                # require explicit namespaces for inputs to avoid surprises
-                raise TypeError("inputs must be a namespace (use `namespace(...)`).")
-            return explicit
+            spec = _normalize_explicit_spec(explicit)
+            # Inputs must be a namespace — if user forces a leaf (e.g., leaf=True model), we disallow:
+            if not spec.is_namespace():
+                raise TypeError(
+                    "Explicit inputs must be a namespace. "
+                    "If you're passing a Pydantic model, avoid `model_config={'leaf': True}` for inputs."
+                )
+            # ensure top-level call_role=kwargs
+            return replace(spec, meta=replace(spec.meta, call_role=CallRole.KWARGS))
 
         sig = inspect.signature(func)
         ann_map = cls._safe_type_hints(func)
 
         fields: dict[str, SocketSpec] = {}
-        # if var_args or var_kwargs are present, the top level becomes dynamic
         is_dyn: bool = False
 
         for name, param in sig.parameters.items():
@@ -657,9 +832,17 @@ class BaseSpecInferAPI:
             if annotated_spec is not None:
                 spec = annotated_spec
             else:
-                spec = cls._spec_from_annotation(base_T)
+                # Pydantic-aware leaf override?
+                leaf_override = _annot_is_leaf_marker(T)
+                if leaf_override is not None and _is_pydantic_model_type(leaf_override):
+                    spec = cls._leaf_from_type(dict)
+                # Pydantic model?
+                elif _is_pydantic_model_type(base_T):
+                    spec = cls.from_model(base_T)
+                else:
+                    spec = cls._spec_from_annotation(base_T)
 
-            # Merge *all* SocketSpecMeta from annotation, overlaying required/call_role defaults
+            # Merge meta from annotation onto required/call_role defaults
             merged_meta = _merge_all_meta_from_annotation(
                 T,
                 SocketSpecMeta(
@@ -676,18 +859,24 @@ class BaseSpecInferAPI:
                     item_T if item_T is not inspect._empty else Any
                 )
                 spec = SocketSpec(
-                    identifier=cls.TYPE_MAPPING["namespace"],
+                    identifier=cls._ns_identifier(),
                     dynamic=True,
                     item=item_spec,
                     meta=spec.meta,
                 )
             elif param.kind is inspect.Parameter.VAR_KEYWORD:
                 item_T, _ = _unwrap_annotated(T)
-                item_spec = cls._spec_from_annotation(
-                    item_T if item_T is not inspect._empty else Any
-                )
+                # try Mapping[str, T] -> T else Any
+                origin = get_origin(item_T)
+                if origin in (dict,):
+                    args = get_args(item_T)
+                    if args and len(args) == 2 and (args[0] in (str, Any)):
+                        item_T = args[1]
+                else:
+                    item_T = Any if item_T is inspect._empty else item_T
+                item_spec = cls._spec_from_annotation(item_T)
                 spec = SocketSpec(
-                    identifier=cls.TYPE_MAPPING["namespace"],
+                    identifier=cls._ns_identifier(),
                     dynamic=True,
                     item=item_spec,
                     meta=spec.meta,
@@ -712,15 +901,23 @@ class BaseSpecInferAPI:
 
         # Always return a namespace, even if empty
         return SocketSpec(
-            identifier=cls.TYPE_MAPPING["namespace"],
+            identifier=cls._ns_identifier(),
             fields=fields,
             dynamic=is_dyn,
-            meta=SocketSpecMeta(call_role="kwargs"),
+            meta=SocketSpecMeta(call_role=CallRole.KWARGS),
+        )
+
+    @classmethod
+    def _wrap_leaf_as_ns(cls, leaf: SocketSpec) -> SocketSpec:
+        return SocketSpec(
+            identifier=cls._ns_identifier(),
+            fields={cls.DEFAULT_OUTPUT_KEY: leaf},
+            meta=SocketSpecMeta(call_role=CallRole.RETURN),
         )
 
     @classmethod
     def build_outputs_from_signature(
-        cls, func, explicit: SocketSpec | None
+        cls, func, explicit: SocketSpec | SocketView | type[BaseModel] | None
     ) -> SocketSpec:
         """Always return a NAMESPACE spec, with selection/meta applied.
         - If the function body never does `return <value>`, return an EMPTY namespace,
@@ -728,30 +925,19 @@ class BaseSpecInferAPI:
         - Otherwise, honor explicit, Annotated, or wrap leaf under DEFAULT_OUTPUT_KEY.
         """
 
-        def _wrap_leaf_as_ns(leaf: SocketSpec) -> SocketSpec:
-            return SocketSpec(
-                identifier=cls.TYPE_MAPPING["namespace"],
-                fields={cls.DEFAULT_OUTPUT_KEY: leaf},
-                meta=SocketSpecMeta(call_role=CallRole.RETURN),
-            )
-
+        # explicit override (now supports BaseModel & SocketView)
         if explicit is not None:
-            if isinstance(explicit, SocketView):
-                explicit = explicit.to_spec()
-            if not isinstance(explicit, SocketSpec):
-                raise TypeError("outputs must be a SocketSpec")
-            # Respect namespaces (even empty) as-is; just set call_role
-            if explicit.is_namespace():
-                return replace(
-                    explicit, meta=replace(explicit.meta, call_role=CallRole.RETURN)
-                )
-            return _wrap_leaf_as_ns(explicit)
+            spec = _normalize_explicit_spec(explicit)
+            if spec.is_namespace():
+                return replace(spec, meta=replace(spec.meta, call_role=CallRole.RETURN))
+            # leaf -> wrap under DEFAULT_OUTPUT_KEY
+            return cls._wrap_leaf_as_ns(spec)
 
         # If function body never returns a value -> EMPTY namespace
         if not _function_returns_value(func):
             return SocketSpec(
-                identifier=cls.TYPE_MAPPING["namespace"],
-                fields={},  # empty
+                identifier=cls._ns_identifier(),
+                fields={},
                 dynamic=False,
                 meta=SocketSpecMeta(call_role=CallRole.RETURN),
             )
@@ -784,12 +970,18 @@ class BaseSpecInferAPI:
                 base_spec, meta=replace(base_spec.meta, call_role=CallRole.RETURN)
             )
 
-        # Fallback leaf under 'result'
+        # Leaf override for Pydantic
+        leaf_override = _annot_is_leaf_marker(ret)
+        if leaf_override is not None and _is_pydantic_model_type(leaf_override):
+            return cls._wrap_leaf_as_ns(cls._leaf_from_type(dict))
+
+        # Fallbacks
         if ret is None or ret is inspect._empty:
-            leaf = SocketSpec(identifier=cls.TYPE_MAPPING["default"])
-            return _wrap_leaf_as_ns(leaf)
+            leaf = SocketSpec(identifier=cls._map_identifier(Any))
+            return cls._wrap_leaf_as_ns(leaf)
 
         base_T, _ = _unwrap_annotated(ret)
+
         if isinstance(base_T, SocketSpec):
             base_T = _apply_select_from_annotation(ret, base_T)
             base_T = replace(
@@ -797,10 +989,19 @@ class BaseSpecInferAPI:
             )
             return replace(base_T, meta=replace(base_T.meta, call_role=CallRole.RETURN))
 
-        leaf = cls._spec_from_annotation(base_T)
+        # Pydantic model?
+        if _is_pydantic_model_type(base_T):
+            leaf = cls.from_model(base_T)
+            leaf = _apply_select_from_annotation(ret, leaf)
+            leaf = replace(leaf, meta=_merge_all_meta_from_annotation(ret, leaf.meta))
+            if leaf.is_namespace():
+                return replace(leaf, meta=replace(leaf.meta, call_role=CallRole.RETURN))
+            return cls._wrap_leaf_as_ns(leaf)
+
+        leaf = SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketSpecMeta())
         leaf = _apply_select_from_annotation(ret, leaf)
         leaf = replace(leaf, meta=_merge_all_meta_from_annotation(ret, leaf.meta))
-        return _wrap_leaf_as_ns(leaf)
+        return cls._wrap_leaf_as_ns(leaf)
 
     @classmethod
     def infer_specs_from_callable(
@@ -845,7 +1046,7 @@ def remove_spec_field(ns: SocketSpec, name: str) -> SocketSpec:
     if not ns.is_namespace():
         raise TypeError("remove_spec_field expects a namespace SocketSpec.")
     if name not in (ns.fields or {}):
-        return ns  # Field doesn't exist, do nothing
+        return ns
     new_fields = dict(ns.fields or {})
     del new_fields[name]
     return replace(ns, fields=new_fields)
@@ -937,12 +1138,13 @@ def unset_default(spec: SocketSpec | SocketView, dotted: str) -> SocketSpec:
     return _set_leaf_default(root, tuple(dotted.split(".")), MISSING)
 
 
-# Convenience: expose classmethods directly (bound to the base class)
-socket = BaseSocketSpecAPI.socket
-namespace = BaseSocketSpecAPI.namespace
-dynamic = BaseSocketSpecAPI.dynamic
-validate_socket_data = BaseSocketSpecAPI.validate_socket_data
-infer_specs_from_callable = BaseSpecInferAPI.infer_specs_from_callable
+# ---------- module-level convenience exports ----------
+socket = SocketSpecAPI.socket
+namespace = SocketSpecAPI.namespace
+dynamic = SocketSpecAPI.dynamic
+validate_socket_data = SocketSpecAPI.validate_socket_data
+infer_specs_from_callable = SocketSpecAPI.infer_specs_from_callable
+from_model = SocketSpecAPI.from_model
 # shorter aliases
 select = SocketSpecSelect
 meta = SocketSpecMeta
