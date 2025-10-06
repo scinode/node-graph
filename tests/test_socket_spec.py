@@ -176,6 +176,22 @@ def test_merge_specs():
     assert set(merged.fields.keys()) == {"a", "b", "c", "d", "e"}
 
 
+def test_normalize_explicit_spec():
+
+    spec = ss.namespace(foo=int, bar=int)
+    ss._normalize_explicit_spec(spec) is spec
+    ss._normalize_explicit_spec(ss.SocketView(spec)) is spec
+
+    # Pydantic model
+    class MyModel(BaseModel):
+        foo: int
+        bar: int
+
+    spec = ss._normalize_explicit_spec(MyModel)
+    assert isinstance(spec, ss.SocketSpec)
+    assert set(spec.fields.keys()) == {"foo", "bar"}
+
+
 def test_build_inputs_from_explicit():
     def add(x, y):
         return x + y
@@ -235,6 +251,29 @@ def test_build_outputs_from_explicit():
 
 
 def test_build_inputs_from_annotation():
+    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)]):
+        """"""
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=None)
+    assert "a" in spec.fields
+    assert "x" in spec.fields["b"].fields
+
+    # pydantic model
+    class AddInputs(BaseModel):
+        x: int
+        y: int
+
+    def add(a: AddInputs, b: Annotated[dict, AddInputs]):
+        """"""
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=None)
+    assert "a" in spec.fields
+    assert "x" in spec.fields["a"].fields
+    assert "b" in spec.fields
+    assert "x" in spec.fields["b"].fields
+
+
+def test_build_outputs_from_annotation():
     def add() -> Annotated[dict, ss.namespace(sum=int, product=int)]:
         """"""
         return {"sum": 0, "product": 0}
@@ -407,6 +446,13 @@ def test_pydantic_model():
 
 def test_dynamic_pydantic_model():
     class Squares(BaseModel):
+        model_config = {"extra": "allow"}
+
+    result = ss.from_model(Squares)
+    assert result.dynamic is True
+    assert result.item.identifier == "node_graph.any"
+
+    class Squares(BaseModel):
         model_config = {"extra": "allow", "item_type": int}
 
         total: int
@@ -414,7 +460,7 @@ def test_dynamic_pydantic_model():
     result = ss.from_model(Squares)
     assert result.dynamic is True
     assert "total" in result.fields
-    assert result.item.identifier.endswith("int")
+    assert result.item.identifier == "node_graph.int"
 
 
 def test_mixed_annotation_and_model():

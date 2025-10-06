@@ -131,6 +131,10 @@ def _extract_spec_from_annotated(tp: Any) -> Optional["SocketSpec"]:
     for m in metas:
         if isinstance(m, SocketSpec):
             return m
+    # Pydantic BaseModel in metadata
+    for m in metas:
+        if isinstance(m, type) and _is_pydantic_model_type(m):
+            return SocketSpecAPI.from_model(m)
     return None
 
 
