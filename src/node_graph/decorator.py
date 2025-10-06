@@ -7,26 +7,6 @@ from .node_spec import NodeHandle, BaseHandle
 from .socket_spec import SocketSpec
 
 
-def set_node_arguments(call_args, call_kwargs, node):
-    input_names = node.inputs._get_keys()
-    for i, value in enumerate(call_args):
-        if i < len(input_names):
-            node.inputs[input_names[i]].value = value
-        else:
-            # Does not support var_args yet
-            raise TypeError(
-                f"Too many positional arguments. expects {len(input_names)} but you supplied {len(call_args)}."
-            )
-    node.set_inputs(call_kwargs)
-    outputs = [
-        output for output in node.outputs if output._name not in ["_wait", "_outputs"]
-    ]
-    if len(outputs) == 1:
-        return outputs[0]
-    else:
-        return node.outputs
-
-
 def build_node_from_callable(
     executor: Callable,
     inputs: Optional[SocketSpec | List[str]] = None,
