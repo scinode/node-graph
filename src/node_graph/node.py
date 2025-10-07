@@ -10,7 +10,7 @@ from node_graph.collection import (
 )
 from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
-from node_graph.socket_spec import BaseSocketSpecAPI
+from node_graph.socket_spec import SocketSpecAPI
 from .config import BuiltinPolicy
 from .node_spec import NodeSpec
 from dataclasses import replace
@@ -39,7 +39,7 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
     _REGISTRY: Optional[RegistryHub] = registry_hub
     _PROPERTY_CLASS = PropertyCollection
-    _SOCKET_SPEC_API = BaseSocketSpecAPI
+    _SOCKET_SPEC_API = SocketSpecAPI
     _BUILTINS_POLICY = BuiltinPolicy()
 
     _default_spec = NodeSpec(

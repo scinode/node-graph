@@ -4,7 +4,8 @@ from node_graph import socket_spec as ss
 from node_graph.orm.mapping import type_mapping
 from typing import Any, Annotated
 from node_graph import node
-from dataclasses import MISSING
+from dataclasses import dataclass, MISSING
+from pydantic import BaseModel
 
 
 def test_namespace_build_and_roundtrip():
@@ -138,7 +139,7 @@ def test_include_prefix_exclude_prefix_top_level_only():
     ).fields["x"]
     assert set(inc_pfx.fields.keys()) == {"band_k", "band_e"}
 
-    # exclude all top-level fields starting with 'ba'
+    # exclude all top-level fields starting with 'b'
     exc_pfx = ss.namespace(
         x=Annotated[dict, base, ss.SocketSpecSelect(exclude_prefix="b")]
     ).fields["x"]
@@ -175,50 +176,197 @@ def test_merge_specs():
     assert set(merged.fields.keys()) == {"a", "b", "c", "d", "e"}
 
 
-def test_build_inputs_from_signature():
+def test_normalize_explicit_spec():
+    spec = ss.namespace(foo=int, bar=int)
+    ss._normalize_explicit_spec(spec) is spec
+    ss._normalize_explicit_spec(ss.SocketView(spec)) is spec
+
+    # Pydantic model
+    class MyModel(BaseModel):
+        foo: int
+        bar: int
+
+    spec = ss._normalize_explicit_spec(MyModel)
+    assert isinstance(spec, ss.SocketSpec)
+    assert set(spec.fields.keys()) == {"foo", "bar"}
+
+    # Dataclass model
+    @dataclass
+    class MyDC:
+        foo: int
+        bar: int
+
+    spec = ss._normalize_explicit_spec(MyDC)
+    assert isinstance(spec, ss.SocketSpec)
+    assert set(spec.fields.keys()) == {"foo", "bar"}
+
+
+def test_build_inputs_from_explicit():
     def add(x, y):
         return x + y
 
-    with pytest.raises(TypeError, match="inputs must be a SocketSpec"):
-        ss.BaseSpecInferAPI.build_inputs_from_signature(add, explicit=int)
+    with pytest.raises(
+        TypeError,
+        match=r"Unsupported explicit spec\.",  # keep message flexible
+    ):
+        ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=int)
 
-    spec = ss.BaseSpecInferAPI.build_inputs_from_signature(
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(
         add, explicit=ss.namespace(x=Any)
     )
     assert "x" in spec.fields
 
     with pytest.raises(TypeError, match="inputs must be a namespace"):
-        spec = ss.BaseSpecInferAPI.build_inputs_from_signature(
+        _ = ss.SocketSpecAPI.build_inputs_from_signature(
             add, explicit=ss.SocketSpec("any")
         )
 
+    # pydantic model
+    class AddInputs(BaseModel):
+        x: int
+        y: int
 
-def test_build_outputs_from_signature():
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=AddInputs)
+    assert "x" in spec.fields
+    assert "y" in spec.fields
+
+    # dataclass model
+    @dataclass
+    class AddInputsDC:
+        x: int
+        y: int
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=AddInputsDC)
+    assert "x" in spec.fields
+    assert "y" in spec.fields
+
+
+def test_build_outputs_from_explicit():
     def add(x, y):
         return x + y
 
-    with pytest.raises(TypeError, match="outputs must be a SocketSpec"):
-        ss.BaseSpecInferAPI.build_outputs_from_signature(add, explicit=int)
+    with pytest.raises(
+        TypeError,
+        match=r"Unsupported explicit spec\.",
+    ):
+        ss.SocketSpecAPI.build_outputs_from_signature(add, explicit=int)
 
     # if user provides a namespace explicitly, we use it directly
     # do NOT add a 'result' field
-    spec = ss.BaseSpecInferAPI.build_outputs_from_signature(
-        add, explicit=ss.namespace()
-    )
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(add, explicit=ss.namespace())
     assert "result" not in spec.fields
     # will wrap the spec into a namespace with 'result' field
-    spec = ss.BaseSpecInferAPI.build_outputs_from_signature(
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(
         add, explicit=ss.SocketSpec("any")
     )
     assert "result" in spec.fields
 
+    # pydantic model
+    class AddOutputs(BaseModel):
+        result: int
+
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(add, explicit=AddOutputs)
+    assert "result" in spec.fields
+
+    # dataclass model
+    @dataclass
+    class AddOutputsDC:
+        result: int
+
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(add, explicit=AddOutputsDC)
+    assert "result" in spec.fields
+
+
+def test_build_inputs_from_annotation():
+    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)]):
+        """"""
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=None)
+    assert "a" in spec.fields
+    assert "x" in spec.fields["b"].fields
+
+    # pydantic model
+    class AddInputs(BaseModel):
+        x: int
+        y: int
+
+    def add(a: AddInputs, b: Annotated[dict, AddInputs]):
+        """"""
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add, explicit=None)
+    assert "a" in spec.fields
+    assert "x" in spec.fields["a"].fields
+    assert "b" in spec.fields
+    assert "x" in spec.fields["b"].fields
+
+    # dataclass model
+    @dataclass
+    class AddInputsDC:
+        x: int
+        y: int
+
+    def add_dc(a: AddInputsDC, b: Annotated[dict, AddInputsDC]):
+        """"""
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add_dc, explicit=None)
+    assert "a" in spec.fields
+    assert "x" in spec.fields["a"].fields
+    assert "b" in spec.fields
+    assert "x" in spec.fields["b"].fields
+
+
+def test_build_outputs_from_annotation():
+    def add() -> Annotated[dict, ss.namespace(sum=int, product=int)]:
+        """"""
+        return {"sum": 0, "product": 0}
+
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(add, explicit=None)
+    assert "sum" in spec.fields
+    assert "sum" in spec.fields
+
+    # pydantic model
+    class AddOutputs(BaseModel):
+        sum: int
+        product: int
+
+    def add_pm() -> AddOutputs:
+        """"""
+        return {"sum": 0, "product": 0}
+
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(add_pm, explicit=None)
+    assert "sum" in spec.fields
+    assert "product" in spec.fields
+
+    # dataclass model
+    @dataclass
+    class AddOutputsDC:
+        sum: int
+        product: int
+
+    def add_dc() -> AddOutputsDC:
+        """"""
+        return AddOutputsDC(0, 0)
+
+    spec = ss.SocketSpecAPI.build_outputs_from_signature(add_dc, explicit=None)
+    assert "sum" in spec.fields
+    assert "product" in spec.fields
+
 
 def test_validate_socket_data():
-
     with pytest.raises(TypeError, match="All elements in the list must be strings"):
         ss.validate_socket_data(["a", 2])
-    with pytest.raises(TypeError, match="Expected list or namespace type"):
+    with pytest.raises(TypeError, match="Unsupported spec input type:"):
         ss.validate_socket_data({"a": 1})
+
+    # dataclass accepted
+    @dataclass
+    class VDC:
+        a: int
+        b: int
+
+    spec = ss.validate_socket_data(VDC)
+    assert isinstance(spec, ss.SocketSpec)
+    assert set(spec.fields.keys()) == {"a", "b"}
 
 
 def test_is_namespace():
@@ -279,19 +427,19 @@ def test_set_default_from_annotation():
     def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = {"x": 1, "y": 2}):
         return a + b
 
-    ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+    ns = ss.SocketSpecAPI.build_inputs_from_signature(add)
     assert ns.fields["b"].fields["x"].default == 1
     assert ns.fields["b"].fields["y"].default == 2
 
-    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = 1):
+    def add2(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = 1):
         return a + b
 
     with pytest.raises(
         TypeError, match="Scalar default provided for namespace parameter"
     ):
-        ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+        _ = ss.SocketSpecAPI.build_inputs_from_signature(add2)
 
-    def add(
+    def add3(
         a,
         b: Annotated[dict, ss.namespace(x=int, y=ss.namespace(z=int))] = {
             "x": 1,
@@ -300,11 +448,11 @@ def test_set_default_from_annotation():
     ):
         return a + b
 
-    ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+    ns = ss.SocketSpecAPI.build_inputs_from_signature(add3)
     assert ns.fields["b"].fields["x"].default == 1
     assert ns.fields["b"].fields["y"].fields["z"].default == 2
 
-    def add(
+    def add4(
         a,
         b: Annotated[dict, ss.namespace(x=int, y=ss.namespace(z=int))] = {
             "x": 1,
@@ -316,7 +464,7 @@ def test_set_default_from_annotation():
     with pytest.raises(
         TypeError, match="Default for 'y' is scalar, but the field is a namespace."
     ):
-        ns = ss.BaseSpecInferAPI.build_inputs_from_signature(add)
+        _ = ss.SocketSpecAPI.build_inputs_from_signature(add4)
 
 
 def test_add_spec_field():
@@ -337,3 +485,157 @@ def test_remove_spec_field():
     )
     ns1 = remove_spec_field(ns, "b")
     assert "b" not in ns1.fields
+
+
+def test_pydantic_model():
+    class Inner(BaseModel):
+        d: str
+
+    class Outer(BaseModel):
+        a: int
+        b: int = 5
+        c: Inner
+
+    ns = ss.from_model(Outer)
+
+    assert ns.is_namespace()
+    assert set(ns.fields.keys()) == {"a", "b", "c"}
+    assert ns.fields["b"].default == 5
+    assert ns.fields["c"].is_namespace()
+    assert set(ns.fields["c"].fields.keys()) == {"d"}
+
+    blob = ns.to_dict()
+    ns2 = ss.SocketSpec.from_dict(copy.deepcopy(blob))
+    assert ns2 == ns
+
+
+def test_dynamic_pydantic_model():
+    class Squares(BaseModel):
+        model_config = {"extra": "allow"}
+
+    result = ss.from_model(Squares)
+    assert result.dynamic is True
+    assert result.item.identifier == "node_graph.any"
+
+    class Squares2(BaseModel):
+        model_config = {"extra": "allow", "item_type": int}
+        total: int
+
+    result = ss.from_model(Squares2)
+    assert result.dynamic is True
+    assert "total" in result.fields
+    assert result.item.identifier == "node_graph.int"
+
+
+def test_mixed_annotation_and_model():
+    class Row(BaseModel):
+        sum: int
+        product: int
+
+    spec = ss.namespace(x=int, y=Row)
+    assert spec.fields["y"].is_namespace()
+    assert set(spec.fields["y"].fields.keys()) == {"sum", "product"}
+
+    spec = ss.dynamic(Row, fixed1=str)
+    assert spec.fields["fixed1"].identifier == "node_graph.string"
+    assert spec.item.is_namespace()
+    assert spec.dynamic is True
+    assert set(spec.item.fields.keys()) == {"sum", "product"}
+
+
+def test_leaf_pydantic_model():
+    class MySpec(BaseModel):
+        model_config = {"leaf": True}
+        x: int
+        y: int
+
+    spec = ss.from_model(MySpec)
+    assert not spec.is_namespace()
+
+    # Per-use leaf wrapper (even if model had no flag)
+    class Other(BaseModel):
+        a: int
+        b: int
+
+    spec = ss.from_model(ss.Leaf[Other])
+    assert not spec.is_namespace()
+
+
+def test_dataclass_model_namespace_and_roundtrip():
+    @dataclass
+    class InnerDC:
+        d: str
+
+    @dataclass
+    class OuterDC:
+        a: int
+        b: int = 5
+        c: InnerDC = None
+
+    ns = ss.from_model(OuterDC)
+    assert ns.is_namespace()
+    assert set(ns.fields.keys()) == {"a", "b", "c"}
+    assert ns.fields["b"].default == 5
+    assert ns.fields["c"].is_namespace()
+    assert set(ns.fields["c"].fields.keys()) == {"d"}
+
+    blob = ns.to_dict()
+    ns2 = ss.SocketSpec.from_dict(copy.deepcopy(blob))
+    assert ns2 == ns
+
+
+def test_dynamic_dataclass_model():
+    @dataclass
+    class SquaresDC:
+        model_config = {"extra": "allow"}  # dynamic
+        # (no fixed fields)
+
+    result = ss.from_model(SquaresDC)
+    assert result.dynamic is True
+    assert result.item.identifier == "node_graph.any"
+
+    @dataclass
+    class Squares2DC:
+        model_config = {"extra": "allow", "item_type": int}
+        total: int = 0
+
+    result = ss.from_model(Squares2DC)
+    assert result.dynamic is True
+    assert "total" in result.fields
+    assert result.item.identifier == "node_graph.int"
+
+
+def test_mixed_annotation_and_dataclass():
+    @dataclass
+    class RowDC:
+        sum: int
+        product: int
+
+    spec = ss.namespace(x=int, y=RowDC)
+    assert spec.fields["y"].is_namespace()
+    assert set(spec.fields["y"].fields.keys()) == {"sum", "product"}
+
+    spec = ss.dynamic(RowDC, fixed1=str)
+    assert spec.fields["fixed1"].identifier == "node_graph.string"
+    assert spec.item.is_namespace()
+    assert spec.dynamic is True
+    assert set(spec.item.fields.keys()) == {"sum", "product"}
+
+
+def test_leaf_dataclass_model():
+    @dataclass
+    class MyLeafDC:
+        model_config = {"leaf": True}
+        x: int
+        y: int
+
+    spec = ss.from_model(MyLeafDC)
+    assert not spec.is_namespace()
+
+    @dataclass
+    class OtherDC:
+        a: int
+        b: int
+
+    spec = ss.from_model(ss.Leaf[OtherDC])
+    assert not spec.is_namespace()

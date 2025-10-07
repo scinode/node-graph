@@ -1,6 +1,50 @@
 from ..node_graph import NodeGraph
 from typing import Any, Optional, Callable
 from node_graph.socket_spec import SocketSpec
+from node_graph.socket import (
+    BaseSocket,
+    NodeSocket,
+    NodeSocketNamespace,
+    TaggedValue,
+)
+
+
+def format_invalid_graph_payload_error(subpath: str, vtype: str) -> str:
+    """
+    Formats the 'Invalid graph return payload' error message with specific
+    subpath and vtype values.
+    """
+    error_message = (
+        "Invalid graph return payload.\n"
+        f"- Location: {subpath}\n"
+        f"- Got: {vtype}\n"
+        "- Expected: BaseSocket (a node's socket) or TaggedValue\n\n"
+        "Why this fails:\n"
+        "You're returning a raw Python value computed inside the graph node. "
+        "This bypasses NodeGraph's provenance tracking and breaks data lineage.\n\n"
+        "How to fix:\n"
+        "1) Wrap the computation in a node and return its OUTPUT SOCKET:\n"
+        "   @node()\n"
+        "   def compute(x, y):\n"
+        "       return x + y\n"
+        "\n"
+        "   # inside your graph\n"
+        "   s = compute(x, y)\n"
+        "   return {\n"
+        "       'sum': s.outputs.result  # <-- BaseSocket, not a raw value\n"
+        "   }\n\n"
+    )
+    return error_message
+
+
+def _ensure_all_sockets_in_dict(d: dict, path: str = "outputs") -> None:
+    for k, v in d.items():
+        subpath = f"{path}.{k}"
+        if isinstance(v, dict):
+            _ensure_all_sockets_in_dict(v, path=subpath)
+        elif not isinstance(v, (BaseSocket, TaggedValue)):
+            vtype = type(v).__name__
+            raise TypeError(format_invalid_graph_payload_error(subpath, vtype))
 
 
 def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
@@ -14,22 +58,6 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
       - dict        -> every leaf value (including nested dicts) must be BaseSocket
       - tuple       -> every item must be BaseSocket; length must match declared outputs
     """
-    from node_graph.socket import (
-        BaseSocket,
-        NodeSocket,
-        NodeSocketNamespace,
-        TaggedValue,
-    )
-
-    def _ensure_all_sockets_in_dict(d: dict, path: str = "outputs") -> None:
-        for k, v in d.items():
-            subpath = f"{path}.{k}"
-            if isinstance(v, dict):
-                _ensure_all_sockets_in_dict(v, path=subpath)
-            elif not isinstance(v, (BaseSocket, TaggedValue)):
-                raise TypeError(
-                    f"Invalid output at '{subpath}': expected BaseSocket or TaggedValue, got {type(v).__name__}."
-                )
 
     if outputs is None:
         if len(graph.outputs) != 0:
@@ -60,7 +88,8 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
                     continue
                 raise ValueError(
                     "Output socket name "
-                    f"'{socket._name}' not declared in Graph node outputs.\n\n"
+                    f"'{socket._name}' not declared in Graph node outputs.Available outputs: "
+                    f"{list(graph.outputs._get_keys())}\n\n"
                     "How to fix:\n"
                     "1) Make graph outputs dynamic if you want to return arbitrary names:\n"
                     "   • `outputs = dynamic(Any)`\n"
@@ -86,7 +115,10 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
         for i, output in enumerate(outputs):
             if not isinstance(output, (BaseSocket, TaggedValue)):
                 raise TypeError(
-                    f"Invalid output at index {i}: expected Socket or TaggedValue, got {type(output).__name__}."
+                    format_invalid_graph_payload_error(
+                        subpath=f"outputs[{i}]",
+                        vtype=type(output).__name__,
+                    )
                 )
         outputs_dict = {
             graph.outputs[i]._name: output for i, output in enumerate(outputs)
@@ -95,8 +127,10 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
 
     else:
         raise TypeError(
-            f"Unsupported output type {type(outputs).__name__}. Must be one of "
-            "Socket, TaggedValue, dict, tuple, or None."
+            format_invalid_graph_payload_error(
+                subpath="outputs",
+                vtype=type(outputs).__name__,
+            )
         )
 
 

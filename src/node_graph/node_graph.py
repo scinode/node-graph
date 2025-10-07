@@ -3,7 +3,7 @@ from node_graph.registry import RegistryHub, registry_hub
 from node_graph.collection import NodeCollection, LinkCollection
 from uuid import uuid1
 from node_graph.node_spec import NodeSpec
-from node_graph.socket_spec import SocketSpec, BaseSocketSpecAPI
+from node_graph.socket_spec import SocketSpec, SocketSpecAPI
 from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.node import Node
@@ -74,7 +74,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
 
     _REGISTRY: Optional[RegistryHub] = registry_hub
     _BUILTINS_POLICY = BuiltinPolicy()
-    _SOCKET_SPEC_API = BaseSocketSpecAPI
+    _SOCKET_SPEC_API = SocketSpecAPI
 
     platform: str = "node_graph"
 

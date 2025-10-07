@@ -63,7 +63,7 @@ def test_invalid_outputs():
     def add_multiply(x, y):
         return x + y
 
-    with pytest.raises(TypeError, match="Unsupported output type"):
+    with pytest.raises(TypeError, match="Invalid graph return payload."):
         add_multiply.build(x=2, y=3)
 
     # dict with invalid type
@@ -71,7 +71,7 @@ def test_invalid_outputs():
     def add_multiply(x, y):
         return {"sum": add(x, y).result, "product": x * y}
 
-    with pytest.raises(TypeError, match="Invalid output at"):
+    with pytest.raises(TypeError, match="Invalid graph return payload."):
         add_multiply.build(x=2, y=3)
 
     # Tuple with invalid type
@@ -79,7 +79,7 @@ def test_invalid_outputs():
     def add_multiply(x, y):
         return add(x, y).result, x * y
 
-    with pytest.raises(TypeError, match="Invalid output at"):
+    with pytest.raises(TypeError, match="Invalid graph return payload."):
         add_multiply.build(x=2, y=3)
 
 
