@@ -8,11 +8,41 @@ from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.node import Node
 from node_graph.socket import NodeSocket
-from node_graph.socket_spec import add_spec_field
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
 from .config import BuiltinPolicy, BUILTIN_NODES
 from .mixins import IOOwnerMixin, WidgetRenderableMixin
+from dataclasses import dataclass
+from dataclasses import replace
+
+
+@dataclass(frozen=True)
+class GraphSpec:
+    """Specification for a NodeGraph's inputs and outputs."""
+
+    schema_source: str = "EMBEDDED"
+    inputs: Optional[SocketSpec] = None
+    outputs: Optional[SocketSpec] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {"schema_source": self.schema_source}
+        if self.inputs is not None:
+            data["inputs"] = self.inputs.to_dict()
+        if self.outputs is not None:
+            data["outputs"] = self.outputs.to_dict()
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GraphSpec":
+        from node_graph.socket_spec import SocketSpec
+
+        inputs = SocketSpec.from_dict(data["inputs"]) if "inputs" in data else None
+        outputs = SocketSpec.from_dict(data["outputs"]) if "outputs" in data else None
+        return cls(
+            schema_source=data.get("schema_source", "EMBEDDED"),
+            inputs=inputs,
+            outputs=outputs,
+        )
 
 
 class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
@@ -80,40 +110,41 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
-        self._inputs = inputs
-        self._outputs = outputs
+        self._init_graph_spec(inputs, outputs)
         if init_graph_level_nodes:
-            self._init_graph_level_nodes(inputs, outputs)
+            self._init_graph_level_nodes()
 
         self.state = "CREATED"
         self.action = "NONE"
         self.description = ""
 
-    def _init_graph_level_nodes(self, inputs, outputs):
-        from dataclasses import replace
+    def _init_graph_spec(
+        self, inputs: Optional[SocketSpec], outputs: Optional[SocketSpec]
+    ) -> None:
 
         inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
-        outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
-
-        base_class = self._REGISTRY.node_pool["graph_level"].load()
-
         # if inputs is None, we assume it's a dynamic inputs
         inputs = self._SOCKET_SPEC_API.dynamic(Any) if inputs is None else inputs
         meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
-        self._inputs = inputs
+        outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
+        # if outputs is None, we assume it's a dynamic outputs
+        outputs = self._SOCKET_SPEC_API.dynamic(Any) if outputs is None else outputs
+
+        self.spec = GraphSpec(inputs=inputs, outputs=outputs)
+
+    def _init_graph_level_nodes(self):
+        base_class = self._REGISTRY.node_pool["graph_level"].load()
         self.graph_inputs_spec = NodeSpec(
             identifier="graph_inputs",
-            inputs=inputs,
+            inputs=self.spec.inputs,
             base_class=base_class,
         )
         self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
-        # if outputs is None, we assume it's a dynamic outputs
-        outputs = self._SOCKET_SPEC_API.dynamic(Any) if outputs is None else outputs
-        self._outputs = outputs
+
         self.graph_outputs_spec = NodeSpec(
             identifier="graph_outputs",
-            inputs=outputs,
+            inputs=self.spec.outputs,
             base_class=base_class,
         )
         graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
@@ -186,18 +217,9 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             raise ValueError(f"The following named nodes do not exist: {missing}")
         for name in names - set(BUILTIN_NODES):
             node = self.nodes[name]
-            # skip linked sockets
-            socket = node.inputs._copy(
-                node=self.graph_inputs,
-                parent=self.inputs,
-                skip_linked=True,
-                skip_builtin=True,
-            )
-            socket._name = node.name
-            self.inputs._append(socket)
             # update the _inputs spec
             if node.spec.inputs is not None:
-                self._inputs = add_spec_field(self._inputs, node.name, node.spec.inputs)
+                socket = self.add_input_spec(node.spec.inputs, name=node.name)
             keys = node.inputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -217,18 +239,8 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             raise ValueError(f"The following named nodes do not exist: {missing}")
         for name in names - set(BUILTIN_NODES):
             node = self.nodes[name]
-            socket = node.outputs._copy(
-                node=self.graph_outputs,
-                parent=self.outputs,
-                skip_builtin=True,
-            )
-            socket._name = node.name
-            self.outputs._append(socket)
-            # update the _outputs spec
             if node.spec.outputs is not None:
-                self._outputs = add_spec_field(
-                    self._outputs, node.name, node.spec.outputs
-                )
+                socket = self.add_output_spec(node.spec.outputs, name=node.name)
             keys = node.outputs._get_all_keys()
             exist_keys = socket._get_all_keys()
             for key in keys:
@@ -359,6 +371,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             "action": self.action,
             "error": "",
             "metadata": metadata,
+            "spec": self.spec.to_dict(),
             "nodes": nodes,
             "links": links,
             "description": self.description,
@@ -370,10 +383,6 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         meta: Dict[str, Any] = {
             "graph_type": self.graph_type,
         }
-        if self._inputs is not None:
-            meta["inputs_spec"] = self._inputs.to_dict()
-        if self._outputs is not None:
-            meta["outputs_spec"] = self._outputs.to_dict()
         # also save the parent class information
         meta["graph_class"] = {
             "callable_name": self.__class__.__name__,
@@ -453,9 +462,6 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         Returns:
             NodeGraph: The rebuilt node graph.
         """
-
-        md = ngdata.get("metadata", {}) or {}
-
         ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
@@ -466,18 +472,9 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         ng.action = ngdata.get("action", "NONE")
         ng.description = ngdata.get("description", "")
 
-        # built-in graph level nodes
-        inputs_spec = (
-            SocketSpec.from_dict(md["inputs_spec"], type_mapping=ng.type_mapping)
-            if "inputs_spec" in md
-            else None
-        )
-        outputs_spec = (
-            SocketSpec.from_dict(md["outputs_spec"], type_mapping=ng.type_mapping)
-            if "outputs_spec" in md
-            else None
-        )
-        ng._init_graph_level_nodes(inputs_spec, outputs_spec)
+        spec = GraphSpec.from_dict(ngdata.get("spec", {}))
+        ng.spec = spec
+        ng._init_graph_level_nodes()
 
         for ndata in ngdata["nodes"].values():
             ng.add_node_from_dict(ndata)

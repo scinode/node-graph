@@ -2,6 +2,9 @@ from __future__ import annotations
 from typing import Any, List, Protocol
 from node_graph.collection import DependencyCollection
 from .socket import BaseSocket
+from .socket_spec import SocketSpec, add_spec_field
+from .node_spec import SchemaSource
+from dataclasses import replace
 
 
 class _HasSocketNamespaces(Protocol):
@@ -23,6 +26,54 @@ class IOOwnerMixin(_HasSocketNamespaces):
 
     def get_output_names(self) -> List[str]:
         return self.outputs._get_keys()
+
+    def add_input_spec(self, spec: str | SocketSpec, name: str, **kwargs) -> BaseSocket:
+        """
+        Permanently adds an input socket to the node's spec.
+        This marks the node as modified and will be persisted.
+        """
+        if isinstance(spec, str):
+            spec = SocketSpec(identifier=spec, **kwargs)
+        new_inputs_spec = add_spec_field(self.spec.inputs, name, spec)
+        # This is an explicit, permanent modification
+        self.spec = replace(
+            self.spec, schema_source=SchemaSource.EMBEDDED, inputs=new_inputs_spec
+        )
+        # add the socket to the runtime object
+        self._SOCKET_SPEC_API.SocketNamespace._append_from_spec(
+            self.inputs,
+            name,
+            spec,
+            node=self.inputs._node,
+            graph=self.inputs._graph,
+            role="input",
+        )
+        return self.inputs[name]
+
+    def add_output_spec(
+        self, spec: str | SocketSpec, name: str, **kwargs
+    ) -> BaseSocket:
+        """
+        Permanently adds an output socket to the node's spec.
+        This marks the node as modified and will be persisted.
+        """
+        if isinstance(spec, str):
+            spec = SocketSpec(identifier=spec, **kwargs)
+        new_outputs_spec = add_spec_field(self.spec.outputs, name, spec)
+        # This is an explicit, permanent modification
+        self.spec = replace(
+            self.spec, schema_source=SchemaSource.EMBEDDED, outputs=new_outputs_spec
+        )
+        # add the socket to the runtime object
+        self._SOCKET_SPEC_API.SocketNamespace._append_from_spec(
+            self.outputs,
+            name,
+            spec,
+            node=self.outputs._node,
+            graph=self.outputs._graph,
+            role="output",
+        )
+        return self.outputs[name]
 
 
 class WidgetRenderableMixin:

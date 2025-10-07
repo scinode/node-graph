@@ -3,16 +3,16 @@ from uuid import uuid1
 from node_graph.registry import RegistryHub, registry_hub
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
-from .socket import BaseSocket, WaitingOn
+from .socket import WaitingOn
 from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
 )
 from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
-from node_graph.socket_spec import BaseSocketSpecAPI, SocketSpec, add_spec_field
+from node_graph.socket_spec import BaseSocketSpecAPI
 from .config import BuiltinPolicy
-from .node_spec import NodeSpec, SchemaSource
+from .node_spec import NodeSpec
 from dataclasses import replace
 from .mixins import IOOwnerMixin, WidgetRenderableMixin, WaitableMixin
 
@@ -159,50 +159,6 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
     @classmethod
     def generate_name(cls) -> str:
         cls.get_executor()["callable_name"]
-
-    def add_input_spec(self, identifier: str, name: str, **kwargs) -> BaseSocket:
-        """
-        Permanently adds an input socket to the node's spec.
-        This marks the node as modified and will be persisted.
-        """
-        new_socket_spec = SocketSpec(identifier=identifier, **kwargs)
-        new_inputs_spec = add_spec_field(self.spec.inputs, name, new_socket_spec)
-        # This is an explicit, permanent modification
-        self.spec = replace(
-            self.spec, schema_source=SchemaSource.EMBEDDED, inputs=new_inputs_spec
-        )
-        # add the socket to the runtime object
-        self._SOCKET_SPEC_API.SocketNamespace._append_from_spec(
-            self.inputs,
-            name,
-            new_socket_spec,
-            node=self,
-            graph=self.graph,
-            role="input",
-        )
-        return self.inputs[name]
-
-    def add_output_spec(self, identifier: str, name: str, **kwargs) -> BaseSocket:
-        """
-        Permanently adds an output socket to the node's spec.
-        This marks the node as modified and will be persisted.
-        """
-        new_socket_spec = SocketSpec(identifier=identifier, **kwargs)
-        new_outputs_spec = add_spec_field(self.spec.outputs, name, new_socket_spec)
-        # This is an explicit, permanent modification
-        self.spec = replace(
-            self.spec, schema_source=SchemaSource.EMBEDDED, outputs=new_outputs_spec
-        )
-        # add the socket to the runtime object
-        self._SOCKET_SPEC_API.SocketNamespace._append_from_spec(
-            self.outputs,
-            name,
-            new_socket_spec,
-            node=self,
-            graph=self.graph,
-            role="output",
-        )
-        return self.outputs[name]
 
     def add_property(self, identifier: str, name: str, **kwargs) -> Any:
         prop = self.properties._new(identifier, name, **kwargs)

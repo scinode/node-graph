@@ -51,8 +51,8 @@ def _build_subgraph_task_nodespec(
 
     return NodeSpec(
         identifier=graph.name,
-        inputs=graph._inputs,
-        outputs=graph._outputs,
+        inputs=graph.spec.inputs,
+        outputs=graph.spec.outputs,
         executor=RuntimeExecutor.from_graph(graph),
         base_class=SubGraphNode,
         metadata=meta,
