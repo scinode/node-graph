@@ -150,7 +150,7 @@ def test_expose_inputs(test_ng):
     ng = test_ng
     ng.expose_inputs()
     assert "add1" in ng.inputs
-    assert "add1" in ng._inputs.fields
+    assert "add1" in ng.spec.inputs.fields
     assert ng.inputs.add1._value == ng.nodes["add1"].inputs._value
     assert ng.inputs.add2._value == ng.nodes["add2"].inputs._value
 
@@ -180,7 +180,7 @@ def test_expose_outputs(test_ng):
     ng = test_ng
     ng.expose_outputs()
     assert "add1" in ng.outputs
-    assert "add1" in ng._outputs.fields
+    assert "add1" in ng.spec.outputs.fields
     assert ng.outputs.add1._value == ng.nodes["add1"].outputs._value
     assert ng.outputs.add2._value == ng.nodes["add2"].outputs._value
 

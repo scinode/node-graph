@@ -1,23 +1,23 @@
 from __future__ import annotations
 from uuid import uuid1
 from node_graph.registry import RegistryHub, registry_hub
-from node_graph.collection import DependencyCollection
 from typing import List, Optional, Dict, Any, Union
 from node_graph.utils import deep_copy_only_dicts
-from .socket import BaseSocket, NodeSocket, WaitingOn
+from .socket import WaitingOn
 from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
 )
 from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
-from node_graph.socket_spec import SocketSpecAPI, SocketSpec, add_spec_field
+from node_graph.socket_spec import SocketSpecAPI
 from .config import BuiltinPolicy
-from .node_spec import NodeSpec, SchemaSource
+from .node_spec import NodeSpec
 from dataclasses import replace
+from .mixins import IOOwnerMixin, WidgetRenderableMixin, WaitableMixin
 
 
-class Node:
+class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
     """Base class for Node.
 
     Attributes:
@@ -160,69 +160,9 @@ class Node:
     def generate_name(cls) -> str:
         cls.get_executor()["callable_name"]
 
-    def add_input(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        """Add an input socket to this node."""
-
-        input = self.inputs._new(identifier, name, **kwargs)
-        return input
-
-    def add_output(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        output = self.outputs._new(identifier, name, **kwargs)
-        return output
-
-    def add_input_spec(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        """
-        Permanently adds an input socket to the node's spec.
-        This marks the node as modified and will be persisted.
-        """
-        new_socket_spec = SocketSpec(identifier=identifier, **kwargs)
-        new_inputs_spec = add_spec_field(self.spec.inputs, name, new_socket_spec)
-        # This is an explicit, permanent modification
-        self.spec = replace(
-            self.spec, schema_source=SchemaSource.EMBEDDED, inputs=new_inputs_spec
-        )
-        # add the socket to the runtime object
-        self._SOCKET_SPEC_API.SocketNamespace._append_from_spec(
-            self.inputs,
-            name,
-            new_socket_spec,
-            node=self,
-            graph=self.graph,
-            role="input",
-        )
-        return self.inputs[name]
-
-    def add_output_spec(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        """
-        Permanently adds an output socket to the node's spec.
-        This marks the node as modified and will be persisted.
-        """
-        new_socket_spec = SocketSpec(identifier=identifier, **kwargs)
-        new_outputs_spec = add_spec_field(self.spec.outputs, name, new_socket_spec)
-        # This is an explicit, permanent modification
-        self.spec = replace(
-            self.spec, schema_source=SchemaSource.EMBEDDED, outputs=new_outputs_spec
-        )
-        # add the socket to the runtime object
-        self._SOCKET_SPEC_API.SocketNamespace._append_from_spec(
-            self.outputs,
-            name,
-            new_socket_spec,
-            node=self,
-            graph=self.graph,
-            role="output",
-        )
-        return self.outputs[name]
-
     def add_property(self, identifier: str, name: str, **kwargs) -> Any:
         prop = self.properties._new(identifier, name, **kwargs)
         return prop
-
-    def get_input_names(self) -> List[str]:
-        return self.inputs._get_keys()
-
-    def get_output_names(self) -> List[str]:
-        return self.outputs._get_keys()
 
     def get_property_names(self) -> List[str]:
         return self.properties._get_keys()
@@ -546,40 +486,3 @@ class Node:
 
         wgdata = {"name": self.name, "nodes": {self.name: tdata}, "links": []}
         return wgdata
-
-    def _repr_mimebundle_(self, *args: Any, **kwargs: Any) -> any:
-        # if ipywdigets > 8.0.0, use _repr_mimebundle_ instead of _ipython_display_
-        self.widget.value = self.to_widget_value()
-        if hasattr(self.widget, "_repr_mimebundle_"):
-            return self.widget._repr_mimebundle_(*args, **kwargs)
-        else:
-            return self.widget._ipython_display_(*args, **kwargs)
-
-    def to_html(self, output: str = None, **kwargs):
-        """Write a standalone html file to visualize the task."""
-        self.widget.value = self.to_widget_value()
-        return self.widget.to_html(output=output, **kwargs)
-
-    def __rshift__(self, other: "Node" | BaseSocket | DependencyCollection):
-        """
-        Called when we do: self >> other
-        So we link them or mark that 'other' must wait for 'self'.
-        """
-        if isinstance(other, DependencyCollection):
-            for item in other.items:
-                self >> item
-        else:
-            other._waiting_on.add(self)
-        return other
-
-    def __lshift__(self, other: "Node" | BaseSocket | DependencyCollection):
-        """
-        Called when we do: self << other
-        Means the same as: other >> self
-        """
-        if isinstance(other, DependencyCollection):
-            for item in other.items:
-                self << item
-        else:
-            self._waiting_on.add(other)
-        return other
