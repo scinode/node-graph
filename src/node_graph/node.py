@@ -11,7 +11,7 @@ from node_graph.collection import (
 )
 from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
-from node_graph.socket_spec import BaseSocketSpecAPI, SocketSpec, add_spec_field
+from node_graph.socket_spec import SocketSpecAPI, SocketSpec, add_spec_field
 from .config import BuiltinPolicy
 from .node_spec import NodeSpec, SchemaSource
 from dataclasses import replace
@@ -39,7 +39,7 @@ class Node:
 
     _REGISTRY: Optional[RegistryHub] = registry_hub
     _PROPERTY_CLASS = PropertyCollection
-    _SOCKET_SPEC_API = BaseSocketSpecAPI
+    _SOCKET_SPEC_API = SocketSpecAPI
     _BUILTINS_POLICY = BuiltinPolicy()
 
     _default_spec = NodeSpec(

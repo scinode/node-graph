@@ -2,28 +2,6 @@ from __future__ import annotations
 from typing import Dict, Any, Union, List
 
 
-def get_executor_from_path(path: dict | str) -> Any:
-    """Get the executor from the path."""
-    import importlib
-
-    if isinstance(path, dict):
-        module_path = path["module_path"]
-        callable_name = path["callable_name"]
-    elif isinstance(path, str):
-        parts = path.split(".")
-        if len(parts) < 2:
-            raise ValueError(
-                "module_path must contain at least one dot to separate "
-                "the module from the callable (e.g. 'mymodule.myfunc')"
-            )
-        callable_name = parts[-1]
-        module_path = ".".join(parts[:-1])
-    module = importlib.import_module(module_path)
-    executor = getattr(module, callable_name)
-
-    return executor
-
-
 def nodegaph_to_short_json(
     ngdata: Dict[str, Union[str, List, Dict]]
 ) -> Dict[str, Union[str, Dict]]:
@@ -128,24 +106,6 @@ def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
         args_data["var_kwargs"] = name
 
 
-def collect_values_inside_namespace(
-    namespace: Dict[str, Any], include_none: bool = True
-) -> Dict[str, Any]:
-    """Collect values inside the namespace."""
-    values = {}
-    for key, socket in namespace.get("sockets", {}).items():
-        if "sockets" in socket:
-            data = collect_values_inside_namespace(socket, include_none=include_none)
-            if data:
-                values[key] = data
-        if "property" in socket:
-            value = socket.get("property", {}).get("value")
-            if value is None and not include_none:
-                continue
-            values[key] = value
-    return values
-
-
 def valid_name_string(s: str) -> bool:
     """
     Check whether the input string s contains only alphanumeric characters and underscores.
@@ -172,30 +132,6 @@ def valid_name_string(s: str) -> bool:
         raise ValueError(
             f"Invalid name: {s!r}. Only letters, digits and underscores are allowed"
         )
-
-
-def socket_value_id_mapping(socket):
-    """Create a mapping of value IDs to sockets in a NodeSocketNamespace."""
-    from node_graph.socket import NodeSocketNamespace
-
-    mapping = {}
-    for sub_socket in socket._sockets.values():
-        if isinstance(sub_socket, NodeSocketNamespace):
-            sub_mapping = socket_value_id_mapping(sub_socket)
-            for value_id, socket_list in sub_mapping.items():
-                if value_id in mapping:
-                    mapping[value_id].extend(socket_list)
-                else:
-                    mapping[value_id] = socket_list
-        else:
-            value_id = sub_socket.property._value_id
-            if sub_socket.property.value is None:
-                continue
-            if value_id in mapping:
-                mapping[value_id].append(sub_socket)
-            else:
-                mapping[value_id] = [sub_socket]
-    return mapping
 
 
 def tag_socket_value(socket: "NodeSocket") -> "NodeSocket":
