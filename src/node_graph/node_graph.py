@@ -11,11 +11,11 @@ from node_graph.socket import NodeSocket
 from node_graph.socket_spec import add_spec_field
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
-from node_graph_widget import NodeGraphWidget
 from .config import BuiltinPolicy, BUILTIN_NODES
+from .mixins import IOOwnerMixin, WidgetRenderableMixin
 
 
-class NodeGraph:
+class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
     """A collection of nodes and links.
 
     Attributes:
@@ -260,12 +260,6 @@ class NodeGraph:
         except importlib.metadata.PackageNotFoundError:
             return "unknown"
 
-    @property
-    def widget(self) -> NodeGraphWidget:
-        if self._widget is None:
-            self._widget = NodeGraphWidget(parent=self)
-        return self._widget
-
     def add_node(
         self,
         identifier: Union[str, Callable],
@@ -315,16 +309,6 @@ class NodeGraph:
         link = self.links._new(source, target)
         self._version += 1
         return link
-
-    def add_input(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        """Add an input socket to this node."""
-
-        input = self.inputs._new(identifier, name, **kwargs)
-        return input
-
-    def add_output(self, identifier: str, name: str, **kwargs) -> NodeSocket:
-        output = self.outputs._new(identifier, name, **kwargs)
-        return output
 
     def append_node(self, node: Node) -> None:
         """Appends a node to the node graph."""
@@ -684,19 +668,6 @@ class NodeGraph:
 
     def __repr__(self) -> str:
         return f'NodeGraph(name="{self.name}", uuid="{self.uuid}")'
-
-    def _repr_mimebundle_(self, *args, **kwargs):
-        # if ipywdigets > 8.0.0, use _repr_mimebundle_ instead of _ipython_display_
-        self.widget.value = self.to_widget_value()
-        if hasattr(self.widget, "_repr_mimebundle_"):
-            return self.widget._repr_mimebundle_(*args, **kwargs)
-        else:
-            return self.widget._ipython_display_(*args, **kwargs)
-
-    def to_html(self, output: str = None, **kwargs):
-        """Write a standalone html file to visualize the graph."""
-        self.widget.value = self.to_widget_value()
-        return self.widget.to_html(output=output, **kwargs)
 
     def __enter__(self):
         from node_graph.manager import active_graph as _active_graph
