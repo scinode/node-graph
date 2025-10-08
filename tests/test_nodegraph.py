@@ -175,6 +175,21 @@ def test_expose_inputs_names_invalid(test_ng):
         test_ng.expose_inputs(names=[name])
 
 
+def test_expose_inputs_skip_linked(test_ng):
+    """Test generation of inputs from nodes, skip linked sockets"""
+    ng = test_ng
+    ng.add_link(ng.nodes.add1.outputs.output1.x, ng.nodes.add2.inputs.input1.x)
+    ng.expose_inputs()
+    assert "add2" in ng.inputs
+    assert "input1.x" not in ng.inputs.add2
+    assert "input1.y" in ng.inputs.add2
+    # outputs will still have all sockets
+    ng.expose_outputs()
+    assert "add1" in ng.outputs
+    assert "output1.x" in ng.outputs.add1
+    assert "output1.y" in ng.outputs.add1
+
+
 def test_expose_outputs(test_ng):
     """Test generation of outputs from nodes"""
     ng = test_ng

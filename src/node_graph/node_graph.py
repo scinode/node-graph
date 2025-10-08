@@ -209,7 +209,8 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""
-        self.inputs._clear()
+        from node_graph.socket_spec import remove_spec_field
+
         all_names = set(self.nodes._get_keys())
         names = set(names or all_names)
         missing = names - all_names
@@ -219,19 +220,25 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             node = self.nodes[name]
             # update the _inputs spec
             if node.spec.inputs is not None:
-                socket = self.add_input_spec(node.spec.inputs, name=node.name)
-            keys = node.inputs._get_all_keys()
-            exist_keys = socket._get_all_keys()
-            for key in keys:
-                new_key = f"{node.name}.{key}"
-                if new_key not in exist_keys:
-                    continue
-                # add link from group inputs to node inputs
-                self.add_link(self.inputs[new_key], node.inputs[key])
+                # skip linked sockets
+                names = [
+                    link.to_socket._scoped_name
+                    for link in self.links
+                    if link.to_node == node
+                ]
+                spec = remove_spec_field(node.spec.inputs, names=names)
+                socket = self.add_input_spec(spec, name=node.name)
+                keys = node.inputs._get_all_keys()
+                exist_keys = socket._get_all_keys()
+                for key in keys:
+                    new_key = f"{node.name}.{key}"
+                    if new_key not in exist_keys:
+                        continue
+                    # add link from group inputs to node inputs
+                    self.add_link(self.inputs[new_key], node.inputs[key])
 
     def expose_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from nodes."""
-        self.outputs._clear()
         all_names = set(self.nodes._get_keys())
         names = set(names or all_names)
         missing = names - all_names
@@ -241,14 +248,14 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             node = self.nodes[name]
             if node.spec.outputs is not None:
                 socket = self.add_output_spec(node.spec.outputs, name=node.name)
-            keys = node.outputs._get_all_keys()
-            exist_keys = socket._get_all_keys()
-            for key in keys:
-                new_key = f"{node.name}.{key}"
-                if new_key not in exist_keys:
-                    continue
-                # add link from node outputs to group outputs
-                self.add_link(node.outputs[key], self.outputs[new_key])
+                keys = node.outputs._get_all_keys()
+                exist_keys = socket._get_all_keys()
+                for key in keys:
+                    new_key = f"{node.name}.{key}"
+                    if new_key not in exist_keys:
+                        continue
+                    # add link from node outputs to group outputs
+                    self.add_link(node.outputs[key], self.outputs[new_key])
 
     def set_inputs(self, inputs: Dict[str, Any]):
         for name, input in inputs.items():
@@ -462,19 +469,17 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         Returns:
             NodeGraph: The rebuilt node graph.
         """
+        spec = GraphSpec.from_dict(ngdata.get("spec", {}))
         ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
+            inputs=spec.inputs,
+            outputs=spec.outputs,
             graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
-            init_graph_level_nodes=False,
         )
         ng.state = ngdata.get("state", "CREATED")
         ng.action = ngdata.get("action", "NONE")
         ng.description = ngdata.get("description", "")
-
-        spec = GraphSpec.from_dict(ngdata.get("spec", {}))
-        ng.spec = spec
-        ng._init_graph_level_nodes()
 
         for ndata in ngdata["nodes"].values():
             ng.add_node_from_dict(ndata)
