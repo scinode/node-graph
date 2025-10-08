@@ -469,19 +469,17 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         Returns:
             NodeGraph: The rebuilt node graph.
         """
+        spec = GraphSpec.from_dict(ngdata.get("spec", {}))
         ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
+            inputs=spec.inputs,
+            outputs=spec.outputs,
             graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
-            init_graph_level_nodes=False,
         )
         ng.state = ngdata.get("state", "CREATED")
         ng.action = ngdata.get("action", "NONE")
         ng.description = ngdata.get("description", "")
-
-        spec = GraphSpec.from_dict(ngdata.get("spec", {}))
-        ng.spec = spec
-        ng._init_graph_level_nodes()
 
         for ndata in ngdata["nodes"].values():
             ng.add_node_from_dict(ndata)

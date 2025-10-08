@@ -470,21 +470,48 @@ def test_set_default_from_annotation():
 def test_add_spec_field():
     from node_graph.socket_spec import add_spec_field
 
+    with pytest.raises(TypeError, match="expects a namespace SocketSpec at the root."):
+        add_spec_field(ss.SocketSpec("any"), "a", ss.SocketSpec("any"))
+
     ns = ss.namespace(a=int, b=(int, 5))
+
+    with pytest.raises(ValueError, match="Field name must be a non-empty string."):
+        add_spec_field(ns, "", ss.SocketSpec("any"))
+
     ns1 = add_spec_field(ns, "c", ss.namespace(d=str))
     assert "c" in ns1.fields
+    # nested
+    ns2 = add_spec_field(ns1, "c.f", ss.namespace(g=str))
+    assert "f" in ns2.fields["c"].fields
+    # missing field
+    with pytest.raises(ValueError, match="Cannot add"):
+        add_spec_field(ns1, "e.f", ss.namespace(g=str))
+    # not namespace
+    with pytest.raises(TypeError, match="Cannot descend into non-namespace field"):
+        add_spec_field(ns1, "a.f", ss.namespace(g=str))
+    # already exist
+    with pytest.raises(ValueError, match="Field 'c' already exists."):
+        add_spec_field(ns1, "c", ss.namespace(g=str))
 
 
 def test_remove_spec_field():
     from node_graph.socket_spec import remove_spec_field
 
+    with pytest.raises(TypeError, match="expects a namespace SocketSpec at the root."):
+        remove_spec_field(ss.SocketSpec("any"), "a")
+
     ns = ss.namespace(
         a=int,
         b=(int, 5),
         c=ss.namespace(d=str),
+        d=int,
     )
     ns1 = remove_spec_field(ns, "b")
     assert "b" not in ns1.fields
+    # multiple names
+    ns2 = remove_spec_field(ns, ["a", "b"])
+    assert "a" not in ns2.fields
+    assert "b" not in ns2.fields
 
 
 def test_pydantic_model():

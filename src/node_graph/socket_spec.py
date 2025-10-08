@@ -1092,20 +1092,20 @@ def merge_specs(ns: SocketSpec, additions: SocketSpec) -> SocketSpec:
 
 
 def add_spec_field(
-    ns: SocketSpec, dotted: str, spec: SocketSpec, *, create_missing: bool = False
+    ns: SocketSpec, name: str, spec: SocketSpec, *, create_missing: bool = False
 ) -> SocketSpec:
     """
-    Add a field at a (possibly nested) dotted path like "a.b.c".
+    Add a field at a (possibly nested) name path like "a.b.c".
     If create_missing=True, auto-creates intermediate namespaces with the same
     namespace identifier as `ns`. Otherwise, raises when an intermediate is missing
     or is not a namespace. Raises if the final field already exists.
     """
     if not ns.is_namespace():
         raise TypeError("add_spec_field expects a namespace SocketSpec at the root.")
-    if not isinstance(dotted, str) or not dotted.strip():
+    if not isinstance(name, str) or not name.strip():
         raise ValueError("Field name must be a non-empty string.")
 
-    path = [seg for seg in dotted.split(".") if seg]
+    path = [seg for seg in name.split(".") if seg]
     if not path:
         raise ValueError("Empty field path.")
 
@@ -1119,7 +1119,7 @@ def add_spec_field(
 
         if not rest:
             if head in fields:
-                raise ValueError(f"Field '{dotted}' already exists.")
+                raise ValueError(f"Field '{name}' already exists.")
             fields[head] = spec
             return replace(cur, fields=fields)
 
@@ -1128,12 +1128,12 @@ def add_spec_field(
         if child is None:
             if not create_missing:
                 raise ValueError(
-                    f"Cannot add '{dotted}': missing intermediate namespace '{head}'."
+                    f"Cannot add '{name}': missing intermediate namespace '{head}'."
                 )
             child = _ensure_ns(ns.identifier)  # inherit the namespace identifier
         if not child.is_namespace():
             raise TypeError(
-                f"Cannot descend into non-namespace field '{head}' while adding '{dotted}'."
+                f"Cannot descend into non-namespace field '{head}' while adding '{name}'."
             )
 
         new_child = _recur(child, rest)
@@ -1150,6 +1150,8 @@ def remove_spec_field(ns: SocketSpec, names: Union[str, Iterable[str]]) -> Socke
     Remove one or more fields by dotted path, e.g. "a.b.c" or ["x", "y.z"].
     Missing paths are ignored (idempotent).
     """
+    if not ns.is_namespace():
+        raise TypeError("remove_spec_field expects a namespace SocketSpec at the root.")
     if isinstance(names, str):
         names = [names]
     names = [n for n in names if isinstance(n, str) and n.strip()]
