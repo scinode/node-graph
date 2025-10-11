@@ -1,9 +1,10 @@
-from node_graph import NodeGraph, node
+from node_graph import NodeGraph, node, dynamic
 from node_graph.nodes.tests import test_add
 from node_graph.socket_spec import namespace as ns
 
 from node_graph.engine.direct import DirectEngine
 from node_graph.engine.provenance import ProvenanceRecorder, content_hash
+from typing import Annotated
 
 
 @node()
@@ -63,3 +64,54 @@ def test_direct_engine_records_subgraph_provenance():
         for name in process_names
         if name not in {"chain", "final"}
     )
+
+
+def test_direct_engine_handles_nested_and_dynamic_outputs():
+    @node()
+    def generate_square_numbers(
+        n: int,
+    ) -> Annotated[dict, dynamic(int)]:
+        return {f"square_{i}": i**2 for i in range(n)}
+
+    @node()
+    def add_multiply(
+        data: Annotated[dict, ns(x=int, y=int)],
+    ) -> Annotated[dict, ns(sum=int, product=int)]:
+        return {"sum": data["x"] + data["y"], "product": data["x"] * data["y"]}
+
+    @node.graph(
+        outputs=ns(
+            square=generate_square_numbers.outputs,
+            add_multiply=add_multiply.outputs,
+        )
+    )
+    def composed(
+        data: Annotated[dict, add_multiply.inputs.data],
+    ):
+        out1 = add_multiply(data=data)
+        square_numbers = generate_square_numbers(out1["sum"])
+        out2 = add_multiply(data={"x": out1["sum"], "y": out1["product"]})
+        return {"square": square_numbers, "add_multiply": out2}
+
+    ng = composed.build(data={"x": 2, "y": 3})
+    engine = DirectEngine()
+    values = engine.run(ng)
+
+    assert values["add_multiply"]["sum"] == 5
+    assert values["generate_square_numbers"]["square_4"] == 16
+    assert values["add_multiply1"]["product"] == 30
+    assert len(values["generate_square_numbers"]) == 5
+
+    prov = engine.recorder.to_json()
+
+    nested_labels = {
+        edge["label"] for edge in prov["edges"] if edge["dst"] == "proc:add_multiply1:1"
+    }
+    assert {"input:data.x", "input:data.y"}.issubset(nested_labels)
+
+    dynamic_labels = {
+        edge["label"]
+        for edge in prov["edges"]
+        if edge["src"] == "proc:generate_square_numbers:1"
+    }
+    assert dynamic_labels == {f"output:square_{i}" for i in range(5)}
