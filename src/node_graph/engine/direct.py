@@ -33,8 +33,6 @@ class DirectEngine:
         # Share the same recorder across nested subgraphs so an entire run is in one DAG
         self.recorder = recorder or ProvenanceRecorder(self.name)
 
-    # ---------- public API ----------
-
     def run(self, ng: NodeGraph) -> Dict[str, Dict[str, Any]]:
         """Execute `ng` and return:"""
         order, incoming, _required = _scan_links_topology(ng)
