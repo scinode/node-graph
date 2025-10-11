@@ -31,7 +31,18 @@ ng = NodeGraph(name="example")
 add1 = ng.add_node(add, x=1, y=2)
 add2 = ng.add_node(add, x=3)
 ng.add_link(add1.outputs.result, add2.inputs.y)
-ntdata = ng.to_dict()
+```
+
+## Engines and provenance
+Run graphs directly in Python:
+
+```python
+from node_graph.engine.direct import DirectEngine
+
+engine = DirectEngine()
+results = engine.run(ng)
+# export provenance for visualization
+engine.recorder.save_graphviz("provenance_run.dot")
 ```
 
 ## License
