@@ -149,7 +149,7 @@ def materialize_graph(
     Run func(*args, **kwargs, **(var_kwargs or {})) inside a NodeGraph,
     assign its outputs and return the NodeGraph.
     """
-    from node_graph.utils import tag_socket_value
+    from node_graph.utils import tag_socket_value, clean_socket_reference
     from node_graph.utils.function import prepare_function_inputs
 
     if graph_class is None:
@@ -161,9 +161,11 @@ def materialize_graph(
     name = identifier or func.__name__
     with graph_class(name=name, inputs=in_spec, outputs=out_spec) as graph:
         inputs = prepare_function_inputs(func, *args, **merged)
+        inputs = clean_socket_reference(inputs)
         graph.graph_inputs.set_inputs(inputs)
         tag_socket_value(graph.inputs)
         inputs = graph.inputs._collect_values(raw=False)
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
+        tag_socket_value(graph.inputs, only_uuid=True)
         return graph

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from uuid import uuid4
 from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
@@ -491,11 +492,16 @@ class TaggedValue(wrapt.ObjectProxy):
         super().__init__(wrapped)
 
         self._self_socket = socket
+        self._self_uuid = str(uuid4())
 
     # Provide clean access via `proxy._socket` instead of `proxy._self_socket`
     @property
     def _socket(self):
         return self._self_socket
+
+    @property
+    def _uuid(self):
+        return self._self_uuid
 
     @_socket.setter
     def _socket(self, value):
@@ -703,7 +709,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
             ):
                 value = value._outputs
             self._node.graph.add_link(value, self)
-        elif isinstance(value, TaggedValue):
+        elif isinstance(value, TaggedValue) and value._socket is not None:
             self._node.graph.add_link(value._socket, self)
         elif self.property:
             self.property.value = value
@@ -1120,8 +1126,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                         ],
                     )
 
-                # Decide whether to create a namespace or a leaf based on the value type
-                if isinstance(val, (dict, NodeSocketNamespace)):
+                # Create a leaf based on the dynamic item type
+                item = self._metadata.extras.get("item", {"identifier": "any"})
+                # override if the incoming value is a namespace
+                if isinstance(value[key], NodeSocketNamespace):
+                    item = {"identifier": "namespace"}
+                if item["identifier"].endswith("namespace"):
                     # create child namespace (dynamic)
                     self._new(
                         self._SocketPool["namespace"],
@@ -1134,7 +1144,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     )
                 else:
                     # create a leaf socket that can accept "any"
-                    self._new(self._SocketPool["any"], key, **kwargs)
+                    self._new(item["identifier"], key, **kwargs)
 
             # Now we’re guaranteed the key exists; delegate appropriately
             target = self._sockets[key]

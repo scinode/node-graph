@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from typing import Any, Dict, List, Optional, Tuple, Set
 from collections import defaultdict, deque
 from node_graph.link import NodeLink
 from node_graph import NodeGraph
+from node_graph.socket_spec import SocketSpec
 
 
 def get_nested_dict(d: Dict, name: str, **kwargs) -> Any:
@@ -107,12 +110,32 @@ def update_nested_dict_with_special_keys(data: Dict[str, Any]) -> Dict[str, Any]
     return data
 
 
-def _collect_literals(node) -> Dict[str, Any]:
+def _collect_literals(node, raw=False) -> Dict[str, Any]:
     """
     Recursively collect literal values from the node's input namespace, excluding
     values that are overridden by links at schedule time.
     """
-    return node.inputs._collect_values(raw=True)
+    from node_graph.utils import tag_socket_value
+
+    tag_socket_value(node.inputs, only_uuid=True)
+    return node.inputs._collect_values(raw=raw)
+
+
+def _resolve_tagged_value(value: Any) -> Any:
+    """
+    Recursively unwrap TaggedValue instances to get their raw values.
+    """
+    from node_graph.socket import TaggedValue
+
+    if isinstance(value, TaggedValue):
+        return value.__wrapped__
+    elif isinstance(value, dict):
+        return {k: _resolve_tagged_value(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_resolve_tagged_value(v) for v in value]
+    elif isinstance(value, tuple):
+        return tuple(_resolve_tagged_value(v) for v in value)
+    return value
 
 
 def _scan_links_topology(
@@ -218,3 +241,88 @@ def _merge_multi_links_for_node(
             kwargs[to_sock] = bundle
 
     return kwargs
+
+
+def _ordered_field_names(spec: SocketSpec) -> list[str]:
+    return list(spec.fields.keys())
+
+
+def parse_outputs(
+    results: Any,
+    spec: SocketSpec | Dict[str, Any],
+) -> Tuple[Optional[Dict[str, Any]]]:
+    """Validate & convert *results* according to *spec*.
+
+    Returns (outputs_dict, exit_code). If *exit_code* is not None, the caller should
+    return it and ignore *outputs_dict*.
+    """
+    fields = spec.fields or {}
+    is_dyn = bool(spec.dynamic)
+    item_spec = spec.item if is_dyn else None
+
+    # tuple -> map by order of fixed field names
+    if isinstance(results, tuple):
+        names = _ordered_field_names(spec)
+        if len(names) != len(results):
+            return None
+        outs: Dict[str, Any] = {}
+        for i, name in enumerate(names):
+            child_spec = fields[name]
+            outs[name] = results[i]
+        return outs, None
+
+    # dict
+    if isinstance(results, dict):
+        remaining = dict(results)
+        outs: Dict[str, Any] = {}
+        if len(fields) == 1 and not is_dyn:
+            ((only_name, only_spec),) = fields.items()
+            # if user used the same key as port name, use that value;
+            if only_name in results:
+                outs[only_name] = results.pop(only_name)
+                if results:
+                    print(
+                        f"Found extra results that are not included in the output: {list(results.keys())}"
+                    )
+            else:
+                # else treat the entire dict as the value for that single port.
+                outs[only_name] = results
+            return outs
+
+        # fixed fields
+        for name, child_spec in fields.items():
+            if name in remaining:
+                value = remaining.pop(name)
+                outs[name] = value
+            else:
+                # If the field is explicitly required -> invalid output
+                required = getattr(child_spec.meta, "required", None)
+                if required is True:
+                    print(f"Missing required output: {name}")
+                    return None
+        # dynamic items
+        if is_dyn:
+            if item_spec is None:
+                print(
+                    "Outputs marked dynamic but missing 'item' schema; treating as ANY."
+                )
+            for name, value in remaining.items():
+                outs[name] = value
+            return outs
+        # not dynamic -> leftovers are unexpected (warn but continue)
+        if remaining:
+            print(
+                f"Found extra results that are not included in the output: {list(remaining.keys())}"
+            )
+        return outs
+
+    # single fixed output + non-dict/tuple scalar
+    if len(fields) == 1 and not is_dyn:
+        ((only_name, only_spec),) = fields.items()
+        return {only_name: results}
+
+    # empty output spec + None result
+    if len(fields) == 0 and results is None:
+        return {}
+
+    return None
