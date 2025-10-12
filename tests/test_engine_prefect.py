@@ -55,14 +55,14 @@ def test_prefect_engine_nested_reuses_recorder():
     prov = engine.recorder.to_json()
     process_nodes = prov["process_nodes"]
     process_names = {proc["name"] for proc in process_nodes.values()}
-    assert {"chain", "final"}.issubset(process_names)
+    assert "chain" not in process_names
+    assert {"chain__subgraph", "final"}.issubset(process_names)
     edges = {(edge["src"], edge["dst"], edge["label"]) for edge in prov["edges"]}
     graph_pid = next(
         pid for pid, info in process_nodes.items() if info["name"] == "prefect-nested"
     )
     assert process_nodes[graph_pid]["kind"] == "graph"
-    assert (graph_pid, "proc:chain:1", "call") in edges
     nested_proc = next(
         pid for pid, info in process_nodes.items() if info["name"] == "chain__subgraph"
     )
-    assert ("proc:chain:1", nested_proc, "call") in edges
+    assert (graph_pid, nested_proc, "call") in edges

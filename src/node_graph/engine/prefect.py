@@ -97,6 +97,7 @@ def _make_prefect_task_with_prov_runtime(
     """
     recorder = engine.recorder
     fn = _unwrap_callable(node, engine)
+    is_graph = getattr(node.spec, "node_type", "").lower() == "graph"
     if fn is None:
 
         @task(name=f"node:{node.name}")
@@ -128,29 +129,35 @@ def _make_prefect_task_with_prov_runtime(
         fr_id = flow_run.get_id()
         tr_id = task_run.get_id()
         parent_pid = _GRAPH_PID_CTX.get()
-        pid = recorder.process_start(node.name, fn, fr_id, tr_id, parent_pid=parent_pid)
-        token = _GRAPH_PID_CTX.set(pid)
-
-        # Record inputs with real, runtime keys (handles dynamic namespaces)
-        recorder.record_inputs_payload(pid, kwargs)
+        pid: Optional[str] = None
+        token = None
+        if not is_graph:
+            pid = recorder.process_start(
+                node.name, fn, fr_id, tr_id, parent_pid=parent_pid
+            )
+            token = _GRAPH_PID_CTX.set(pid)
+            # Record inputs with real, runtime keys (handles dynamic namespaces)
+            recorder.record_inputs_payload(pid, kwargs)
         try:
             # get the raw value of the kwargs recursively
-            if getattr(node.spec, "node_type", "").lower() != "graph":
-                kwargs = _resolve_tagged_value(kwargs)
-            res = fn(**kwargs)
+            call_kwargs = kwargs if is_graph else _resolve_tagged_value(kwargs)
+            res = fn(**call_kwargs)
             res = parse_outputs(res, node.spec.outputs)
             node.outputs._set_socket_value(res)
             tag_socket_value(node.outputs, only_uuid=True)
             res = node.outputs._collect_values(raw=False)
             # Record outputs with real keys (handles dynamic outputs)
-            recorder.record_outputs_payload(pid, res, label_kind=label_kind)
-            recorder.process_end(pid, state="FINISHED")
+            if pid is not None:
+                recorder.record_outputs_payload(pid, res, label_kind=label_kind)
+                recorder.process_end(pid, state="FINISHED")
             return res
         except Exception as e:
-            recorder.process_end(pid, state="FAILED", error=str(e))
+            if pid is not None:
+                recorder.process_end(pid, state="FAILED", error=str(e))
             raise
         finally:
-            _GRAPH_PID_CTX.reset(token)
+            if token is not None:
+                _GRAPH_PID_CTX.reset(token)
 
     return _node_task
 

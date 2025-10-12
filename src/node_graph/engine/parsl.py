@@ -170,11 +170,13 @@ class ParslEngine:
     def _make_parsl_app(self, node, label_kind: str):
         fn = _unwrap_callable(node, self)
         recorder = self.recorder
+        is_graph = self._is_graph_node(node)
 
         if fn is None:
 
             @python_app
             def _noop_app(parent_pid: Optional[str], **kwargs: Any):
+                resolved_kwargs = self._resolve_app_futures(kwargs)
                 pid = recorder.process_start(
                     node.name,
                     None,
@@ -182,9 +184,9 @@ class ParslEngine:
                     task_run_id=None,
                     parent_pid=parent_pid,
                 )
-                recorder.record_inputs_payload(pid, kwargs)
+                recorder.record_inputs_payload(pid, resolved_kwargs)
                 try:
-                    outputs = dict(kwargs)
+                    outputs = dict(resolved_kwargs)
                     recorder.record_outputs_payload(pid, outputs, label_kind=label_kind)
                     recorder.process_end(pid, state="FINISHED")
                     return outputs
@@ -196,27 +198,35 @@ class ParslEngine:
 
         @python_app
         def _node_app(parent_pid: Optional[str], **kwargs: Any):
-            pid = recorder.process_start(
-                node.name,
-                fn,
-                flow_run_id=None,
-                task_run_id=None,
-                parent_pid=parent_pid,
-            )
-            recorder.record_inputs_payload(pid, kwargs)
+            pid: Optional[str] = None
+            resolved_kwargs = self._resolve_app_futures(kwargs)
+            if not is_graph:
+                pid = recorder.process_start(
+                    node.name,
+                    fn,
+                    flow_run_id=None,
+                    task_run_id=None,
+                    parent_pid=parent_pid,
+                )
+                recorder.record_inputs_payload(pid, resolved_kwargs)
             try:
-                if getattr(node.spec, "node_type", "").lower() != "graph":
-                    kwargs = _resolve_tagged_value(kwargs)
-                res = fn(**kwargs)
+                call_kwargs = (
+                    resolved_kwargs
+                    if is_graph
+                    else _resolve_tagged_value(resolved_kwargs)
+                )
+                res = fn(**call_kwargs)
                 res = parse_outputs(res, node.spec.outputs)
                 node.outputs._set_socket_value(res)
                 tag_socket_value(node.outputs, only_uuid=True)
                 tagged = node.outputs._collect_values(raw=False)
-                recorder.record_outputs_payload(pid, tagged, label_kind=label_kind)
-                recorder.process_end(pid, state="FINISHED")
+                if pid is not None:
+                    recorder.record_outputs_payload(pid, tagged, label_kind=label_kind)
+                    recorder.process_end(pid, state="FINISHED")
                 return tagged
             except Exception as exc:
-                recorder.process_end(pid, state="FAILED", error=str(exc))
+                if pid is not None:
+                    recorder.process_end(pid, state="FAILED", error=str(exc))
                 raise
 
         return _node_app
@@ -258,8 +268,6 @@ class ParslEngine:
             for name in order:
                 if name in BUILTIN_NODES:
                     continue
-
-                print(f"Scheduling node: {name}")
 
                 node = ng.nodes[name]
 
