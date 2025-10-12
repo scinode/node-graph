@@ -67,14 +67,14 @@ def test_direct_engine_records_subgraph_provenance():
 
     assert results["result"] == 16
 
-    process_names = {
-        proc["name"] for proc in recorder.to_json()["process_nodes"].values()
-    }
-    assert {"chain", "final"}.issubset(process_names)
+    process_nodes = recorder.to_json()["process_nodes"].values()
+    process_names = {proc["name"] for proc in process_nodes}
+    assert "chain" not in process_names
+    assert {"chain__subgraph", "final"}.issubset(process_names)
     assert any(
         name.startswith("double")
         for name in process_names
-        if name not in {"chain", "final"}
+        if name not in {"direct-subgraph", "final", "chain__subgraph"}
     )
 
 
@@ -133,10 +133,8 @@ def test_direct_engine_records_call_edges():
     )
     assert process_nodes[graph_proc]["kind"] == "graph"
 
-    edges = {(edge["src"], edge["dst"], edge["label"]) for edge in prov["edges"]}
-    assert (graph_proc, "proc:chain:1", "call") in edges
-
     nested_proc = next(
         pid for pid, info in process_nodes.items() if info["name"] == "chain__subgraph"
     )
-    assert ("proc:chain:1", nested_proc, "call") in edges
+    edges = {(edge["src"], edge["dst"], edge["label"]) for edge in prov["edges"]}
+    assert (graph_proc, nested_proc, "call") in edges

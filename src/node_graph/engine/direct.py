@@ -41,11 +41,7 @@ class DirectEngine:
         ng: NodeGraph,
         parent_pid: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Execute `ng` and return the graph outputs as plain values.
-
-        When ``return_full_map`` is True, return the full per-node output map
-        (including TaggedValue instances) for internal consumption.
-        """
+        """Execute ``ng`` and return the graph outputs as plain values."""
         order, incoming, _required = _scan_links_topology(ng)
 
         # Built-ins: treat as already "available" values
@@ -72,7 +68,6 @@ class DirectEngine:
                 if name in BUILTIN_NODES:
                     continue
 
-                print(f"Running node: {name}")
                 node = ng.nodes[name]
                 fn = self._unwrap_callable(node)
 
@@ -85,20 +80,23 @@ class DirectEngine:
                 kw.update(link_kwargs)
                 kw = update_nested_dict_with_special_keys(kw)
 
-                pid = self.recorder.process_start(
-                    task_name=name,
-                    callable_obj=fn,
-                    flow_run_id=f"direct:{self.name}",
-                    task_run_id=f"direct:{name}",
-                    parent_pid=graph_pid,
-                )
-                self.recorder.record_inputs_payload(pid, kw)
+                is_graph = self._is_graph_node(node)
+                pid: Optional[str] = None
+                if not is_graph:
+                    pid = self.recorder.process_start(
+                        task_name=name,
+                        callable_obj=fn,
+                        flow_run_id=f"direct:{self.name}",
+                        task_run_id=f"direct:{name}",
+                        parent_pid=graph_pid,
+                    )
+                    self.recorder.record_inputs_payload(pid, kw)
 
                 try:
                     label_kind = "output"
                     raw_kwargs = _resolve_tagged_value(kw)
-                    if self._is_graph_node(node) and fn is not None:
-                        res = self._run_graph_node(node, fn, kw, pid)
+                    if is_graph and fn is not None:
+                        res = self._run_graph_node(node, fn, kw, graph_pid)
                         label_kind = "return"
                     elif fn is None:
                         res = dict(raw_kwargs)
@@ -116,12 +114,14 @@ class DirectEngine:
 
                     values[name] = tagged_out
 
-                    self.recorder.record_outputs_payload(
-                        pid, tagged_out, label_kind=label_kind
-                    )
-                    self.recorder.process_end(pid, state="FINISHED")
+                    if pid is not None:
+                        self.recorder.record_outputs_payload(
+                            pid, tagged_out, label_kind=label_kind
+                        )
+                        self.recorder.process_end(pid, state="FINISHED")
                 except Exception as e:
-                    self.recorder.process_end(pid, state="FAILED", error=str(e))
+                    if pid is not None:
+                        self.recorder.process_end(pid, state="FAILED", error=str(e))
                     raise
 
             graph_links = incoming.get("graph_outputs", [])
