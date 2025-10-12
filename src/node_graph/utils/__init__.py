@@ -134,18 +134,42 @@ def valid_name_string(s: str) -> bool:
         )
 
 
-def tag_socket_value(socket: "NodeSocket") -> "NodeSocket":
+def tag_socket_value(socket: "NodeSocket", only_uuid: bool = False) -> "NodeSocket":
     """Use a tagged object for the socket's property value."""
     from node_graph.socket import NodeSocketNamespace, TaggedValue
 
     if isinstance(socket, NodeSocketNamespace):
         for sub_socket in socket._sockets.values():
-            tag_socket_value(sub_socket)
+            tag_socket_value(sub_socket, only_uuid=only_uuid)
     else:
         # replace the socket's property value directly with a TaggedValue
         # this avoids triggering the value setter
         if socket.property:
             if socket.property.value is not None:
-                socket.property.value = TaggedValue(
-                    socket.property.value, socket=socket
-                )
+                if not isinstance(socket.property.value, TaggedValue):
+                    socket.property.value = TaggedValue(
+                        socket.property.value, socket=socket
+                    )
+                if only_uuid:
+                    # only keep the uuid reference, clear the socket reference.
+                    # the uuid is kept for provenance tracking
+                    socket.property.value._socket = None
+                else:
+                    socket.property.value._socket = socket
+
+
+def clean_socket_reference(data: Any) -> Any:
+    """Recursively clear the socket reference in TaggedValue objects."""
+    from node_graph.socket import TaggedValue
+
+    if isinstance(data, TaggedValue):
+        data._socket = None
+        return data
+    elif isinstance(data, dict):
+        return {k: clean_socket_reference(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_socket_reference(v) for v in data]
+    elif isinstance(data, tuple):
+        return tuple(clean_socket_reference(v) for v in data)
+    else:
+        return data
