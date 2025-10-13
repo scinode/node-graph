@@ -78,7 +78,9 @@ class ParslEngine(BaseEngine):
         self, from_name: str, from_socket: str, source_map: Dict[str, Any]
     ) -> Any:
         upstream = source_map[from_name]
-        return _parsl_get_nested(upstream, from_socket, default=None)
+        if isinstance(upstream, AppFuture):
+            return _parsl_get_nested(upstream, from_socket, default=None)
+        return super()._link_socket_value(from_name, from_socket, source_map)
 
     def _link_bundle(self, payload: Dict[str, Any]) -> Any:
         return _parsl_bundle(**payload)
