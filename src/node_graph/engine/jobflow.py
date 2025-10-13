@@ -17,11 +17,9 @@ from .utils import (
     get_nested_dict,
 )
 
-from jobflow import Flow, job, run_locally  # type: ignore
-from jobflow.core.job import Job  # type: ignore
-from jobflow.core.reference import OutputReference  # type: ignore
-
-_GRAPH_OUTPUTS_KEY = "graph_outputs"
+from jobflow import Flow, job, run_locally
+from jobflow.core.job import Job
+from jobflow.core.reference import OutputReference
 
 
 @job(name="jobflow_bundle")

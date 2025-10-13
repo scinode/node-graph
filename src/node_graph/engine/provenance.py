@@ -8,13 +8,6 @@ from node_graph.socket import TaggedValue
 from uuid import uuid4
 
 
-def _canon(o: Any) -> bytes:
-    try:
-        return json.dumps(o, sort_keys=True, default=str).encode("utf-8")
-    except TypeError:
-        return repr(o).encode("utf-8")
-
-
 def _flatten_dict(payload: Any, prefix: str = "") -> Dict[str, Any]:
     """
     Recursively flatten dict-like payloads into dotted keys.
@@ -252,7 +245,7 @@ class ProvenanceRecorder:
     def to_graphviz_svg(self) -> str:
         try:
             from graphviz import Source
-        except ImportError as exc:  # pragma: no cover - optional dependency
+        except ImportError as exc:
             raise RuntimeError(
                 "graphviz package is required to export SVG provenance diagrams."
             ) from exc

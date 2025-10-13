@@ -15,6 +15,10 @@ from .utils import (
     _resolve_tagged_value,
     get_nested_dict,
 )
+from redun import task as redun_task
+from redun.config import Config as RedunConfig
+from redun.scheduler import Scheduler, TaskExpression
+
 
 _TASK_NAME_SANITIZE_RE = re.compile(r"[^0-9A-Za-z_]")
 _GRAPH_OUTPUTS_KEY = "graph_outputs"
@@ -23,11 +27,6 @@ _GRAPH_OUTPUTS_KEY = "graph_outputs"
 def _sanitize_task_name(*parts: str) -> str:
     name = "_".join(parts)
     return _TASK_NAME_SANITIZE_RE.sub("_", name)
-
-
-from redun import task as redun_task  # type: ignore
-from redun.config import Config as RedunConfig  # type: ignore
-from redun.scheduler import Scheduler, TaskExpression  # type: ignore
 
 
 @redun_task(name=_sanitize_task_name("ng", "get_nested"), cache=False)
@@ -40,7 +39,7 @@ def _redun_bundle(**kwargs: Any) -> Dict[str, Any]:
     return dict(kwargs)
 
 
-def _default_config() -> "RedunConfig":  # pragma: no cover - simple helper
+def _default_config() -> "RedunConfig":
     if RedunConfig is None:
         raise RuntimeError("redun is required to use RedunEngine.")
     return RedunConfig(
@@ -150,10 +149,6 @@ class RedunEngine(BaseEngine):
         ng: NodeGraph,
         parent_pid: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if Scheduler is None:
-            raise RuntimeError(
-                "redun is not installed. Install `redun` to use RedunEngine."
-            )
 
         order, incoming, _required = _scan_links_topology(ng)
         values: Dict[str, Any] = self._snapshot_builtins(ng)

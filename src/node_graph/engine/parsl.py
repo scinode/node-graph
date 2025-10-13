@@ -34,7 +34,7 @@ def _parsl_bundle(**kwargs: Any) -> Dict[str, Any]:
 
 
 def _default_config() -> "Config":
-    if Config is None:  # pragma: no cover - safeguarded by importorskip
+    if Config is None:
         raise RuntimeError("Parsl is not installed.")
     return Config(
         executors=[ThreadPoolExecutor(max_threads=4)],
@@ -43,7 +43,7 @@ def _default_config() -> "Config":
 
 
 def _ensure_dfk(config: "Config") -> "parsl.dataflow.dflow.DataFlowKernel":
-    assert parsl is not None  # mypy safeguard
+    assert parsl is not None
     try:
         return parsl.dfk()
     except Exception:
@@ -65,7 +65,7 @@ class ParslEngine(BaseEngine):
         config: Optional["Config"] = None,
         dfk: Optional["parsl.dataflow.dflow.DataFlowKernel"] = None,
     ):
-        if parsl is None:  # pragma: no cover - surfaced via importorskip
+        if parsl is None:
             raise RuntimeError(
                 "Parsl is not installed. Install `parsl` to use ParslEngine."
             )
