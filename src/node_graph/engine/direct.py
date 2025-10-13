@@ -63,7 +63,7 @@ class DirectEngine(BaseEngine):
                 kw.update(link_kwargs)
                 kw = update_nested_dict_with_special_keys(kw)
 
-                label_kind = "return" if self._is_graph_node(node) else "output"
+                label_kind = "return" if self._is_graph_node(node) else "create"
                 executor = self._build_node_executor(node, label_kind=label_kind)
                 tagged_out = executor(graph_pid, **kw)
                 values[name] = tagged_out

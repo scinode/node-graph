@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from node_graph.socket import TaggedValue
+from uuid import uuid4
 
 
 def _canon(o: Any) -> bytes:
@@ -80,7 +81,6 @@ class ProvenanceRecorder:
         self.process_nodes: Dict[str, ProcessNode] = {}
         self.data_nodes: Dict[str, DataNode] = {}
         self.edges: List[Edge] = []
-        self._attempt_counter: Dict[str, int] = {}
 
     def process_start(
         self,
@@ -92,9 +92,7 @@ class ProvenanceRecorder:
         kind: str = "task",
         parent_pid: Optional[str] = None,
     ) -> str:
-        attempt = self._attempt_counter.get(task_name, 0) + 1
-        self._attempt_counter[task_name] = attempt
-        pid = f"proc:{task_name}:{attempt}"
+        pid = f"proc:{uuid4().hex}"
         callable_path = None
         if callable_obj is not None:
             mod = getattr(callable_obj, "__module__", None)
@@ -206,30 +204,38 @@ class ProvenanceRecorder:
         ]
         for p in self.process_nodes.values():
             if p.kind == "graph":
-                shape = "doubleoctagon"
-                fill = "#e8f5e9"
+                shape = "rectangle"
+                fill = "#e38851ff"
                 color = "#2e7d32"
             else:
-                shape = "box"
-                fill = "#f6f6f6"
+                shape = "rectangle"
+                fill = "#de707f77"
                 color = "#2f5597"
-            label = f"{p.name}\\n{p.id.split(':')[-1]}\\nstate={p.state}"
+            label = f"{p.name} ({self._short_id(p.id)})\\nstate={p.state}"
             lines.append(
                 f'  "{p.id}" [shape={shape}, style="filled,rounded", fillcolor="{fill}", color="{color}", label="{label}"];'
             )
         for d in self.data_nodes.values():
             label_prefix = d.label or ""
             node_label = (
-                f"{label_prefix}-{d.id[5:12]}..."
+                f"{label_prefix} ({self._short_id(d.id)})"
                 if label_prefix
-                else f"{d.id[5:12]}..."
+                else self._short_id(d.id)
             )
             lines.append(
-                f'  "{d.id}" [shape=ellipse, style="filled", fillcolor="#fff4e5", color="#d46a0b", label="{node_label}"];'
+                f'  "{d.id}" [shape=ellipse, style="filled", fillcolor="#8cd499ff", color="#d46a0b", label="{node_label}"];'
             )
         for e in self.edges:
-            elabel = f' [label="{e.label}"]' if e.label else ""
-            lines.append(f'  "{e.src}" -> "{e.dst}"{elabel};')
+            label_text, style, color = self._edge_attributes(e.label)
+            attrs = []
+            if label_text:
+                attrs.append(f'label="{label_text}"')
+            if style:
+                attrs.append(f'style="{style}"')
+            if color:
+                attrs.append(f'color="{color}"')
+            attr_str = f" [{', '.join(attrs)}]" if attrs else ""
+            lines.append(f'  "{e.src}" -> "{e.dst}"{attr_str};')
         lines.append("}")
         return "\n".join(lines)
 
@@ -254,3 +260,40 @@ class ProvenanceRecorder:
         with open(path, "w", encoding="utf-8") as f:
             f.write(svg)
         return path
+
+    @staticmethod
+    def _edge_attributes(
+        label: Optional[str],
+    ) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        if not label:
+            return None, None, None
+
+        style: Optional[str] = None
+        color: Optional[str] = None
+        text: Optional[str] = None
+
+        if label == "call":
+            style = "dashed"
+            color = "#546e7a"
+            text = "CALL"
+            return text, style, color
+
+        if label.startswith("return"):
+            style = "dotted"
+            color = "#7b1fa2"
+
+        if ":" in label:
+            kind, _, name = label.partition(":")
+            kind_text = kind.upper()
+            text = f"{kind_text}\\n{name}"
+            return text, style, color
+
+        text = label.upper()
+        return text, style, color
+
+    @staticmethod
+    def _short_id(identifier: str, length: int = 7) -> str:
+        tail = identifier.split(":")[-1]
+        if len(tail) <= length:
+            return tail
+        return f"{tail[:length]}..."

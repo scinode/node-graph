@@ -48,11 +48,12 @@ def test_parsl_engine_executes_basic_graph():
     assert results["total"] == 6
 
     prov = engine.recorder.to_json()
-    assert "proc:add1:1" in prov["process_nodes"]
-    assert prov["process_nodes"]["proc:add2:1"]["state"] == "FINISHED"
+    add2_pid = next(
+        pid for pid, info in prov["process_nodes"].items() if info["name"] == "add2"
+    )
+    assert prov["process_nodes"][add2_pid]["state"] == "FINISHED"
     assert any(
-        edge["dst"] == "proc:add2:1" and edge["label"] == "input:y"
-        for edge in prov["edges"]
+        edge["dst"] == add2_pid and edge["label"] == "input:y" for edge in prov["edges"]
     )
 
 

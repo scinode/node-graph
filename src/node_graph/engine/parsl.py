@@ -192,7 +192,7 @@ class ParslEngine(BaseEngine):
                 kw.update(link_kwargs)
                 kw = update_nested_dict_with_special_keys(kw)
 
-                label_kind = "return" if self._is_graph_node(node) else "output"
+                label_kind = "return" if self._is_graph_node(node) else "create"
 
                 app_fn = self._build_node_executor(node, label_kind=label_kind)
                 future = app_fn(graph_pid, **kw)

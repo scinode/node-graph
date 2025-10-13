@@ -27,7 +27,8 @@ def test_prefect_engine_resolves_states_and_graph_outputs():
     )
     assert process_nodes[graph_pid]["kind"] == "graph"
     edges = {(edge["src"], edge["dst"], edge["label"]) for edge in prov["edges"]}
-    assert (graph_pid, "proc:add:1", "call") in edges
+    add_pid = next(pid for pid, info in process_nodes.items() if info["name"] == "add")
+    assert (graph_pid, add_pid, "call") in edges
 
 
 @node()

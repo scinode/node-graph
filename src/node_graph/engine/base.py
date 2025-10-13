@@ -103,7 +103,7 @@ class BaseEngine(ABC):
         self.recorder.record_outputs_payload(
             graph_pid,
             cleaned,
-            label_kind="graph_output",
+            label_kind="return",
         )
         self.recorder.process_end(graph_pid, state="FINISHED")
         return _resolve_tagged_value(cleaned)
