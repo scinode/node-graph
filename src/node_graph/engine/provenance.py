@@ -81,6 +81,7 @@ class ProvenanceRecorder:
         self.process_nodes: Dict[str, ProcessNode] = {}
         self.data_nodes: Dict[str, DataNode] = {}
         self.edges: List[Edge] = []
+        self._latest_outputs_by_task: Dict[str, Dict[str, Any]] = {}
 
     def process_start(
         self,
@@ -158,6 +159,9 @@ class ProvenanceRecorder:
         label_kind: str = "output",
     ):
         flat = _flatten_dict(outputs)
+        proc = self.process_nodes.get(pid)
+        if proc is not None:
+            self._latest_outputs_by_task[proc.name] = outputs
         self._record_outputs_flat(pid, flat, label_kind)
 
     def _record_outputs_flat(
