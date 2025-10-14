@@ -45,13 +45,28 @@ docs = [
     "sphinx~=7.2",
     "nbsphinx",
 ]
+jobflow = [
+    "jobflow~=0.2",
+]
+parsl = [
+    "parsl==2025.10.6",
+]
+prefect = [
+    "prefect~=3.4",
+]
 pre-commit = [
     "pre-commit~=2.2",
     "pylint~=2.17.4",
 ]
+pyiron = [
+    "pyiron_base~=0.15",
+]
 tests = [
     "pytest~=7.0",
     "pytest-cov~=2.7,<2.11",
+]
+redun = [
+    "redun~=0.32",
 ]
 
 
