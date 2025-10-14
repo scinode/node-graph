@@ -27,10 +27,15 @@ from node_graph import NodeGraph, node
 def add(x, y):
     return x + y
 
-ng = NodeGraph(name="example")
-add1 = ng.add_node(add, x=1, y=2)
-add2 = ng.add_node(add, x=3)
-ng.add_link(add1.outputs.result, add2.inputs.y)
+@node()
+def multiply(x, y):
+    return x + y
+
+@node.graph()
+def AddMultiply(x, y, z):
+    the_sum = add(x=x, y=y).result
+    return multiply(x=the_sum, y=z).result
+
 ```
 
 ## Engines and provenance
@@ -39,11 +44,20 @@ Run graphs directly in Python:
 ```python
 from node_graph.engine.direct import DirectEngine
 
+graph = AddMultiply.build(x=1, y=2, z=3)
+
 engine = DirectEngine()
-results = engine.run(ng)
+results = engine.run(graph)
 # export provenance for visualization
-engine.recorder.save_graphviz("provenance_run.dot")
+engine.recorder.save_graphviz_svg("add_multiply.svg")
 ```
+
+
+</div>
+
+<p align="center">
+<img src="docs/source/_static/images/add_multiply.svg" height="600" alt="Provenance Graph Example"/>
+</p>
 
 ## License
 [MIT](http://opensource.org/licenses/MIT)
