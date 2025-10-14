@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Set
 from collections import defaultdict, deque
 from node_graph.link import NodeLink
 from node_graph import NodeGraph
@@ -187,22 +187,22 @@ def _scan_links_topology(
     return order, incoming, required_out_sockets
 
 
-def _merge_multi_links_for_node(
+def _build_node_link_kwargs(
     target_name: str,
-    links_into_node: List[NodeLink],
-    whole_task_future: Dict[str, Any],
+    links_into_node: Iterable[NodeLink],
+    source_map: Dict[str, Any],
+    *,
+    resolve_socket: Callable[[str, str, Dict[str, Any]], Any],
+    resolve_whole: Callable[[str, Dict[str, Any]], Any],
+    bundle_factory: Callable[[Dict[str, Any]], Any],
 ) -> Dict[str, Any]:
     """
-    Build kwargs for a node by applying link semantics:
-      - If exactly one link feeds an input socket:
-          * from._wait     -> ignore (keep literal/namespace value)
-          * from._outputs  -> pass the entire dict future for that from-node
-          * else           -> pass that (from_node, from_socket) future
-      - If multiple links feed the SAME input socket -> dict:
-            { "{fromNode}_{fromSocket}": future, ... }
-      - Unlinked inputs/literal namespaces are left to the literal collector in the flow.
+    Shared link-merging helper:
+      - skips explicit ``_wait`` edges (caller handles dependency recording),
+      - routes ``_outputs`` edges to ``resolve_whole`` (entire upstream payload),
+      - resolves upstream socket references with ``resolve_socket``,
+      - bundles multi-fan-in edges via ``bundle_factory``.
     """
-    # group by destination input socket name
     grouped: Dict[str, List[NodeLink]] = defaultdict(list)
     for lk in links_into_node:
         if lk.to_node.name == target_name:
@@ -210,35 +210,31 @@ def _merge_multi_links_for_node(
 
     kwargs: Dict[str, Any] = {}
     for to_sock, lks in grouped.items():
-        if len(lks) == 1:
-            lk = lks[0]
+        # ignore _wait edges for value propagation (handled separately)
+        active_links = [lk for lk in lks if lk.from_socket._scoped_name != "_wait"]
+        if not active_links:
+            continue
+
+        if len(active_links) == 1:
+            lk = active_links[0]
             from_name = lk.from_node.name
             from_sock = lk.from_socket._scoped_name
-            if from_sock == "_wait":
-                # wait edge --> don't override literal, just ensure the dependency is honored.
-                # (Dependency is implicitly honored because we reference the source in futures elsewhere.)
-                continue
-            elif from_sock == "_outputs":
-                # whole dict of source outputs (future)
-                kwargs[to_sock] = whole_task_future[from_name]
+            if from_sock == "_outputs":
+                kwargs[to_sock] = resolve_whole(from_name, source_map)
             else:
-                kwargs[to_sock] = get_nested_dict(
-                    whole_task_future[from_name], from_sock, default=None
-                )
-        else:
-            # multiple links into same input --> bundle as dict
-            bundle: Dict[str, Any] = {}
-            for lk in lks:
-                from_name = lk.from_node.name
-                from_sock = lk.from_socket._scoped_name
-                if from_sock in ("_wait", "_outputs"):
-                    # skip _wait and _outputs in multi-fan-in to avoid ambiguity
-                    continue
-                key = f"{from_name}_{from_sock}"
-                bundle[key] = get_nested_dict(
-                    whole_task_future[from_name], from_sock, default=None
-                )
-            kwargs[to_sock] = bundle
+                kwargs[to_sock] = resolve_socket(from_name, from_sock, source_map)
+            continue
+
+        bundle_payload: Dict[str, Any] = {}
+        for lk in active_links:
+            from_name = lk.from_node.name
+            from_sock = lk.from_socket._scoped_name
+            if from_sock in ("_wait", "_outputs"):
+                continue
+            key = f"{from_name}_{from_sock}"
+            bundle_payload[key] = resolve_socket(from_name, from_sock, source_map)
+        if bundle_payload:
+            kwargs[to_sock] = bundle_factory(bundle_payload)
 
     return kwargs
 

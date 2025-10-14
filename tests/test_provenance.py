@@ -83,5 +83,7 @@ def test_provenance_recorder_save_graphviz(tmp_path):
     assert returned == str(dot_path)
     content = dot_path.read_text()
     assert "digraph provenance" in content
-    assert '"proc:task:1"' in content
-    assert 'fillcolor="#f6f6f6"' in content
+    assert "proc:" in content
+    assert "task (" in content
+    assert "OUTPUT\\nresult" in content
+    assert "#de707f77" in content

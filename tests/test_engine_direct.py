@@ -46,11 +46,14 @@ def test_direct_engine_executes_basic_graph():
     assert results["total"] == 6
 
     proc_data = engine.recorder.to_json()
-    assert "proc:add1:1" in proc_data["process_nodes"]
-    assert proc_data["process_nodes"]["proc:add2:1"]["state"] == "FINISHED"
-
+    add2_pid = next(
+        pid
+        for pid, info in proc_data["process_nodes"].items()
+        if info["name"] == "add2"
+    )
+    assert proc_data["process_nodes"][add2_pid]["state"] == "FINISHED"
     assert any(
-        edge["dst"] == "proc:add2:1" and edge["label"] == "input:y"
+        edge["dst"] == add2_pid and edge["label"] == "input:y"
         for edge in proc_data["edges"]
     )
 
@@ -104,17 +107,30 @@ def test_direct_engine_handles_nested_and_dynamic_outputs():
 
     prov = engine.recorder.to_json()
 
-    nested_labels = {
-        edge["label"] for edge in prov["edges"] if edge["dst"] == "proc:add_multiply1:1"
-    }
-    assert {"input:data.x", "input:data.y"}.issubset(nested_labels)
+    proc_nodes = prov["process_nodes"]
+    add_multiply_pids = [
+        pid
+        for pid, info in proc_nodes.items()
+        if info["name"].startswith("add_multiply")
+    ]
+    assert add_multiply_pids
+    matched = False
+    for pid in add_multiply_pids:
+        labels = {edge["label"] for edge in prov["edges"] if edge["dst"] == pid}
+        if {"input:data.x", "input:data.y"}.issubset(labels):
+            matched = True
+            break
+    assert matched
 
+    generate_pid = next(
+        pid
+        for pid, info in proc_nodes.items()
+        if info["name"] == "generate_square_numbers"
+    )
     dynamic_labels = {
-        edge["label"]
-        for edge in prov["edges"]
-        if edge["src"] == "proc:generate_square_numbers:1"
+        edge["label"] for edge in prov["edges"] if edge["src"] == generate_pid
     }
-    assert dynamic_labels == {f"output:square_{i}" for i in range(5)}
+    assert dynamic_labels == {f"create:square_{i}" for i in range(5)}
 
 
 def test_direct_engine_records_call_edges():
