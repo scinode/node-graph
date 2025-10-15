@@ -23,6 +23,12 @@ class GraphSpec:
     schema_source: str = "EMBEDDED"
     inputs: Optional[SocketSpec] = None
     outputs: Optional[SocketSpec] = None
+    ctx: Optional[SocketSpec] = None
+
+    def __post_init__(self):
+        # ctx should be dynamic
+        if self.ctx is not None and not self.ctx.dynamic:
+            self.ctx = replace(self.ctx, dynamic=True)
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {"schema_source": self.schema_source}
@@ -30,6 +36,8 @@ class GraphSpec:
             data["inputs"] = self.inputs.to_dict()
         if self.outputs is not None:
             data["outputs"] = self.outputs.to_dict()
+        if self.ctx is not None:
+            data["ctx"] = self.ctx.to_dict()
         return data
 
     @classmethod
@@ -38,10 +46,12 @@ class GraphSpec:
 
         inputs = SocketSpec.from_dict(data["inputs"]) if "inputs" in data else None
         outputs = SocketSpec.from_dict(data["outputs"]) if "outputs" in data else None
+        ctx = SocketSpec.from_dict(data["ctx"]) if "ctx" in data else None
         return cls(
             schema_source=data.get("schema_source", "EMBEDDED"),
             inputs=inputs,
             outputs=outputs,
+            ctx=ctx,
         )
 
 
@@ -83,6 +93,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         name: str = "NodeGraph",
         inputs: Optional[SocketSpec | List[str]] = None,
         outputs: Optional[SocketSpec | List[str]] = None,
+        ctx: Optional[SocketSpec | List[str]] = None,
         uuid: Optional[str] = None,
         graph_type: str = "NORMAL",
         graph: Optional[NodeGraph] = None,
@@ -110,7 +121,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
-        self._init_graph_spec(inputs, outputs)
+        self._init_graph_spec(inputs, outputs, ctx)
         if init_graph_level_nodes:
             self._init_graph_level_nodes()
 
@@ -119,7 +130,10 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         self.description = ""
 
     def _init_graph_spec(
-        self, inputs: Optional[SocketSpec], outputs: Optional[SocketSpec]
+        self,
+        inputs: Optional[SocketSpec],
+        outputs: Optional[SocketSpec],
+        ctx: Optional[SocketSpec],
     ) -> None:
 
         inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
@@ -130,8 +144,10 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
         # if outputs is None, we assume it's a dynamic outputs
         outputs = self._SOCKET_SPEC_API.dynamic(Any) if outputs is None else outputs
-
-        self.spec = GraphSpec(inputs=inputs, outputs=outputs)
+        ctx = self._SOCKET_SPEC_API.validate_socket_data(ctx)
+        # if ctx is None, we assume it's a dynamic ctx
+        ctx = self._SOCKET_SPEC_API.dynamic(Any) if ctx is None else ctx
+        self.spec = GraphSpec(inputs=inputs, outputs=outputs, ctx=ctx)
 
     def _init_graph_level_nodes(self):
         base_class = self._REGISTRY.node_pool["graph_level"].load()
@@ -150,9 +166,10 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
         graph_outputs.inputs._name = "outputs"
         # graph context
-        ctx = self._SOCKET_SPEC_API.dynamic(Any)
+        ctx = self.spec.ctx or self._SOCKET_SPEC_API.dynamic(Any)
         meta = replace(ctx.meta, sub_socket_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
+        self.spec = replace(self.spec, ctx=ctx)
         self.graph_ctx_spec = NodeSpec(
             identifier="graph_ctx",
             inputs=ctx,
@@ -364,6 +381,11 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         Returns:
             Dict[str, Any]: The node graph data.
         """
+        # Capture the current ctx namespace shape into the graph spec before exporting.
+        if hasattr(self.graph_ctx, "inputs"):
+            ctx_snapshot = self.graph_ctx.inputs.to_spec()
+            self.spec = replace(self.spec, ctx=ctx_snapshot)
+
         metadata = self.get_metadata()
         nodes = self.export_nodes_to_dict(
             include_sockets=include_sockets, should_serialize=should_serialize
@@ -475,6 +497,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             uuid=ngdata.get("uuid"),
             inputs=spec.inputs,
             outputs=spec.outputs,
+            ctx=spec.ctx,
             graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
         )
         ng.state = ngdata.get("state", "CREATED")
