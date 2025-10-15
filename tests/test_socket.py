@@ -525,6 +525,22 @@ def test_set_namespace_item():
     assert s["y"]._links == s.y._links
 
 
+def test_add_input_spec_with_dotted_name_materializes_runtime_namespace():
+    node = Node()
+    node.add_input_spec("node_graph.namespace", "metrics")
+    node.add_input_spec("node_graph.int", "metrics.score")
+
+    assert "metrics" in node.inputs._sockets
+    metrics_ns = node.inputs.metrics
+    assert isinstance(metrics_ns, NodeSocketNamespace)
+    assert "score" in metrics_ns._sockets
+    assert metrics_ns.score._identifier == "node_graph.int"
+
+    metrics_spec = node.spec.inputs.fields["metrics"]
+    assert "score" in metrics_spec.fields
+    assert metrics_spec.fields["score"].identifier == "node_graph.int"
+
+
 def test_socket_waiting_on():
     """Test socket waiting_on."""
 

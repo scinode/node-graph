@@ -1400,6 +1400,30 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         graph,
         role: str,
     ) -> None:
+        if "." in name:
+            head, tail = name.split(".", 1)
+            existing = parent_ns._sockets.get(head)
+
+            if existing is None:
+                raise ValueError(
+                    f"Cannot assign nested field '{tail}' under missing socket '{head}'."
+                )
+
+            if not isinstance(existing, NodeSocketNamespace):
+                raise TypeError(
+                    f"Cannot assign nested field '{tail}' under non-namespace socket '{head}'."
+                )
+
+            cls._append_from_spec(
+                existing,
+                tail,
+                spec,
+                node=node,
+                graph=graph,
+                role=role,
+            )
+            return
+
         from copy import deepcopy
         from node_graph.materialize import runtime_meta_from_spec
 
