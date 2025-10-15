@@ -743,7 +743,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         Create a SocketSpec describing the current runtime state of this socket.
         """
         from copy import deepcopy
-        from node_graph.socket_spec import SocketSpec, SocketSpecMeta, CallRole
+        from node_graph.socket_spec import SocketSpec, SocketSpecMeta
 
         extras = self._metadata.extras or {}
 
@@ -755,14 +755,6 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         widget = extras.get("widget")
         if widget is not None:
             meta_kwargs["widget"] = widget
-
-        arg_type = getattr(self._metadata, "arg_type", None)
-        if arg_type:
-            try:
-                meta_kwargs["call_role"] = CallRole(arg_type)
-            except ValueError:
-                # Some special sockets (e.g. builtin wait) use non-standard roles.
-                pass
 
         meta = SocketSpecMeta(**meta_kwargs)
         spec_kwargs: Dict[str, Any] = {
@@ -1068,7 +1060,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         """
         Materialize the current namespace into a SocketSpec snapshot.
         """
-        from node_graph.socket_spec import SocketSpec, SocketSpecMeta, CallRole
+        from node_graph.socket_spec import SocketSpec, SocketSpecMeta
         from copy import deepcopy
 
         extras = self._metadata.extras or {}
@@ -1081,13 +1073,6 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         widget = extras.get("widget")
         if widget is not None:
             meta_kwargs["widget"] = widget
-
-        arg_type = getattr(self._metadata, "arg_type", None)
-        if arg_type:
-            try:
-                meta_kwargs["call_role"] = CallRole(arg_type)
-            except ValueError:
-                pass
 
         meta = SocketSpecMeta(**meta_kwargs)
 
