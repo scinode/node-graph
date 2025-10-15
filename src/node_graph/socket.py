@@ -4,7 +4,7 @@ from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class
-from dataclasses import MISSING, dataclass, field
+from dataclasses import MISSING, dataclass, field, replace
 from node_graph.orm.mapping import type_mapping
 from node_graph.registry import EntryPointPool
 import wrapt
@@ -13,6 +13,17 @@ if TYPE_CHECKING:
     from node_graph.node import Node
     from node_graph.link import NodeLink
     from node_graph.node_graph import NodeGraph
+
+
+def has_socket(data: dict):
+    """Check if the data contains a socket."""
+    for value in data.values():
+        if isinstance(value, BaseSocket):
+            return True
+        elif isinstance(value, dict):
+            return has_socket(value)
+
+    return False
 
 
 def op_add(x, y):
@@ -74,7 +85,7 @@ def _raise_illegal(sock, what: str, tips: list[str]):
     node = getattr(sock, "_node", None)
     node_name = getattr(node, "name", None) or "<unknown-node>"
     socket_name = (
-        getattr(sock, "_NAME", None) or getattr(sock, "name", None) or "<socket>"
+        getattr(sock, "_name", None) or getattr(sock, "name", None) or "<socket>"
     )
 
     common = [
@@ -727,6 +738,47 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
             data["property"] = None
         return data
 
+    def to_spec(self) -> "SocketSpec":
+        """
+        Create a SocketSpec describing the current runtime state of this socket.
+        """
+        from copy import deepcopy
+        from node_graph.socket_spec import SocketSpec, SocketSpecMeta, CallRole
+
+        extras = self._metadata.extras or {}
+
+        meta_kwargs: Dict[str, Any] = {
+            "required": self._metadata.required,
+            "is_metadata": self._metadata.is_metadata,
+            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+        }
+        widget = extras.get("widget")
+        if widget is not None:
+            meta_kwargs["widget"] = widget
+
+        arg_type = getattr(self._metadata, "arg_type", None)
+        if arg_type:
+            try:
+                meta_kwargs["call_role"] = CallRole(arg_type)
+            except ValueError:
+                # Some special sockets (e.g. builtin wait) use non-standard roles.
+                pass
+
+        meta = SocketSpecMeta(**meta_kwargs)
+        spec_kwargs: Dict[str, Any] = {
+            "identifier": self._identifier,
+            "dynamic": False,
+            "item": None,
+            "fields": {},
+            "link_limit": self._link_limit,
+            "meta": meta,
+        }
+
+        if "default" in extras:
+            spec_kwargs["default"] = deepcopy(extras["default"])
+
+        return SocketSpec(**spec_kwargs)
+
     @classmethod
     def _from_dict(cls, data: Dict[str, Any]) -> None:
         # Create a new instance of this class
@@ -1012,6 +1064,100 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                         data[name] = item.value
         return data
 
+    def to_spec(self) -> "SocketSpec":
+        """
+        Materialize the current namespace into a SocketSpec snapshot.
+        """
+        from node_graph.socket_spec import SocketSpec, SocketSpecMeta, CallRole
+        from copy import deepcopy
+
+        extras = self._metadata.extras or {}
+
+        meta_kwargs: Dict[str, Any] = {
+            "required": self._metadata.required,
+            "is_metadata": self._metadata.is_metadata,
+            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+        }
+        widget = extras.get("widget")
+        if widget is not None:
+            meta_kwargs["widget"] = widget
+
+        arg_type = getattr(self._metadata, "arg_type", None)
+        if arg_type:
+            try:
+                meta_kwargs["call_role"] = CallRole(arg_type)
+            except ValueError:
+                pass
+
+        meta = SocketSpecMeta(**meta_kwargs)
+
+        fields: Dict[str, "SocketSpec"] = {}
+        for name, child in self._sockets.items():
+            if getattr(child._metadata, "builtin_socket", False):
+                continue
+            if hasattr(child, "to_spec"):
+                fields[name] = child.to_spec()
+
+        item_spec = None
+        if "item" in extras:
+            item_spec = self._spec_from_shape_snapshot(extras["item"])
+        elif self._metadata.dynamic:
+            item_spec = SocketSpec(
+                identifier=self._type_mapping.get("any", "node_graph.any"),
+                meta=SocketSpecMeta(),
+            )
+
+        spec = SocketSpec(
+            identifier=self._identifier,
+            dynamic=self._metadata.dynamic,
+            item=item_spec,
+            fields=fields,
+            link_limit=self._link_limit,
+            meta=meta,
+        )
+
+        if "default" in extras:
+            spec = replace(spec, default=deepcopy(extras["default"]))
+
+        return spec
+
+    @staticmethod
+    def _spec_from_shape_snapshot(snapshot: Dict[str, Any]) -> "SocketSpec":
+        """
+        Rebuild a SocketSpec from a minimal shape snapshot stored in metadata extras.
+        """
+        from copy import deepcopy
+        from node_graph.socket_spec import SocketSpec, SocketSpecMeta
+
+        identifier = snapshot.get("identifier", "node_graph.any")
+
+        fields = {
+            name: NodeSocketNamespace._spec_from_shape_snapshot(child_snapshot)
+            for name, child_snapshot in snapshot.get("sockets", {}).items()
+        }
+
+        item_snapshot = snapshot.get("item")
+        item_spec = (
+            NodeSocketNamespace._spec_from_shape_snapshot(item_snapshot)
+            if isinstance(item_snapshot, dict)
+            else None
+        )
+
+        spec_kwargs: Dict[str, Any] = {
+            "identifier": identifier,
+            "dynamic": bool(snapshot.get("dynamic", False)),
+            "fields": fields,
+            "item": item_spec,
+            "meta": SocketSpecMeta(),
+        }
+
+        if "default" in snapshot:
+            spec_kwargs["default"] = deepcopy(snapshot["default"])
+        if "link_limit" in snapshot:
+            spec_kwargs["link_limit"] = snapshot["link_limit"]
+
+        return SocketSpec(**spec_kwargs)
+
     @_value.setter
     def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
@@ -1128,10 +1274,16 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
                 # Create a leaf based on the dynamic item type
                 item = self._metadata.extras.get("item", {"identifier": "any"})
+                identifier = item.get("identifier", "any")
                 # override if the incoming value is a namespace
-                if isinstance(value[key], NodeSocketNamespace):
-                    item = {"identifier": "namespace"}
-                if item["identifier"].endswith("namespace"):
+                if identifier.endswith("any") and isinstance(
+                    value[key], NodeSocketNamespace
+                ):
+                    identifier = "namespace"
+                if identifier.endswith("any") and isinstance(value[key], dict):
+                    if has_socket(value[key]):
+                        identifier = "namespace"
+                if identifier.endswith("namespace"):
                     # create child namespace (dynamic)
                     self._new(
                         self._SocketPool["namespace"],
@@ -1144,7 +1296,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     )
                 else:
                     # create a leaf socket that can accept "any"
-                    self._new(item["identifier"], key, **kwargs)
+                    self._new(identifier, key, **kwargs)
 
             # Now we’re guaranteed the key exists; delegate appropriately
             target = self._sockets[key]
