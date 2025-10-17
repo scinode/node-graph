@@ -139,7 +139,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
         # if inputs is None, we assume it's a dynamic inputs
         inputs = self._SOCKET_SPEC_API.dynamic() if inputs is None else inputs
-        meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
+        meta = replace(inputs.meta, child_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
         outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
         # if outputs is None, we assume it's a dynamic outputs
@@ -167,7 +167,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         graph_outputs.inputs._name = "outputs"
         # graph context
         ctx = self.spec.ctx or self._SOCKET_SPEC_API.dynamic(Any)
-        meta = replace(ctx.meta, sub_socket_default_link_limit=1000000)
+        meta = replace(ctx.meta, child_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
         self.spec = replace(self.spec, ctx=ctx)
         self.graph_ctx_spec = NodeSpec(

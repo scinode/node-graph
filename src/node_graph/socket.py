@@ -4,8 +4,9 @@ from node_graph.collection import DependencyCollection
 from node_graph.property import NodeProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class
-from dataclasses import MISSING, dataclass, field, replace
+from dataclasses import MISSING, replace
 from node_graph.orm.mapping import type_mapping
+from node_graph.socket_meta import SocketMeta
 from node_graph.registry import EntryPointPool
 import wrapt
 
@@ -415,87 +416,31 @@ class WaitingOn:
             print(f"Link {link_name} already exists, skipping creation.")
 
 
-@dataclass()
-class SocketMetadata:
-    """A *typed* container for additional socket information.
+def _normalize_meta(raw: Union[SocketMeta, Dict[str, Any], None]) -> SocketMeta:
+    if raw is None:
+        return SocketMeta()
+    if isinstance(raw, SocketMeta):
+        return SocketMeta.from_dict(raw.to_dict())
+    if isinstance(raw, dict):
+        meta = SocketMeta.from_dict(raw)
+        if meta.required is None:
+            meta.required = False
+        if meta.socket_type is None:
+            meta.socket_type = "INPUT"
+        if meta.arg_type is None:
+            meta.arg_type = "kwargs"
+        return meta
+    raise TypeError(f"metadata must be dict | SocketMeta | None – got {type(raw)!r}")
 
-    Parameters
-    ----------
-    dynamic
-        Whether the socket collection is *dynamic* - i.e. it may grow
-        automatically when assigning unknown keys.
-    builtin_socket
-        Marks sockets that are intrinsic to the framework (e.g. ``_wait`` or
-        ``outputs``) so that user code can filter / style them differently.
-    extras
-        Free form mapping for user extensions.  Any key not matching one of the
-        reserved field names ends up in here when converting from an untyped
-        ``dict``.
-    """
 
-    dynamic: bool = False
-    sub_socket_default_link_limit: int = 1
-    required: bool = False
-    is_metadata: bool = False
-    builtin_socket: bool = False
-    function_socket: bool = False
-    socket_type: str = "INPUT"
-    arg_type: str = "kwargs"
-    extras: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Return a *plain* dict suitable for JSON serialisation."""
-
-        data = {
-            "dynamic": self.dynamic,
-            "required": self.required,
-            "is_metadata": self.is_metadata,
-            "builtin_socket": self.builtin_socket,
-            "function_socket": self.function_socket,
-            "socket_type": self.socket_type,
-            "arg_type": self.arg_type,
-        }
-        if self.extras:
-            # Make sure extras are a dict
-            data["extras"] = dict(self.extras)
-
-        # Do not bloat output with empty *extras*
-        if not data.get("extras"):
-            data.pop("extras", None)
-        return data
-
-    @classmethod
-    def from_raw(
-        cls, raw: Union["SocketMetadata", Dict[str, Any], None]
-    ) -> "SocketMetadata":
-        """Normalise *raw* user input into a :class:`SocketMetadata` instance."""
-
-        if raw is None:
-            return cls()
-        if isinstance(raw, cls):
-            return raw
-        if isinstance(raw, dict):
-            # Extract known keys and forward unknown ones into *extras*
-            known_keys = {
-                "dynamic",
-                "builtin_socket",
-                "function_socket",
-                "socket_type",
-                "arg_type",
-                "required",
-                "is_metadata",
-                "sub_socket_default_link_limit",
-                "extras",
-            }
-            known = {k: v for k, v in raw.items() if k in known_keys}
-            known.setdefault("extras", {})
-            known["extras"].update(
-                {k: v for k, v in raw.items() if k not in known_keys}
-            )
-            return cls(**known)
-        raise TypeError(
-            f"metadata must be dict | SocketMetadata | None – got {type(raw)!r}"
-        )
+_RUNTIME_EXTRA_KEYS = {
+    "identifier",
+    "sockets",
+    "dynamic",
+    "item",
+    "builtin_socket",
+    "function_socket",
+}
 
 
 class TaggedValue(wrapt.ObjectProxy):
@@ -568,7 +513,7 @@ class BaseSocket:
         parent: Optional["NodeSocketNamespace"] = None,
         graph: Optional["NodeGraph"] = None,
         link_limit: int = 1,
-        metadata: Union[SocketMetadata, Dict[str, Any], None] = None,
+        metadata: Union[SocketMeta, Dict[str, Any], None] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize an instance of NodeSocket.
@@ -588,7 +533,7 @@ class BaseSocket:
         self._graph = graph
         self._links = []
         self._link_limit = link_limit
-        self._metadata: SocketMetadata = SocketMetadata.from_raw(metadata)
+        self._metadata: SocketMeta = _normalize_meta(metadata)
         self._waiting_on = WaitingOn(node=self._node, graph=self._graph)
 
     @property
@@ -743,23 +688,26 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
         Create a SocketSpec describing the current runtime state of this socket.
         """
         from copy import deepcopy
-        from node_graph.socket_spec import SocketSpec, SocketSpecMeta
+        from node_graph.socket_spec import SocketSpec, SocketMeta
 
-        extras = self._metadata.extras or {}
-
-        meta_kwargs: Dict[str, Any] = {
-            "required": self._metadata.required,
-            "is_metadata": self._metadata.is_metadata,
-            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+        runtime_meta = self._metadata
+        extras = {
+            k: v
+            for k, v in (runtime_meta.extras or {}).items()
+            if k not in _RUNTIME_EXTRA_KEYS
         }
-        widget = extras.get("widget")
-        if widget is not None:
-            meta_kwargs["widget"] = widget
 
-        meta = SocketSpecMeta(**meta_kwargs)
+        meta = SocketMeta(
+            help=runtime_meta.help,
+            required=runtime_meta.required,
+            call_role=runtime_meta.call_role,
+            is_metadata=runtime_meta.is_metadata,
+            dynamic=False,
+            child_default_link_limit=runtime_meta.child_default_link_limit,
+            extras=extras,
+        )
         spec_kwargs: Dict[str, Any] = {
             "identifier": self._identifier,
-            "dynamic": False,
             "item": None,
             "fields": {},
             "link_limit": self._link_limit,
@@ -877,7 +825,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         node: Optional["Node"] = None,
         parent: Optional["NodeSocket"] = None,
         link_limit: int = 1000000,
-        metadata: Union[SocketMetadata, Dict[str, Any], None] = None,
+        metadata: Union[SocketMeta, Dict[str, Any], None] = None,
         sockets: Optional[Dict[str, object]] = None,
         pool: Optional[object] = None,
         entry_point: Optional[str] = None,
@@ -988,6 +936,10 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         identifier = identifier or self._SocketPool["any"]
         check_identifier_name(identifier, self._SocketPool)
 
+        meta_payload = dict(metadata or {})
+        if "socket_type" not in meta_payload and self._metadata.socket_type:
+            meta_payload["socket_type"] = self._metadata.socket_type
+
         _names = name.split(".", 1)
         if len(_names) > 1:
             namespace = _names[0]
@@ -1000,7 +952,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                         namespace,
                         metadata={
                             "dynamic": True,
-                            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+                            "child_default_link_limit": self._metadata.child_default_link_limit,
                         },
                     )
                 else:
@@ -1010,21 +962,19 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             return self[namespace]._new(
                 identifier,
                 _names[1],
-                link_limit=self._metadata.sub_socket_default_link_limit,
-                metadata=metadata,
+                link_limit=self._metadata.child_default_link_limit,
+                metadata=meta_payload,
             )
         else:
             ItemClass = get_item_class(identifier, self._SocketPool)
             kwargs.pop("graph", None)
-            kwargs.setdefault(
-                "link_limit", self._metadata.sub_socket_default_link_limit
-            )
+            kwargs.setdefault("link_limit", self._metadata.child_default_link_limit)
             item = ItemClass(
                 name,
                 node=self._node,
                 parent=self,
                 graph=self._graph,
-                metadata=metadata,
+                metadata=meta_payload,
                 pool=self._SocketPool,
                 **kwargs,
             )
@@ -1058,25 +1008,29 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         """
         Materialize the current namespace into a SocketSpec snapshot.
         """
-        from node_graph.socket_spec import SocketSpec, SocketSpecMeta
+        from node_graph.socket_spec import SocketSpec, SocketMeta
         from copy import deepcopy
 
-        extras = self._metadata.extras or {}
-
-        meta_kwargs: Dict[str, Any] = {
-            "required": self._metadata.required,
-            "is_metadata": self._metadata.is_metadata,
-            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+        runtime_meta = self._metadata
+        extras = {
+            k: v
+            for k, v in (runtime_meta.extras or {}).items()
+            if k not in _RUNTIME_EXTRA_KEYS
         }
-        widget = extras.get("widget")
-        if widget is not None:
-            meta_kwargs["widget"] = widget
 
-        meta = SocketSpecMeta(**meta_kwargs)
+        meta = SocketMeta(
+            help=runtime_meta.help,
+            required=runtime_meta.required,
+            call_role=runtime_meta.call_role,
+            is_metadata=runtime_meta.is_metadata,
+            dynamic=self._metadata.dynamic,
+            child_default_link_limit=runtime_meta.child_default_link_limit,
+            extras=extras,
+        )
 
         fields: Dict[str, "SocketSpec"] = {}
         for name, child in self._sockets.items():
-            if getattr(child._metadata, "builtin_socket", False):
+            if child._metadata.extras.get("builtin_socket"):
                 continue
             if hasattr(child, "_to_spec"):
                 fields[name] = child._to_spec()
@@ -1088,15 +1042,9 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 item_spec = self._spec_from_shape_snapshot(item_snapshot)
             else:
                 item_spec = None
-        elif self._metadata.dynamic:
-            item_spec = SocketSpec(
-                identifier=self._type_mapping.get("any", "node_graph.any"),
-                meta=SocketSpecMeta(),
-            )
 
         spec = SocketSpec(
             identifier=self._identifier,
-            dynamic=self._metadata.dynamic,
             item=item_spec,
             fields=fields,
             link_limit=self._link_limit,
@@ -1114,7 +1062,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         Rebuild a SocketSpec from a minimal shape snapshot stored in metadata extras.
         """
         from copy import deepcopy
-        from node_graph.socket_spec import SocketSpec, SocketSpecMeta
+        from node_graph.socket_spec import SocketSpec, SocketMeta
 
         identifier = snapshot.get("identifier", "node_graph.any")
 
@@ -1130,12 +1078,13 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             else None
         )
 
+        meta = SocketMeta(dynamic=bool(snapshot.get("dynamic", False)))
+
         spec_kwargs: Dict[str, Any] = {
             "identifier": identifier,
-            "dynamic": bool(snapshot.get("dynamic", False)),
             "fields": fields,
             "item": item_spec,
-            "meta": SocketSpecMeta(),
+            "meta": meta,
         }
 
         if "default" in snapshot:
@@ -1227,7 +1176,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                         head,
                         metadata={
                             "dynamic": True,
-                            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
+                            "child_default_link_limit": self._metadata.child_default_link_limit,
                         },
                     )
 
@@ -1470,7 +1419,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 graph=graph,
                 metadata=leaf_meta,
                 property=prop,
-                link_limit=parent_ns._metadata.sub_socket_default_link_limit,
+                link_limit=parent_ns._metadata.child_default_link_limit,
             )
             parent_ns._append(sock)
 

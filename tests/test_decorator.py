@@ -50,7 +50,7 @@ def test_decorator_args() -> None:
     assert task1.inputs.e._identifier == "node_graph.namespace"
     assert task1.inputs.c._metadata.required is True
     assert task1.inputs.d._metadata.required is False
-    assert task1.inputs.d._metadata.function_socket is True
+    assert task1.inputs.d._metadata.extras.get("function_socket") is True
     assert task1.inputs.d.property.default == 1
     assert set(task1.args_data["args"]) == set(["a"])
     assert set(task1.args_data["kwargs"]) == set(["b", "c", "d"])
