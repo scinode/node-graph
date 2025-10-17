@@ -125,8 +125,10 @@ class BaseEngine(ABC):
             try:
                 parsed = parse_outputs(result, node.spec.outputs)
                 node.outputs._set_socket_value(parsed)
-            except Exception:
-                pass
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to parse outputs for node '{node.name}': {e}"
+                ) from e
         tag_socket_value(node.outputs, only_uuid=True)
         return node.outputs._collect_values(raw=False)
 

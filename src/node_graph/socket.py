@@ -738,7 +738,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
             data["property"] = None
         return data
 
-    def to_spec(self) -> "SocketSpec":
+    def _to_spec(self) -> "SocketSpec":
         """
         Create a SocketSpec describing the current runtime state of this socket.
         """
@@ -953,9 +953,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             object.__setattr__(self, name, value)
             return
 
-        self._set_socket_value(
-            {name: value}, link_limit=self._metadata.sub_socket_default_link_limit
-        )
+        self._set_socket_value({name: value})
 
     def __setitem__(self, key: str | int, value: Any) -> None:
         """
@@ -1056,7 +1054,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                         data[name] = item.value
         return data
 
-    def to_spec(self) -> "SocketSpec":
+    def _to_spec(self) -> "SocketSpec":
         """
         Materialize the current namespace into a SocketSpec snapshot.
         """
@@ -1080,12 +1078,16 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         for name, child in self._sockets.items():
             if getattr(child._metadata, "builtin_socket", False):
                 continue
-            if hasattr(child, "to_spec"):
-                fields[name] = child.to_spec()
+            if hasattr(child, "_to_spec"):
+                fields[name] = child._to_spec()
 
         item_spec = None
         if "item" in extras:
-            item_spec = self._spec_from_shape_snapshot(extras["item"])
+            item_snapshot = extras["item"]
+            if isinstance(item_snapshot, dict):
+                item_spec = self._spec_from_shape_snapshot(item_snapshot)
+            else:
+                item_spec = None
         elif self._metadata.dynamic:
             item_spec = SocketSpec(
                 identifier=self._type_mapping.get("any", "node_graph.any"),
@@ -1147,7 +1149,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
 
-    def _set_socket_value(self, value: Dict[str, Any] | NodeSocket, **kwargs) -> None:
+    def _set_socket_value(self, value: Dict[str, Any] | NodeSocket) -> None:
         """Set value(s) into this namespace.
 
         Supports:
@@ -1159,6 +1161,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         - Missing immediate children can be created only if *this* namespace is dynamic.
         - Intermediate dotted segments are created as namespaces (dynamic=True) when needed.
         """
+        from node_graph.socket_spec import SocketSpec
+
         if value is None:
             return
 
@@ -1225,7 +1229,6 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                             "dynamic": True,
                             "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
                         },
-                        **kwargs,
                     )
 
                 child = self._sockets[head]
@@ -1241,7 +1244,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     )
 
                 # Recurse into the child namespace with the remaining tail
-                child._set_socket_value({tail: val}, **kwargs)
+                child._set_socket_value({tail: val})
                 continue  # next key
 
             # Non-dotted key path (single-segment)
@@ -1257,38 +1260,37 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                         ],
                     )
 
-                # Create a leaf based on the dynamic item type
-                item = self._metadata.extras.get("item", {"identifier": "any"})
-                identifier = item.get("identifier", "any")
-                # override if the incoming value is a namespace
-                if identifier.endswith("any") and isinstance(
-                    value[key], NodeSocketNamespace
-                ):
-                    identifier = "namespace"
-                if identifier.endswith("any") and isinstance(value[key], dict):
-                    if has_socket(value[key]):
-                        identifier = "namespace"
-                if identifier.endswith("namespace"):
-                    # create child namespace (dynamic)
-                    self._new(
-                        self._SocketPool["namespace"],
-                        key,
-                        metadata={
+                # Create a leaf or namespace based on the dynamic item type
+                extras = self._metadata.extras or {}
+                item_snapshot = extras.get("item") if isinstance(extras, dict) else None
+                if item_snapshot is None:
+                    if isinstance(val, (dict, NodeSocketNamespace)):
+                        item_snapshot = {
+                            "identifier": self._type_mapping["namespace"],
                             "dynamic": True,
-                            "sub_socket_default_link_limit": self._metadata.sub_socket_default_link_limit,
-                        },
-                        **kwargs,
-                    )
-                else:
-                    # create a leaf socket that can accept "any"
-                    self._new(identifier, key, **kwargs)
+                        }
+                    else:
+                        item_snapshot = {"identifier": self._type_mapping["default"]}
+                item_spec = (
+                    SocketSpec.from_dict(item_snapshot)
+                    if isinstance(item_snapshot, dict)
+                    else None
+                )
+                self._append_from_spec(
+                    self,
+                    key,
+                    item_spec,
+                    node=self._node,
+                    graph=self._graph,
+                    role="input",
+                )
 
             # Now we’re guaranteed the key exists; delegate appropriately
             target = self._sockets[key]
             if isinstance(target, NodeSocketNamespace):
                 # If incoming val is a dict, recurse. If it’s a socket, link to the namespace.
                 if isinstance(val, dict):
-                    target._set_socket_value(val, **kwargs)
+                    target._set_socket_value(val)
                 elif isinstance(val, BaseSocket):
                     self._node.graph.add_link(val, target)
                 else:

@@ -42,8 +42,7 @@ def _spec_shape_snapshot(
             if spec.item is not None:
                 d["item"] = _spec_shape_snapshot(spec.item, type_mapping=type_mapping)
             else:
-                # fallback to 'any' when item is missing
-                d["item"] = {"identifier": type_mapping.get("any", "node_graph.any")}
+                d["item"] = None
     else:
         # leaf: include default if present
         if not isinstance(getattr(spec, "default", MISSING), type(MISSING)):

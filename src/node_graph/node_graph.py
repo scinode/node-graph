@@ -138,15 +138,15 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
 
         inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
         # if inputs is None, we assume it's a dynamic inputs
-        inputs = self._SOCKET_SPEC_API.dynamic(Any) if inputs is None else inputs
+        inputs = self._SOCKET_SPEC_API.dynamic() if inputs is None else inputs
         meta = replace(inputs.meta, sub_socket_default_link_limit=1000000)
         inputs = replace(inputs, meta=meta)
         outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
         # if outputs is None, we assume it's a dynamic outputs
-        outputs = self._SOCKET_SPEC_API.dynamic(Any) if outputs is None else outputs
+        outputs = self._SOCKET_SPEC_API.dynamic() if outputs is None else outputs
         ctx = self._SOCKET_SPEC_API.validate_socket_data(ctx)
         # if ctx is None, we assume it's a dynamic ctx
-        ctx = self._SOCKET_SPEC_API.dynamic(Any) if ctx is None else ctx
+        ctx = self._SOCKET_SPEC_API.dynamic() if ctx is None else ctx
         self.spec = GraphSpec(inputs=inputs, outputs=outputs, ctx=ctx)
 
     def _init_graph_level_nodes(self):
@@ -222,7 +222,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
     def ctx(self, value: Dict[str, Any]) -> None:
         """Set context node."""
         self.graph_ctx.inputs._clear()
-        self.graph_ctx.inputs._set_socket_value(value, link_limit=100000)
+        self.graph_ctx.inputs._set_socket_value(value)
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""
@@ -383,7 +383,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         """
         # Capture the current ctx namespace shape into the graph spec before exporting.
         if hasattr(self.graph_ctx, "inputs"):
-            ctx_snapshot = self.graph_ctx.inputs.to_spec()
+            ctx_snapshot = self.graph_ctx.inputs._to_spec()
             self.spec = replace(self.spec, ctx=ctx_snapshot)
 
         metadata = self.get_metadata()

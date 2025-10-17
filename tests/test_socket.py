@@ -341,6 +341,21 @@ def test_dynamic_namespace(node_with_namespace_socket):
     assert "sub" in n.inputs.dynamic.not_exit
 
 
+def test_dynamic_namespace_without_explicit_item_creates_nested():
+    metadata = {
+        "dynamic": True,
+        "extras": {
+            "identifier": "node_graph.namespace",
+            "dynamic": True,
+            "item": None,
+        },
+    }
+    ns = NodeSocketNamespace("inputs", metadata=metadata)
+    ns._set_socket_value({"payload": {"inner": 1}})
+    assert isinstance(ns.payload, NodeSocketNamespace)
+    assert ns.payload.inner.value == 1
+
+
 def test_set_namespace(node_with_namespace_socket):
     """Test set namespace."""
     n = node_with_namespace_socket
@@ -481,9 +496,8 @@ def test_unpacking():
 def test_set_socket_value():
     s = NodeSocketNamespace("test", metadata={"dynamic": True})
     value = {"a": 1, "b": 2}
-    s._set_socket_value(value, link_limit=100000)
+    s._set_socket_value(value)
     assert s._value == value
-    assert s.a._link_limit == 100000
 
 
 def test_set_namespace_attr():
