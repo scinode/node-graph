@@ -32,7 +32,7 @@ add1 = ng.add_node("node_graph.test_add", name="add1")
 #
 # Connect the output of ``float1`` to the input of ``add1``.
 
-ng.add_link(float1.outputs.float, add1.inputs.x)
+ng.add_link(float1.outputs.result, add1.inputs.x)
 
 ng.to_html()
 # %%
@@ -44,12 +44,3 @@ ng.to_html()
 d = ng.to_dict()
 print("NodeGraph as dict:")
 print(d)
-
-# %%
-# API reference
-# -------------
-#
-# In the narrative documentation you can include an API reference:
-#
-# .. autoclass:: node_graph.NodeGraph
-#    :members:

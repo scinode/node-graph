@@ -29,7 +29,7 @@ def add(x, y):
 
 @node()
 def multiply(x, y):
-    return x + y
+    return x * y
 
 @node.graph()
 def AddMultiply(x, y, z):
