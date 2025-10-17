@@ -12,12 +12,12 @@ from typing import (
 import inspect
 from copy import deepcopy
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
+from node_graph.socket_meta import CallRole, SocketMeta, merge_meta
 from .socket import NodeSocketNamespace
 import ast
 import textwrap
 import types
 import sys
-from enum import Enum
 from dataclasses import (
     is_dataclass as _is_dc,
     fields as _dc_fields,
@@ -38,7 +38,7 @@ _UNION_TYPE = getattr(types, "UnionType", None)
 
 __all__ = [
     # Core datatypes / API
-    "SocketSpecMeta",
+    "SocketMeta",
     "SocketSpecSelect",
     "SocketSpec",
     "SocketView",
@@ -58,18 +58,6 @@ __all__ = [
     "Leaf",
     "from_model",
 ]
-
-WidgetConfig = Union[str, Dict[str, Any]]
-
-
-class CallRole(str, Enum):
-    """Defines how a socket's value is used in a function call."""
-
-    ARGS = "args"
-    KWARGS = "kwargs"
-    VAR_ARGS = "var_args"
-    VAR_KWARGS = "var_kwargs"
-    RETURN = "return"
 
 
 def _is_union_origin(origin: Any) -> bool:
@@ -111,13 +99,13 @@ def _annotated_parts(annot: Any) -> tuple[Any, tuple[Any, ...]]:
     return base, tuple(meta)
 
 
-def _unwrap_annotated(tp: Any) -> tuple[Any, Optional["SocketSpecMeta"]]:
-    """Return (base_type, SocketSpecMeta|None) for Annotated types (incl. inside Optional/Union)."""
+def _unwrap_annotated(tp: Any) -> tuple[Any, Optional["SocketMeta"]]:
+    """Return (base_type, SocketMeta|None) for Annotated types (incl. inside Optional/Union)."""
     annot = _find_first_annotated(tp)
     if annot is None:
         return tp, None
     base, metas = _annotated_parts(annot)
-    spec_meta = next((m for m in metas if isinstance(m, SocketSpecMeta)), None)
+    spec_meta = next((m for m in metas if isinstance(m, SocketMeta)), None)
     return base, spec_meta
 
 
@@ -141,35 +129,6 @@ def _extract_spec_from_annotated(tp: Any) -> Optional["SocketSpec"]:
         if isinstance(m, type) and _is_struct_model_type(m):
             return SocketSpecAPI.from_model(m)
     return None
-
-
-@dataclass(frozen=True)
-class SocketSpecMeta:
-    help: Optional[str] = None
-    # by default all sockets are required
-    required: Optional[bool] = True
-    call_role: Optional[CallRole] = None
-    sub_socket_default_link_limit: Optional[int] = 1
-    is_metadata: Optional[bool] = False
-    widget: Optional[WidgetConfig] = None
-
-
-def _merge_meta(base: "SocketSpecMeta", over: "SocketSpecMeta") -> "SocketSpecMeta":
-    """Overlay non-None fields from `over` onto `base`."""
-    return SocketSpecMeta(
-        help=over.help if over.help is not None else base.help,
-        required=over.required if over.required is not None else base.required,
-        call_role=over.call_role if over.call_role is not None else base.call_role,
-        sub_socket_default_link_limit=(
-            over.sub_socket_default_link_limit
-            if over.sub_socket_default_link_limit is not None
-            else base.sub_socket_default_link_limit
-        ),
-        is_metadata=over.is_metadata
-        if over.is_metadata is not None
-        else base.is_metadata,
-        widget=over.widget if over.widget is not None else base.widget,
-    )
 
 
 @dataclass(frozen=True)
@@ -331,17 +290,17 @@ def _apply_select_from_annotation(annot_like: Any, spec: "SocketSpec") -> "Socke
 
 
 def _merge_all_meta_from_annotation(
-    annot_like: Any, base: "SocketSpecMeta"
-) -> "SocketSpecMeta":
-    """Overlay every SocketSpecMeta present in Annotated metadata (order-respecting)."""
+    annot_like: Any, base: "SocketMeta"
+) -> "SocketMeta":
+    """Overlay every SocketMeta present in Annotated metadata (order-respecting)."""
     annot = _find_first_annotated(annot_like)
     if annot is None:
         return base
     _, metas = _annotated_parts(annot)
     out = base
     for m in metas:
-        if isinstance(m, SocketSpecMeta):
-            out = _merge_meta(out, m)
+        if isinstance(m, SocketMeta):
+            out = merge_meta(out, m)
     return out
 
 
@@ -351,20 +310,22 @@ class SocketSpec:
     Immutable socket schema tree (leaf or namespace).
 
     - identifier: leaf type identifier or "node_graph.namespace"
-    - dynamic: namespace accepts arbitrary keys (item gives per-key schema)
     - item: schema for each dynamic key (leaf or namespace)
     - fields: fixed fields for namespace (name -> schema)
     - default: leaf-only default value
-    - meta: optional meta (help/required/widget/is_metadata/call_role/sub_socket_default_link_limit)
+    - meta: optional metadata (help/required/is_metadata/call_role/...)
     """
 
     identifier: str
-    dynamic: bool = False
     item: Optional["SocketSpec"] = None
     default: Any = field(default_factory=lambda: MISSING)
     link_limit: Optional[int] = None
     fields: Dict[str, "SocketSpec"] = field(default_factory=dict)
-    meta: SocketSpecMeta = field(default_factory=SocketSpecMeta)
+    meta: SocketMeta = field(default_factory=SocketMeta)
+
+    @property
+    def dynamic(self) -> bool:
+        return bool(self.meta.dynamic)
 
     # structural predicates
     def is_namespace(self) -> bool:
@@ -375,7 +336,9 @@ class SocketSpec:
         return not isinstance(self.default, type(MISSING)) and (not self.is_namespace())
 
     def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"identifier": self.identifier, "dynamic": self.dynamic}
+        meta_payload = self.meta.to_dict()
+        dynamic = bool(meta_payload.pop("dynamic", self.dynamic))
+        d: Dict[str, Any] = {"identifier": self.identifier, "dynamic": dynamic}
         if self.item is not None:
             d["item"] = self.item.to_dict()
         if self.fields:
@@ -383,41 +346,30 @@ class SocketSpec:
         # default only for leaves and only if not MISSING
         if not self.is_namespace() and not isinstance(self.default, type(MISSING)):
             d["default"] = deepcopy(self.default)
-        if any(
-            getattr(self.meta, k) is not None
-            for k in (
-                "help",
-                "required",
-                "widget",
-                "call_role",
-                "link_limit",
-                "sub_socket_default_link_limit",
-                "is_metadata",
-            )
-        ):
-            d["meta"] = {
-                k: getattr(self.meta, k)
-                for k in (
-                    "help",
-                    "required",
-                    "widget",
-                    "call_role",
-                    "sub_socket_default_link_limit",
-                    "is_metadata",
-                )
-                if getattr(self.meta, k) is not None
-            }
+        if meta_payload:
+            d["meta"] = meta_payload
         return d
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "SocketSpec":
-        meta = SocketSpecMeta(**d.get("meta", {}))
+        meta = SocketMeta.from_dict(d.get("meta", {}))
+        if "dynamic" in d and not meta.dynamic:
+            meta = SocketMeta(
+                help=meta.help,
+                required=meta.required,
+                call_role=meta.call_role,
+                is_metadata=meta.is_metadata,
+                dynamic=bool(d.get("dynamic", False)),
+                child_default_link_limit=meta.child_default_link_limit,
+                socket_type=meta.socket_type,
+                arg_type=meta.arg_type,
+                extras=meta.extras,
+            )
         item = cls.from_dict(d["item"]) if "item" in d else None
         fields = {k: cls.from_dict(v) for k, v in d.get("fields", {}).items()}
         default = d.get("default", MISSING)
         return cls(
             identifier=d["identifier"],
-            dynamic=bool(d.get("dynamic", False)),
             item=item,
             link_limit=d.get("link_limit", None),
             fields=fields,
@@ -539,7 +491,7 @@ class SocketSpecAPI:
 
     # convenience re-exports
     SocketSpec = SocketSpec
-    SocketSpecMeta = SocketSpecMeta
+    SocketMeta = SocketMeta
     SocketSpecSelect = SocketSpecSelect
     SocketView = SocketView
     SocketNamespace = NodeSocketNamespace
@@ -570,8 +522,8 @@ class SocketSpecAPI:
 
     @classmethod
     def socket(cls, T: Any, **meta) -> Any:
-        """Wrap a type with optional metadata (help/required/widget/etc.)."""
-        return Annotated[T, SocketSpecMeta(**meta)]
+        """Wrap a type with optional metadata (help/required/extras/etc.)."""
+        return Annotated[T, SocketMeta(**meta)]
 
     @classmethod
     def namespace(cls, _name: Optional[str] = None, /, **fields) -> SocketSpec:
@@ -599,7 +551,7 @@ class SocketSpecAPI:
                     child = base_T.to_spec()
                 else:
                     child = SocketSpec(
-                        identifier=cls._map_identifier(base_T), meta=SocketSpecMeta()
+                        identifier=cls._map_identifier(base_T), meta=SocketMeta()
                     )
 
             # overlay all meta from Annotated
@@ -623,7 +575,7 @@ class SocketSpecAPI:
     @classmethod
     def dynamic(cls, item_type: Any = None, /, **fixed) -> SocketSpec:
         base = cls.namespace(**fixed)
-        base = replace(base, dynamic=True)
+        base = replace(base, meta=replace(base.meta, dynamic=True))
 
         if item_type is None:
             return base
@@ -639,10 +591,9 @@ class SocketSpecAPI:
             item_spec = (
                 T
                 if isinstance(T, SocketSpec)
-                else SocketSpec(
-                    identifier=cls._map_identifier(T), meta=SocketSpecMeta()
-                )
+                else SocketSpec(identifier=cls._map_identifier(T), meta=SocketMeta())
             )
+
         return replace(base, item=item_spec)
 
     @classmethod
@@ -686,7 +637,9 @@ class SocketSpecAPI:
             # ---------- Pydantic ----------
             if _struct_is_dynamic(model_cls):
                 ns = SocketSpec(
-                    identifier=cls._ns_identifier(), fields={}, dynamic=True
+                    identifier=cls._ns_identifier(),
+                    fields={},
+                    meta=SocketMeta(dynamic=True),
                 )
                 for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
                     child = cls._child_spec_from_type(model_field.annotation or Any)
@@ -721,7 +674,9 @@ class SocketSpecAPI:
 
             if _struct_is_dynamic(model_cls):
                 ns = SocketSpec(
-                    identifier=cls._ns_identifier(), fields={}, dynamic=True
+                    identifier=cls._ns_identifier(),
+                    fields={},
+                    meta=SocketMeta(dynamic=True),
                 )
                 for f in _dc_fields(model_cls):
                     ann = hints.get(f.name, f.type)
@@ -754,7 +709,7 @@ class SocketSpecAPI:
 
     @classmethod
     def _leaf_from_type(cls, T: Any) -> SocketSpec:
-        return SocketSpec(identifier=cls._map_identifier(T), meta=SocketSpecMeta())
+        return SocketSpec(identifier=cls._map_identifier(T), meta=SocketMeta())
 
     @classmethod
     def _child_spec_from_type(cls, ann: Any) -> SocketSpec:
@@ -837,7 +792,7 @@ class SocketSpecAPI:
         if _is_struct_model_type(base_T):
             return SocketSpecAPI.from_model(base_T)
 
-        return SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketSpecMeta())
+        return SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketMeta())
 
     @classmethod
     def build_inputs_from_signature(
@@ -907,12 +862,12 @@ class SocketSpecAPI:
             # Merge meta from annotation onto required/call_role defaults
             merged_meta = _merge_all_meta_from_annotation(
                 T,
-                SocketSpecMeta(
+                SocketMeta(
                     required=is_required,
                     call_role=call_role,
                 ),
             )
-            spec = replace(spec, meta=_merge_meta(spec.meta, merged_meta))
+            spec = replace(spec, meta=merge_meta(spec.meta, merged_meta))
 
             # varargs/kwargs become dynamic namespaces
             if param.kind is inspect.Parameter.VAR_POSITIONAL:
@@ -922,9 +877,8 @@ class SocketSpecAPI:
                 )
                 spec = SocketSpec(
                     identifier=cls._ns_identifier(),
-                    dynamic=True,
                     item=item_spec,
-                    meta=spec.meta,
+                    meta=replace(spec.meta, dynamic=True),
                 )
             elif param.kind is inspect.Parameter.VAR_KEYWORD:
                 item_T, _ = _unwrap_annotated(T)
@@ -939,9 +893,8 @@ class SocketSpecAPI:
                 item_spec = cls._spec_from_annotation(item_T)
                 spec = SocketSpec(
                     identifier=cls._ns_identifier(),
-                    dynamic=True,
                     item=item_spec,
-                    meta=spec.meta,
+                    meta=replace(spec.meta, dynamic=True),
                 )
 
             # Apply selection/transform directives from Annotated
@@ -965,8 +918,7 @@ class SocketSpecAPI:
         return SocketSpec(
             identifier=cls._ns_identifier(),
             fields=fields,
-            dynamic=is_dyn,
-            meta=SocketSpecMeta(call_role=CallRole.KWARGS),
+            meta=SocketMeta(call_role=CallRole.KWARGS, dynamic=is_dyn),
         )
 
     @classmethod
@@ -974,7 +926,7 @@ class SocketSpecAPI:
         return SocketSpec(
             identifier=cls._ns_identifier(),
             fields={cls.DEFAULT_OUTPUT_KEY: leaf},
-            meta=SocketSpecMeta(call_role=CallRole.RETURN),
+            meta=SocketMeta(call_role=CallRole.RETURN),
         )
 
     @classmethod
@@ -1000,8 +952,7 @@ class SocketSpecAPI:
             return SocketSpec(
                 identifier=cls._ns_identifier(),
                 fields={},
-                dynamic=False,
-                meta=SocketSpecMeta(call_role=CallRole.RETURN),
+                meta=SocketMeta(call_role=CallRole.RETURN),
             )
 
         # Otherwise, infer from return annotation / metadata
@@ -1060,7 +1011,7 @@ class SocketSpecAPI:
                 return replace(leaf, meta=replace(leaf.meta, call_role=CallRole.RETURN))
             return cls._wrap_leaf_as_ns(leaf)
 
-        leaf = SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketSpecMeta())
+        leaf = SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketMeta())
         leaf = _apply_select_from_annotation(ret, leaf)
         leaf = replace(leaf, meta=_merge_all_meta_from_annotation(ret, leaf.meta))
         return cls._wrap_leaf_as_ns(leaf)
@@ -1253,4 +1204,4 @@ infer_specs_from_callable = SocketSpecAPI.infer_specs_from_callable
 from_model = SocketSpecAPI.from_model
 # shorter aliases
 select = SocketSpecSelect
-meta = SocketSpecMeta
+meta = SocketMeta

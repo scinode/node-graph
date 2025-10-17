@@ -133,7 +133,7 @@ def test_meta_overlay_required_is_metadata():
         x=Annotated[
             dict,
             base,
-            ss.SocketSpecMeta(required=True, is_metadata=True, help="top-level ns"),
+            ss.SocketMeta(required=True, is_metadata=True, help="top-level ns"),
         ]
     ).fields["x"]
 

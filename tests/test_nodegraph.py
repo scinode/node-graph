@@ -229,4 +229,4 @@ def test_build_inputs_outputs(ng):
     assert "x" in ng.inputs.c
     assert "sum" in ng.outputs
     assert "sum" in ng.outputs.nested
-    assert ng.inputs._metadata.sub_socket_default_link_limit == 1000000
+    assert ng.inputs._metadata.child_default_link_limit == 1000000

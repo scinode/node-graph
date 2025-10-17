@@ -11,7 +11,7 @@ from node_graph.socket_spec import (
     _annotated_parts,
     _unwrap_annotated,
     _extract_spec_from_annotated,
-    SocketSpecMeta,
+    SocketMeta,
     SocketSpec,
     SocketView,
 )
@@ -44,13 +44,13 @@ def test_is_union_origin_pep604_union():
 
 
 def test_is_annotated_type_direct():
-    T = Annotated[int, SocketSpecMeta("m")]
+    T = Annotated[int, SocketMeta("m")]
     assert _is_annotated_type(T) is True
     assert _is_annotated_type(int) is False
 
 
 def test_find_first_annotated_direct_and_nested_in_union():
-    A = Annotated[int, SocketSpecMeta("m1")]
+    A = Annotated[int, SocketMeta("m1")]
     assert _find_first_annotated(A) is A
 
     T = Union[str, A]
@@ -66,14 +66,14 @@ def test_find_first_annotated_direct_and_nested_in_union():
     not _has_pep604_union(), reason="PEP 604 unions not available before Python 3.10"
 )
 def test_find_first_annotated_nested_in_pep604_union():
-    A = Annotated[int, SocketSpecMeta("m")]
+    A = Annotated[int, SocketMeta("m")]
     T = str | A
     found = _find_first_annotated(T)
     assert found is A
 
 
 def test_annotated_parts_base_and_metadata_order():
-    m1 = SocketSpecMeta("m1")
+    m1 = SocketMeta("m1")
     sv = SocketView("sv_spec")
     sp = SocketSpec("plain_spec")
 
@@ -86,12 +86,12 @@ def test_annotated_parts_base_and_metadata_order():
     assert metas[2] is sp
 
 
-def test_unwrap_annotated_picks_SocketSpecMeta():
-    m = SocketSpecMeta(help="testing")
+def test_unwrap_annotated_picks_SocketMeta():
+    m = SocketMeta(help="testing")
     A = Annotated[int, "x", m, 123]
     base, meta = _unwrap_annotated(A)
     assert base is int
-    assert isinstance(meta, SocketSpecMeta)
+    assert isinstance(meta, SocketMeta)
     assert meta.help == "testing"
 
     # No Annotated case

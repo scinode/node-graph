@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, Literal
 from copy import deepcopy
 from node_graph.socket_spec import SocketSpec
 from node_graph.orm.mapping import type_mapping as default_type_mapping
-from node_graph.socket import SocketMetadata
+from node_graph.socket_meta import SocketMeta
 from dataclasses import MISSING
 
 
@@ -61,9 +61,9 @@ def runtime_meta_from_spec(
     link_limit_for_dynamic: int = 1_000_000,
     extra_overrides: Optional[Dict[str, Any]] = None,
     type_mapping: Dict[str, Any] = None,
-) -> SocketMetadata:
+) -> SocketMeta:
     """
-    Convert an author-time SocketSpec to runtime SocketMetadata (engine-facing).
+    Convert an author-time SocketSpec to runtime SocketMeta (engine-facing).
     Also emits a shape snapshot into `extras` so tests and UIs can introspect:
       - extras["identifier"]
       - extras["sockets"] for fixed namespace fields
@@ -72,45 +72,32 @@ def runtime_meta_from_spec(
       - extras["widget"] when present on the spec
     """
     type_mapping = type_mapping or default_type_mapping
-    md: Dict[str, Any] = {}
+    is_namespace = spec.identifier == type_mapping["namespace"]
+    child_link_limit = spec.meta.child_default_link_limit
+    if child_link_limit is None:
+        child_link_limit = link_limit_for_dynamic if spec.dynamic else 1
 
-    # required
-    if spec.meta.required is not None:
-        md["required"] = bool(spec.meta.required)
-    # is_metadata
-    if spec.meta.is_metadata is not None:
-        md["is_metadata"] = bool(spec.meta.is_metadata)
-
-    # namespace features
-    if spec.identifier == type_mapping["namespace"]:
-        md["dynamic"] = bool(spec.dynamic)
-        md["sub_socket_default_link_limit"] = (
-            link_limit_for_dynamic if spec.dynamic else 1
-        )
-        md["sub_socket_default_link_limit"] = spec.meta.sub_socket_default_link_limit
-
-    # runtime-only flags
-    md["builtin_socket"] = bool(is_builtin)
-    md["function_socket"] = bool(function_generated)
-
-    # roles
     chosen_role = (
-        arg_role
-        or getattr(spec.meta, "call_role", None)
-        or ("kwargs" if role == "input" else "return")
+        arg_role or spec.meta.call_role or ("kwargs" if role == "input" else "return")
     )
-    md["socket_type"] = "INPUT" if role == "input" else "OUTPUT"
-    md["arg_type"] = chosen_role
 
     extras: Dict[str, Any] = _spec_shape_snapshot(spec, type_mapping=type_mapping)
-
-    if spec.meta.widget is not None:
-        extras["widget"] = spec.meta.widget
+    extras.update({k: v for k, v in spec.meta.extras.items() if k not in extras})
 
     if extra_overrides:
         extras.update(extra_overrides)
 
-    if extras:
-        md["extras"] = extras
+    extras.setdefault("builtin_socket", bool(is_builtin))
+    extras.setdefault("function_socket", bool(function_generated))
 
-    return SocketMetadata.from_raw(md)
+    return SocketMeta(
+        help=spec.meta.help,
+        required=spec.meta.required,
+        call_role=spec.meta.call_role,
+        is_metadata=spec.meta.is_metadata,
+        dynamic=bool(spec.dynamic) if is_namespace else False,
+        child_default_link_limit=child_link_limit,
+        socket_type="INPUT" if role == "input" else "OUTPUT",
+        arg_type=chosen_role,
+        extras=extras,
+    )
