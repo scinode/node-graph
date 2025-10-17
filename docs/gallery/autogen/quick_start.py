@@ -46,11 +46,11 @@ ng.to_html()
 # %%
 # Engines and provenance
 # Run graphs directly in Python:
-from node_graph_engine.parsl import ParslEngine
+from node_graph.engine.direct import DirectEngine
 
 graph = AddMultiply.build(x=1, y=2, z=3)
 
-engine = ParslEngine()
+engine = DirectEngine()
 results = engine.run(graph)
 print("results:", results)
 

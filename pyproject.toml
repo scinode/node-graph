@@ -31,7 +31,8 @@ dependencies = [
     "node-graph-widget",
     "wrapt",
     "typing_extensions>=4.7; python_version < '3.11'",
-    'pydantic~=2.6',
+    "pydantic~=2.6",
+    "pyyaml",
 ]
 
 [project.urls]
