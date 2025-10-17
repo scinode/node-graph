@@ -410,17 +410,10 @@ class SocketSpec:
         return d
 
     @classmethod
-    def from_dict(
-        cls, d: Dict[str, Any], *, type_mapping: Optional[dict] = None
-    ) -> "SocketSpec":
+    def from_dict(cls, d: Dict[str, Any]) -> "SocketSpec":
         meta = SocketSpecMeta(**d.get("meta", {}))
-        item = (
-            cls.from_dict(d["item"], type_mapping=type_mapping) if "item" in d else None
-        )
-        fields = {
-            k: cls.from_dict(v, type_mapping=type_mapping)
-            for k, v in d.get("fields", {}).items()
-        }
+        item = cls.from_dict(d["item"]) if "item" in d else None
+        fields = {k: cls.from_dict(v) for k, v in d.get("fields", {}).items()}
         default = d.get("default", MISSING)
         return cls(
             identifier=d["identifier"],
@@ -628,9 +621,13 @@ class SocketSpecAPI:
         return replace(spec, fields=new_fields)
 
     @classmethod
-    def dynamic(cls, item_type: Any, /, **fixed) -> SocketSpec:
+    def dynamic(cls, item_type: Any = None, /, **fixed) -> SocketSpec:
         base = cls.namespace(**fixed)
         base = replace(base, dynamic=True)
+
+        if item_type is None:
+            return base
+
         T, _ = _unwrap_annotated(item_type)
         # Pydantic model
         leaf_override = _annot_is_leaf_marker(item_type)

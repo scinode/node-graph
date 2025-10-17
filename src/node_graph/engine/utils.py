@@ -254,7 +254,6 @@ def parse_outputs(
     """
     fields = spec.fields or {}
     is_dyn = bool(spec.dynamic)
-    item_spec = spec.item if is_dyn else None
 
     # tuple -> map by order of fixed field names
     if isinstance(results, tuple):
@@ -298,10 +297,6 @@ def parse_outputs(
                     return None
         # dynamic items
         if is_dyn:
-            if item_spec is None:
-                print(
-                    "Outputs marked dynamic but missing 'item' schema; treating as ANY."
-                )
             for name, value in remaining.items():
                 outs[name] = value
             return outs

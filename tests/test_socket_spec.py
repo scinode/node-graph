@@ -6,6 +6,7 @@ from typing import Any, Annotated
 from node_graph import node
 from dataclasses import dataclass, MISSING
 from pydantic import BaseModel
+from node_graph.materialize import runtime_meta_from_spec
 
 
 def test_namespace_build_and_roundtrip():
@@ -42,6 +43,17 @@ def test_dynamic_namespace_and_item_view():
     assert isinstance(view.fixed1, ss.SocketView)
     with pytest.raises(AttributeError):
         _ = view.missing
+
+
+def test_dynamic_namespace_without_item_type():
+    tm = type_mapping
+    dyn = ss.dynamic()
+    assert dyn.identifier == tm["namespace"]
+    assert dyn.dynamic is True
+    assert dyn.item is None
+
+    meta = runtime_meta_from_spec(dyn, role="input")
+    assert meta.extras["item"] is None
 
 
 def test_select_include_exclude_prefix_rename():
