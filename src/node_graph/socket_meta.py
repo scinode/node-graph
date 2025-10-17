@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping as AbcMapping, Sequence, Set
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -32,9 +33,53 @@ class SocketMeta:
     arg_type: Optional[str] = None
     extras: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:  # pragma: no cover - simple defensive copy
+    def __post_init__(self) -> None:
         # Always operate on a shallow copy so callers can mutate extras freely.
         self.extras = dict(self.extras)
+
+    def __hash__(self) -> int:
+        """Freezing nested extras into stable, hashable tuples so Annotated
+        metadata remains compatible with PEP 604 unions on Python 3.10."""
+
+        return hash(
+            (
+                self.help,
+                self.required,
+                self.call_role,
+                self.is_metadata,
+                self.dynamic,
+                self.child_default_link_limit,
+                self.socket_type,
+                self.arg_type,
+                self._freeze_extras(self.extras),
+            )
+        )
+
+    @classmethod
+    def _freeze_extras(cls, extras: Dict[str, Any]) -> tuple[Any, ...]:
+        if not extras:
+            return ()
+        return tuple(
+            sorted((key, cls._freeze_value(value)) for key, value in extras.items())
+        )
+
+    @classmethod
+    def _freeze_value(cls, value: Any) -> Any:
+        if isinstance(value, AbcMapping):
+            return tuple(sorted((k, cls._freeze_value(v)) for k, v in value.items()))
+        if isinstance(value, (list, tuple, Sequence)) and not isinstance(
+            value, (str, bytes, bytearray, memoryview)
+        ):
+            return tuple(cls._freeze_value(v) for v in value)
+        if isinstance(value, (set, frozenset, Set)):
+            return tuple(sorted(cls._freeze_value(v) for v in value))
+        if isinstance(value, Enum):
+            return value.value
+        try:
+            hash(value)
+        except TypeError:
+            return repr(value)
+        return value
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {}
