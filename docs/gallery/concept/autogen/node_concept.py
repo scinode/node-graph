@@ -2,53 +2,16 @@
 Node
 ====
 
-This tutorial introduces the general features of a ``Node`` in the
-``node_graph`` framework.
+This tutorial introduces the general features of a ``Node`` in the ``node_graph`` framework.
 
-A node can have the following features:
-
-- metadata, for example name, state, type
-- properties (optional)
-- input and output sockets (optional)
-- executor, a function or class that processes node data
 """
-
 # %%
-# Metadata
-# --------
-#
-# Each node has metadata such as:
-#
-# - ``identifier``: identifier of this node class
-# - ``name``: name of this node
-#
-# In the following example we create a simple node graph and add two float nodes.
-
-from node_graph import NodeGraph
-
-# identifier: node_graph.test_float, name: float1
-ng = NodeGraph(name="test_node")
-node1 = ng.add_node("node_graph.test_float", name="float1")
-node2 = ng.add_node("node_graph.test_float", name="float2")
-print(f"Created nodes: {node1}, {node2}")
-
-# %%
-# Executor
-# --------
-#
-# An executor is a Python class or function for processing node data.
-# It uses the node properties, inputs, outputs and context information
-# as positional and keyword arguments.
-#
-#
 # Define and register a custom node with a decorator
 # --------------------------------------------------
 #
 # You can register a function as a ``Node`` with a decorator.
-# The decorator creates the ``Node`` that uses the function as its executor
-# and adds it to the node list.
 
-from node_graph import node
+from node_graph import node, NodeGraph
 
 
 @node(
@@ -67,58 +30,76 @@ ng2.to_html()
 # %%
 # Define a custom node class
 # --------------------------
-#
 # You can also define a new node by extending the ``Node`` class.
+# This is useful when you want to create a node with dynamic inputs/outputs based on properties.
+from node_graph import Node, namespace
+from node_graph.node_spec import NodeSpec
+from node_graph.executor import RuntimeExecutor
 
-from node_graph import Node
 
+class MyNode(Node):
 
-class TestAdd(Node):
-    """TestAdd
-
-    Inputs:
-       t (int): delay time in seconds
-       x (float)
-       y (float)
-
-    Outputs:
-       Result (float)
-    """
-
-    identifier: str = "TestAdd"
-    name = "TestAdd"
-    catalog = "Test"
+    _default_spec = NodeSpec(
+        identifier="my_package.nodes.my_node",
+        catalog="Test",
+        inputs=namespace(),
+        outputs=namespace(
+            result=object,
+        ),
+        executor=RuntimeExecutor.from_callable(pow),
+        base_class_path="my_package.nodes.MyNode",
+    )
 
     def create_properties(self):
         self.add_property("node_graph.int", "t", default=1)
+        self.add_property(
+            "node_graph.enum",
+            "function",
+            default="pow",
+            options=[
+                ["pow", "pow", "pow function"],
+                ["sqrt", "sqrt", "sqrt function"],
+            ],
+            update=self.update_spec,
+        )
 
     def update_spec(self):
-        self.inputs._clear()
-        self.outputs._clear()
-        self.add_input("node_graph.float", "x")
-        self.add_input("node_graph.float", "y")
-        self.add_output("node_graph.float", "Result")
+        """Callback to update the node spec when properties change."""
+        import importlib
+        from dataclasses import replace
 
-    def get_executor(self):
-        executor = {
-            "module_path": "node_graph.executors.test.test_add",
-        }
-        return executor
-
-
-print("Defined custom node class TestAdd with identifier:", TestAdd.identifier)
-
-# %%
-# Use node
-# --------
-#
-# Create a node inside a ``NodeGraph``, set inputs, copy it, and append it.
-
-ng3 = NodeGraph(name="test_node_usage")
-float1 = ng3.add_node("node_graph.test_float", name="float1", value=5)
+        if self.properties["function"].value in ["pow"]:
+            input_spec = namespace(
+                x=float,
+                y=float,
+            )
+        elif self.properties["function"].value in ["sqrt"]:
+            input_spec = namespace(
+                x=float,
+            )
+        func = getattr(
+            importlib.import_module("math"),
+            self.properties["function"].content,
+        )
+        executor = RuntimeExecutor.from_callable(func)
+        self.spec = replace(self.spec, inputs=input_spec, executor=executor)
+        self._materialize_from_spec()
 
 
 # %%
-# .. autoclass:: node_graph.node.Node
-#    :members:
+# Entry point
+# -----------
 #
+# One can register the custom node so that it can be used by its identifier in a node graph.
+#
+# .. code-block:: bash
+#
+#     [project.entry-points."node_graph.node"]
+#     "my_package.my_node" = "my_package.nodes:MyNode"
+#
+# Then you can create the node by its identifier:
+#
+# .. code-block:: python
+#
+#    ng = NodeGraph(name="test_node_usage")
+#    float1 = ng.add_node("my_package.my_node", name="float1", value=5)

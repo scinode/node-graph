@@ -156,10 +156,6 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             )
         return self._widget
 
-    @classmethod
-    def generate_name(cls) -> str:
-        cls.get_executor()["callable_name"]
-
     def add_property(self, identifier: str, name: str, **kwargs) -> Any:
         prop = self.properties._new(identifier, name, **kwargs)
         return prop

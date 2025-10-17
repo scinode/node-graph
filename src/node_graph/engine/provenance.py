@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from node_graph.socket import TaggedValue
@@ -242,21 +243,97 @@ class ProvenanceRecorder:
             f.write(dot)
         return path
 
-    def to_graphviz_svg(self) -> str:
+    def generate_graph(self):
+        """
+        Return a ``graphviz.Source`` object representing the provenance graph.
+        """
         try:
             from graphviz import Source
         except ImportError as exc:
             raise RuntimeError(
-                "graphviz package is required to export SVG provenance diagrams."
+                "graphviz package is required to visualize provenance graphs."
             ) from exc
-        dot = self.to_graphviz()
-        return Source(dot).pipe(format="svg").decode("utf-8")
+        return Source(self.to_graphviz())
+
+    def to_graphviz_svg(self) -> str:
+        graph = self.generate_graph()
+        return graph.pipe(format="svg").decode("utf-8")
 
     def save_graphviz_svg(self, path: str):
         svg = self.to_graphviz_svg()
         with open(path, "w", encoding="utf-8") as f:
             f.write(svg)
         return path
+
+    def _repr_svg_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
+        """SVG representation for rich notebook outputs."""
+        try:
+            return self.to_graphviz_svg()
+        except RuntimeError:
+            return None
+
+    def _repr_html_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
+        """
+        HTML fallback when SVG repr is unavailable or the graphviz dependency is
+        missing.  Returning ``None`` defers to other representations.
+        """
+        svg = self._repr_svg_()
+        if svg is None:
+            return None
+        return f'<div class="node-graph-provenance">{svg}</div>'
+
+    def to_html(self, title: Optional[str] = None) -> str:
+        """Return an HTML document that embeds the rendered provenance graph."""
+        svg = self.to_graphviz_svg()
+        page_title = title or f"{self.workflow_name} provenance"
+        return """<!DOCTYPE html>\n""" + "\n".join(
+            [
+                '<html lang="en">',
+                "  <head>",
+                '    <meta charset="utf-8" />',
+                f"    <title>{page_title}</title>",
+                "    <style>",
+                "      body {",
+                "        font-family: Helvetica, Arial, sans-serif;",
+                "        background-color: #f9f9fb;",
+                "        margin: 0;",
+                "        padding: 1.5rem;",
+                "        color: #212121;",
+                "      }",
+                "      .container {",
+                "        background-color: #ffffff;",
+                "        padding: 1.5rem;",
+                "        border-radius: 12px;",
+                "        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);",
+                "        overflow-x: auto;",
+                "      }",
+                "      h1 {",
+                "        font-size: 1.5rem;",
+                "        margin-top: 0;",
+                "        margin-bottom: 1rem;",
+                "      }",
+                "      svg {",
+                "        max-width: 100%;",
+                "        height: auto;",
+                "      }",
+                "    </style>",
+                "  </head>",
+                "  <body>",
+                '    <div class="container">',
+                f"      <h1>{page_title}</h1>",
+                f"{svg}",
+                "    </div>",
+                "  </body>",
+                "</html>",
+            ]
+        )
+
+    def save_html(self, path: str, title: Optional[str] = None):
+        html = self.to_html(title=title)
+        path_obj = Path(path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        path_obj.write_text(html, encoding="utf-8")
+        return str(path_obj)
 
     @staticmethod
     def _edge_attributes(

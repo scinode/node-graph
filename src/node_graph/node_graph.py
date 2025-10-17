@@ -10,7 +10,7 @@ from node_graph.node import Node
 from node_graph.socket import NodeSocket
 from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
-from .config import BuiltinPolicy, BUILTIN_NODES
+from .config import BuiltinPolicy, BUILTIN_NODES, MAX_LINK_LIMIT
 from .mixins import IOOwnerMixin, WidgetRenderableMixin
 from dataclasses import dataclass
 from dataclasses import replace
@@ -28,7 +28,7 @@ class GraphSpec:
     def __post_init__(self):
         # ctx should be dynamic
         if self.ctx is not None and not self.ctx.dynamic:
-            self.ctx = replace(self.ctx, dynamic=True)
+            object.__setattr__(self, "ctx", replace(self.ctx, dynamic=True))
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {"schema_source": self.schema_source}
@@ -139,7 +139,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         inputs = self._SOCKET_SPEC_API.validate_socket_data(inputs)
         # if inputs is None, we assume it's a dynamic inputs
         inputs = self._SOCKET_SPEC_API.dynamic() if inputs is None else inputs
-        meta = replace(inputs.meta, child_default_link_limit=1000000)
+        meta = replace(inputs.meta, child_default_link_limit=MAX_LINK_LIMIT)
         inputs = replace(inputs, meta=meta)
         outputs = self._SOCKET_SPEC_API.validate_socket_data(outputs)
         # if outputs is None, we assume it's a dynamic outputs
@@ -223,6 +223,9 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         """Set context node."""
         self.graph_ctx.inputs._clear()
         self.graph_ctx.inputs._set_socket_value(value)
+
+    def update_ctx(self, value: Dict[str, Any]) -> None:
+        self.ctx._set_socket_value(value)
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from nodes."""

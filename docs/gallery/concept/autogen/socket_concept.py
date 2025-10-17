@@ -25,7 +25,7 @@ float1 = ng.add_node("node_graph.test_float", name="float1")
 float2 = ng.add_node("node_graph.test_float", name="float2")
 
 # connect output of float1 to input of float2
-ng.add_link(float1.outputs.float, float2.inputs.value)
+ng.add_link(float1.outputs.result, float2.inputs.value)
 
 # %%
 # Data type
@@ -91,16 +91,3 @@ print("Custom node with Any socket and property:", node.inputs.symbols.value)
 # Users can update sockets dynamically based on a property value
 # using an ``update`` callback. For details, see the :ref:`dynamic_socket`
 # page in the documentation.
-
-
-# %%
-# API reference
-# -------------
-#
-# In the narrative documentation you would include:
-#
-# .. automodule:: node_graph.socket
-#    :members:
-#
-# .. automodule:: node_graph.sockets.built_in
-#    :members:
