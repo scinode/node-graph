@@ -128,7 +128,11 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
                 self._REGISTRY.socket_pool.any,
                 WAIT_SOCKET_NAME,
                 link_limit=MAX_LINK_LIMIT,
-                metadata={"arg_type": "none", "builtin_socket": True},
+                metadata={
+                    "required": False,
+                    "arg_type": "none",
+                    "builtin_socket": True,
+                },
             )
         if (
             self._BUILTINS_POLICY.default_output
@@ -137,14 +141,14 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             self.add_output(
                 self._REGISTRY.socket_pool.any,
                 OUTPUT_SOCKET_NAME,
-                metadata={"builtin_socket": True},
+                metadata={"required": False, "builtin_socket": True},
             )
         if self._BUILTINS_POLICY.output_wait and WAIT_SOCKET_NAME not in self.outputs:
             self.add_output(
                 self._REGISTRY.socket_pool.any,
                 WAIT_SOCKET_NAME,
                 link_limit=MAX_LINK_LIMIT,
-                metadata={"arg_type": "none", "builtin_socket": True},
+                metadata={"required": False, "builtin_socket": True},
             )
 
     @property
