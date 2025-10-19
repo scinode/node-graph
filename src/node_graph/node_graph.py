@@ -706,3 +706,10 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
 
     def __exit__(self, exc_type, exc, tb):
         return self.___ctx.__exit__(exc_type, exc, tb)
+
+    def run(self) -> None:
+        """Runs the node graph."""
+        from node_graph.engine.direct import DirectEngine
+
+        self.engine = DirectEngine()
+        return self.engine.run(self)

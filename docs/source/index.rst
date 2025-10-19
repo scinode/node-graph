@@ -33,6 +33,7 @@ The simplest way to install node_graph is to use pip.
    :caption: Contents:
 
    autogen/quick_start
+   autogen/annotate_inputs_outputs
    concept/index
    yaml
    customize

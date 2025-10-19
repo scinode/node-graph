@@ -554,7 +554,7 @@ def test_dynamic_pydantic_model():
 
     result = ss.from_model(Squares)
     assert result.dynamic is True
-    assert result.item.identifier == "node_graph.any"
+    assert result.item is None
 
     class Squares2(BaseModel):
         model_config = {"extra": "allow", "item_type": int}
@@ -631,7 +631,7 @@ def test_dynamic_dataclass_model():
 
     result = ss.from_model(SquaresDC)
     assert result.dynamic is True
-    assert result.item.identifier == "node_graph.any"
+    assert result.item is None
 
     @dataclass
     class Squares2DC:

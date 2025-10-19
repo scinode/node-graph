@@ -7,6 +7,8 @@ build:
   jobs:
     post_create_environment:
       - python -m pip install --no-cache-dir .[docs]
+  apt_packages:
+    - graphviz   # needed for the `dot` executable
 
 # Build from the docs/ directory with Sphinx
 sphinx:

@@ -454,9 +454,7 @@ def _struct_is_leaf(model_or_ann: Any) -> bool:
 
 def _struct_dynamic_item_type(model_cls: type[BaseModel]) -> Any:
     cfg = _struct_cfg(model_cls)
-    if "item_type" in cfg:
-        return cfg["item_type"] or Any
-    return Any
+    return cfg.get("item_type")
 
 
 def _annot_is_leaf_marker(ann_like: Any) -> Optional[Any]:
@@ -651,7 +649,9 @@ class SocketSpecAPI:
                         child = replace(child, default=getattr(model_field, "default"))
                     ns.fields[name] = child
                 item_t = _struct_dynamic_item_type(model_cls)
-                ns = replace(ns, item=cls._child_spec_from_type(item_t))
+                ns = replace(
+                    ns, item=cls._child_spec_from_type(item_t) if item_t else None
+                )
                 return ns
 
             # regular Pydantic (non-dynamic)
@@ -689,7 +689,9 @@ class SocketSpecAPI:
                     ns.fields[f.name] = child
 
                 item_t = _struct_dynamic_item_type(model_cls)
-                ns = replace(ns, item=cls._child_spec_from_type(item_t))
+                ns = replace(
+                    ns, item=cls._child_spec_from_type(item_t) if item_t else None
+                )
                 return ns
 
             # regular dataclass (non-dynamic)
