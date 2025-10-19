@@ -1,15 +1,15 @@
 from __future__ import annotations
-from typing import Any, List, Protocol
+from typing import List, Protocol
 from node_graph.collection import DependencyCollection
-from .socket import BaseSocket
+from .socket import BaseSocket, NodeSocketNamespace
 from .socket_spec import SocketSpec, add_spec_field
 from .node_spec import SchemaSource
 from dataclasses import replace
 
 
 class _HasSocketNamespaces(Protocol):
-    inputs: Any
-    outputs: Any
+    inputs: NodeSocketNamespace
+    outputs: NodeSocketNamespace
 
 
 class IOOwnerMixin(_HasSocketNamespaces):

@@ -20,6 +20,13 @@ def test_base_node():
     assert n1.name == "n1"
 
 
+def test_builtin_sockets():
+    node = Node()
+    assert "_wait" in node.inputs
+    assert "_outputs" in node.outputs
+    assert node.inputs._wait._metadata.required is False
+
+
 def test_id_name():
 
     ng = NodeGraph(name="test_id_name")
