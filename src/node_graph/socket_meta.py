@@ -24,7 +24,7 @@ class SocketMeta:
     """Metadata describing a socket at authoring or runtime."""
 
     help: Optional[str] = None
-    required: Optional[bool] = None
+    required: Optional[bool] = True
     call_role: Optional[CallRole] = None
     is_metadata: bool = False
     dynamic: bool = False

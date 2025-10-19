@@ -151,7 +151,7 @@ def test_metadata():
     assert socket.property.default == 1
     data = socket._to_dict()
     assert data["metadata"] == {
-        "required": False,
+        "required": True,
         "dynamic": True,
         "child_default_link_limit": 1,
         "socket_type": "INPUT",
