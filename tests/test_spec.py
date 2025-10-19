@@ -79,7 +79,7 @@ def test_dynamic_of_namespace_rows():
     # dynamic where each entry is a small namespace
     assert n.outputs._metadata.dynamic is True
     print(n.outputs._metadata)
-    assert "val" in n.outputs._metadata.extras["item"]["sockets"]
+    assert "val" in n.outputs._metadata.extras["item"]["fields"]
 
 
 def test_dynamic_with_fixed_fields_in_same_namespace():

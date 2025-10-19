@@ -339,6 +339,25 @@ def test_dynamic_namespace(node_with_namespace_socket):
     assert "sub" in n.inputs.dynamic.not_exit
 
 
+def test_dynamic_namespace_set_value(node_with_namespace_socket):
+    n = node_with_namespace_socket
+    # dynamic outputs
+    n.outputs._set_socket_value(
+        {
+            "sum": 10,
+            "product": 20,
+            "dynamic": {
+                "item1": {"sum": 1, "product": 2},
+                "item2": {"sum": 3, "product": 4},
+            },
+        }
+    )
+    assert n.outputs.sum.value == 10
+    assert n.outputs.product.value == 20
+    assert "item1" in n.outputs.dynamic
+    assert n.outputs.dynamic.item1.sum.value == 1
+
+
 def test_dynamic_namespace_without_explicit_item_creates_nested():
     metadata = {
         "dynamic": True,
