@@ -6,6 +6,14 @@ Quick Start
 """
 
 # %%
+# Installation
+# ==================
+# Let's first install ``node-graph`` via pip:
+#
+# .. code:: console
+#
+#    $ pip install node-graph
+#
 # First workflow
 # ==================
 # Suppose we want to calculate ``(x + y) * z`` in two steps.
