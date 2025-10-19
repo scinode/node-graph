@@ -20,7 +20,6 @@ def _spec_shape_snapshot(
       Namespace:
         {
           "identifier": "...",
-          "sockets": { name: <snapshot>, ... },      # if fixed fields
           "dynamic": true,                           # if dynamic
           "item": <snapshot>,                        # if dynamic (item present)
         }
@@ -29,18 +28,11 @@ def _spec_shape_snapshot(
     d: Dict[str, Any] = {"identifier": spec.identifier}
 
     if spec.identifier == type_mapping["namespace"]:
-        # fixed fields
-        if spec.fields:
-            d["sockets"] = {
-                k: _spec_shape_snapshot(v, type_mapping=type_mapping)
-                for k, v in spec.fields.items()
-            }
-
         # dynamic behavior
         if spec.dynamic:
             d["dynamic"] = True
             if spec.item is not None:
-                d["item"] = _spec_shape_snapshot(spec.item, type_mapping=type_mapping)
+                d["item"] = spec.item.to_dict()
             else:
                 d["item"] = None
     else:

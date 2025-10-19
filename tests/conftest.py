@@ -1,23 +1,29 @@
 import pytest
 from node_graph import NodeGraph, Node, node
-from node_graph.socket_spec import namespace as ns
+from node_graph.socket_spec import namespace as ns, dynamic as dyn
 from typing import Any
 from node_graph.nodes.tests import test_add, test_float
+from dataclasses import replace
 
 
 @pytest.fixture
 def node_with_namespace_socket():
     n = Node()
-    n.add_input("node_graph.float", "x")
-    n.add_input("node_graph.namespace", "non_dynamic")
-    n.add_input("node_graph.namespace", "non_dynamic.sub")
-    n.add_input("node_graph.float", "non_dynamic.sub.y")
-    n.add_input("node_graph.float", "non_dynamic.sub.z")
-    n.add_input("node_graph.namespace", "dynamic", metadata={"dynamic": True})
-    n.add_input("node_graph.float", "dynamic.x")
-    n.inputs.x.value = 1.0
-    n.inputs.non_dynamic.sub.y.value = 1.0
-    n.inputs.dynamic.x.value = 1.0
+    input_spec = ns(
+        x=float,
+        non_dynamic=ns(sub=ns(y=float, z=float)),
+        dynamic=dyn(x=float),
+    )
+    output_spec = ns(
+        sum=float,
+        product=float,
+        dynamic=dyn(ns(sum=float, product=float)),
+    )
+    n.spec = replace(n.spec, inputs=input_spec, outputs=output_spec)
+    n._materialize_from_spec()
+    n.inputs._set_socket_value(
+        {"x": 1.0, "non_dynamic": {"sub": {"y": 1.0}}, "dynamic": {"x": 1.0}}
+    )
     return n
 
 
