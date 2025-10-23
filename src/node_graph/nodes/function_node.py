@@ -45,10 +45,10 @@ class FunctionNode(Node):
         error_handlers = normalize_error_handlers(error_handlers)
         metadata = metadata or {}
         executor = RuntimeExecutor.from_callable(obj)
-        # if not importable, embed schema
-        schema_source = (
-            SchemaSource.HANDLE if executor.mode == "module" else SchemaSource.EMBEDDED
-        )
+        # We always use the EMBEDDED schema for the function node, but when storing the spec in the DB,
+        # we will check if the callable is a BaseHandler, and switch the schema_source to HANDLER accordingly.
+        # This avoids cyclic import.
+        schema_source = SchemaSource.EMBEDDED
         spec = NodeSpec(
             identifier=identifier or obj.__name__,
             schema_source=schema_source,

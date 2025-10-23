@@ -58,6 +58,9 @@ class NodeSpec:
           - embedded: store full spec under 'spec_schema'
           - module_handle: store only 'executor' (callable is a decorated handle)
         """
+        # override schema_source
+        if self.executor and isinstance(self.executor.callable, BaseHandle):
+            object.__setattr__(self, "schema_source", SchemaSource.HANDLE)
 
         data: Dict[str, Any] = {
             "schema_source": self.schema_source.value,

@@ -15,10 +15,22 @@ def test_build_node():
     ng = NodeGraph(name="test_create_node")
     task1 = ng.add_node(NodeCls, "add1")
     ndata = task1.to_dict()
-    assert ndata["spec"]["schema_source"] == SchemaSource.HANDLE
-    assert "inputs" not in task1.to_dict()["spec"]
+    assert ndata["spec"]["schema_source"] == SchemaSource.EMBEDDED
+    assert "inputs" in task1.to_dict()["spec"]
     assert len(ng.nodes) == 4
     "x" in ng.nodes[-1].inputs
+
+
+def test_importable_node():
+    object.__setattr__(test_add._spec, "schema_source", SchemaSource.EMBEDDED)
+    ng = NodeGraph(name="test_create_node")
+    task1 = ng.add_node(test_add, "add1")
+    assert task1.spec.schema_source == SchemaSource.EMBEDDED
+    # when store in db, we will check if the callable is a handle
+    # if yes, will override the schema source to HANDLE
+    ndata = task1.to_dict()
+    assert ndata["spec"]["schema_source"] == SchemaSource.HANDLE
+    assert "inputs" not in task1.to_dict()["spec"]
 
 
 def test_get_current_graph():
