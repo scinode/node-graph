@@ -491,6 +491,9 @@ class TaggedValue(wrapt.ObjectProxy):
         """
         return self.__wrapped__.__reduce_ex__(protocol)
 
+    def __repr__(self):
+        return f"TaggedValue({self.__wrapped__!r}, socket={self._socket!r}, uuid={self._uuid})"
+
 
 class BaseSocket:
     """Socket object for input and output sockets of a Node.
