@@ -1,21 +1,29 @@
 # NodeGraph
-[![PyPI version](https://badge.fury.io/py/node-graph.svg)](https://badge.fury.io/py/node-graph)
-[![CI](https://github.com/scinode/node-graph/actions/workflows/ci.yaml/badge.svg)](https://github.com/scinode/node-graph/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/scinode/node-graph/branch/main/graph/badge.svg)](https://codecov.io/gh/scinode/node-graph)
-[![Docs status](https://readthedocs.org/projects/node-graph/badge)](http://node-graph.readthedocs.io/)
 
+<div align="center">
+  <img src="docs/source/_static/images/node-graph-logo.png" alt="NodeGraph logo" width="220" />
 
+  <p><strong>Build and run data-driven workflows with clean provenance and a friendly node editor.</strong></p>
 
-A platform for designing node-based workflows.
+  <p>
+    <a href="https://badge.fury.io/py/node-graph"><img src="https://badge.fury.io/py/node-graph.svg" alt="PyPI version"></a>
+    <a href="https://github.com/scinode/node-graph/actions/workflows/ci.yaml"><img src="https://github.com/scinode/node-graph/actions/workflows/ci.yaml/badge.svg" alt="CI status"></a>
+    <a href="https://codecov.io/gh/scinode/node-graph"><img src="https://codecov.io/gh/scinode/node-graph/branch/main/graph/badge.svg" alt="codecov"></a>
+    <a href="https://node-graph.readthedocs.io/"><img src="https://readthedocs.org/projects/node-graph/badge" alt="Docs status"></a>
+  </p>
+</div>
+
+---
+
+NodeGraph is a Python toolkit for building and executing node-based workflows while collecting provenance for debugging, visualization, and audit trails.
 
 
 ```console
     pip install --upgrade --user node_graph
 ```
 
-
 ## Documentation
-Check the [docs](https://node-graph.readthedocs.io/en/latest/) and learn about the features.
+The [online docs](https://node-graph.readthedocs.io/en/latest/) walk through everything from quick starts to provenance export.
 
 ## Examples
 **A simple math calculation**
@@ -53,10 +61,8 @@ engine.recorder.save_graphviz_svg("add_multiply.svg")
 ```
 
 
-</div>
-
 <p align="center">
-<img src="docs/source/_static/images/add_multiply.svg" height="600" alt="Provenance Graph Example"/>
+<img src="docs/source/_static/images/add_multiply.svg" height="600" alt="Provenance graph example"/>
 </p>
 
 ## License
