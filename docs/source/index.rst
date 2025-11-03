@@ -1,31 +1,48 @@
-
 Welcome to NodeGraph's documentation!
-===========================================
+=====================================
 
-NodeGraph is an open-source platform for designing node-based workflows.
+.. image:: /_static/images/node-graph-logo.png
+   :alt: NodeGraph logo
+   :align: center
+   :width: 220px
 
-.. figure:: /_static/images/scinode-nodetree-introduction.png
-   :width: 12cm
+NodeGraph is an open-source platform for designing node-based workflows with provenance you can trust.
 
-.. code-block:: python
+**Why teams use NodeGraph**
 
-    from node_graph import NodeGraph
-    ng = NodeGraph(name="my_first_nodegraph")
-    float1 = ng.add_node("node_graph.test_float", value=2.0)
-    float2 = ng.add_node("node_graph.test_float", value=3.0)
-    add1 = ng.add_node("node_graph.test_add")
-    ng.add_link(float1.outputs[0], add1.inputs[0])
-    ng.add_link(float2.outputs[0], add1.inputs[1])
+- Python APIs for rapid workflow design
+- Rich provenance tracking for audits, debugging, and review
+- Flexible engines that run locally or plug into your own infrastructure
 
 
-Installation
-===========================================
+Getting started
+---------------
 
-The simplest way to install node_graph is to use pip.
+Install the core package with pip:
 
 .. code-block:: console
 
     pip install --upgrade --user node_graph
+
+
+Then spin up your first graph:
+
+.. code-block:: python
+
+    from node_graph import NodeGraph, node
+
+    @node()
+    def add(x, y):
+        return x + y
+
+    @node()
+    def multiply(x, y):
+        return x * y
+
+    @node.graph()
+    def AddMultiply(x, y, z):
+        the_sum = add(x=x, y=y).result
+        return multiply(x=the_sum, y=z).result
 
 
 .. toctree::
@@ -41,7 +58,6 @@ The simplest way to install node_graph is to use pip.
 
 Indices and tables
 ==================
-
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
