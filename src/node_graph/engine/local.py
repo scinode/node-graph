@@ -14,7 +14,7 @@ from .utils import (
 )
 
 
-class DirectEngine(BaseEngine):
+class LocalEngine(BaseEngine):
     """
     Sync, dependency-free runner with provenance:
 
@@ -24,10 +24,10 @@ class DirectEngine(BaseEngine):
     - Link semantics from utils: _wait, _outputs, and multi-fan-in bundling
     """
 
-    engine_kind = "direct"
+    engine_kind = "local"
 
     def __init__(
-        self, name: str = "direct-flow", recorder: Optional[ProvenanceRecorder] = None
+        self, name: str = "local-flow", recorder: Optional[ProvenanceRecorder] = None
     ):
         super().__init__(name, recorder)
         self._graph_pid: Optional[str] = None
@@ -123,7 +123,7 @@ class DirectEngine(BaseEngine):
         return _executor
 
     def _run_subgraph(self, node, sub_ng: NodeGraph, parent_pid: Optional[str]) -> None:
-        DirectEngine(name=f"{self.name}::{node.name}", recorder=self.recorder).run(
+        LocalEngine(name=f"{self.name}::{node.name}", recorder=self.recorder).run(
             sub_ng, parent_pid=parent_pid
         )
 

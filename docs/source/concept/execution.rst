@@ -1,27 +1,27 @@
 Execution engines
 =================
 
-NodeGraph ships with direct engine so you can run the graph locally in Python.
+NodeGraph ships with local engine so you can run the graph locally in Python.
 
-DirectEngine
+LocalEngine
 ------------
 
-``DirectEngine`` executes a graph synchronously in-process and records runtime provenance as it goes.
+``LocalEngine`` executes a graph synchronously in-process and records runtime provenance as it goes.
 
 .. code-block:: python
 
    from node_graph import NodeGraph, node
-   from node_graph.engine.direct import DirectEngine
+   from node_graph.engine.local import LocalEngine
 
    @node()
    def add(x: float, y: float) -> float:
        return x + y
 
-   ng = NodeGraph(name="direct-example")
+   ng = NodeGraph()
    left = ng.add_node(add, "left", x=1, y=2)
    ng.add_node(add, "right", x=3, y=left.outputs.result)
 
-   engine = DirectEngine(name="demo")
+   engine = LocalEngine(name="demo")
    results = engine.run(ng)
    print(results["right"]["result"])  # 6
 

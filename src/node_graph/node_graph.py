@@ -709,7 +709,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
 
     def run(self) -> None:
         """Runs the node graph."""
-        from node_graph.engine.direct import DirectEngine
+        from node_graph.engine.local import LocalEngine
 
-        self.engine = DirectEngine()
+        self.engine = LocalEngine()
         return self.engine.run(self)

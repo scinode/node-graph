@@ -54,11 +54,11 @@ ng.to_html()
 # %%
 # Engines and provenance
 # Run graphs directly in Python:
-from node_graph.engine.direct import DirectEngine
+from node_graph.engine.local import LocalEngine
 
 graph = AddMultiply.build(x=1, y=2, z=3)
 
-engine = DirectEngine()
+engine = LocalEngine()
 results = engine.run(graph)
 print("results:", results)
 

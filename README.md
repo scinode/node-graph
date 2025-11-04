@@ -41,14 +41,14 @@ def AddMultiply(x, y, z):
 ## Engines and provenance
 Explore different execution engines in [node-graph-engine](https://github.com/scinode/node-graph-engine).
 
-Run the above graph locally with the `DirectEngine` and export the provenance graph:
+Run the above graph locally with the `LocalEngine` and export the provenance graph:
 
 ```python
-from node_graph.engine.direct import DirectEngine
+from node_graph.engine.local import LocalEngine
 
 graph = AddMultiply.build(x=1, y=2, z=3)
 
-engine = DirectEngine()
+engine = LocalEngine()
 results = engine.run(graph)
 # export provenance for visualization
 engine.recorder.save_graphviz_svg("add_multiply.svg")
