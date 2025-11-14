@@ -32,10 +32,13 @@ class SocketMeta:
     socket_type: Optional[str] = None
     arg_type: Optional[str] = None
     extras: Dict[str, Any] = field(default_factory=dict)
+    semantics: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         # Always operate on a shallow copy so callers can mutate extras freely.
         self.extras = dict(self.extras)
+        if self.semantics is not None:
+            self.semantics = dict(self.semantics)
 
     def __hash__(self) -> int:
         """Freezing nested extras into stable, hashable tuples so Annotated
@@ -52,6 +55,9 @@ class SocketMeta:
                 self.socket_type,
                 self.arg_type,
                 self._freeze_extras(self.extras),
+                self._freeze_value(self.semantics)
+                if self.semantics is not None
+                else None,
             )
         )
 
@@ -101,6 +107,8 @@ class SocketMeta:
             data["arg_type"] = self.arg_type
         if self.extras:
             data["extras"] = deepcopy(self.extras)
+        if self.semantics is not None:
+            data["semantics"] = deepcopy(self.semantics)
         return data
 
     @classmethod
@@ -135,6 +143,11 @@ class SocketMeta:
             payload.update(meta_section)
 
         extras = dict(payload.pop("extras", {}))
+        semantics = payload.pop("semantics", None)
+        if semantics is None and "semantics" in extras:
+            semantics = extras.pop("semantics")
+        if semantics is not None:
+            semantics = dict(semantics)
         if "builtin_socket" in payload:
             extras.setdefault("builtin_socket", payload.pop("builtin_socket"))
         if "function_socket" in payload:
@@ -158,6 +171,7 @@ class SocketMeta:
                 payload["call_role"] = None
 
         payload["extras"] = extras
+        payload["semantics"] = semantics
 
         return cls(**payload)
 
@@ -167,6 +181,12 @@ def merge_meta(base: SocketMeta, overlay: SocketMeta) -> SocketMeta:
 
     extras: Dict[str, Any] = dict(base.extras)
     extras.update(overlay.extras)
+    if overlay.semantics is not None:
+        semantics: Optional[Dict[str, Any]] = dict(overlay.semantics)
+    elif base.semantics is not None:
+        semantics = dict(base.semantics)
+    else:
+        semantics = None
     return SocketMeta(
         help=overlay.help if overlay.help is not None else base.help,
         required=overlay.required if overlay.required is not None else base.required,
@@ -183,4 +203,5 @@ def merge_meta(base: SocketMeta, overlay: SocketMeta) -> SocketMeta:
         socket_type=overlay.socket_type or base.socket_type,
         arg_type=overlay.arg_type or base.arg_type,
         extras=extras,
+        semantics=semantics,
     )
