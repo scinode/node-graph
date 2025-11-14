@@ -606,6 +606,37 @@ def UseMeta(
         return consume_complex(data=data)
 
 
+# Attaching ontology semantics
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# When exchanging scientific data, it is often useful to attach ontology metadata to clarify
+# what a value represents. ``meta`` accepts a dedicated ``semantics=`` payload so you do not need
+# to funnel these details through ``extras``.
+
+
+@node()
+def AnnotateSemantics(
+    energy: float,
+) -> t.Annotated[
+    float,
+    meta(
+        semantics={
+            "label": "Potential energy",
+            "iri": "qudt:PotentialEnergy",
+            "rdf_types": ["qudt:QuantityValue"],
+            "context": {
+                "qudt": "http://qudt.org/schema/qudt/",
+                "qudt-unit": "http://qudt.org/vocab/unit/",
+            },
+            "attributes": {
+                "qudt:unit": "qudt-unit:EV",
+            },
+        }
+    ),
+]:
+    return energy
+
+
 # %%
 # Conclusion
 # ----------
