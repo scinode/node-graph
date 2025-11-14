@@ -606,6 +606,29 @@ def UseMeta(
         return consume_complex(data=data)
 
 
+# Attaching custom metadata
+# ~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# The ``meta`` helper also exposes a generic ``extras=`` dictionary if you need to carry
+# arbitrary metadata through the graph (for example, GUI hints or backend-specific flags).
+# These keys are preserved on the socket and available to downstream tooling.
+
+
+@node()
+def AnnotateExtras(
+    payload: dict,
+) -> t.Annotated[
+    dict,
+    meta(
+        extras={
+            "ui:panel": "energy-details",
+            "source": "user-provided",
+        }
+    ),
+]:
+    return payload
+
+
 # Attaching ontology semantics
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
