@@ -14,12 +14,10 @@ Use annotations to control data provenance
 # This process addresses two key aspects of provenance:
 #
 # - **Data creation**: How should data be created and stored? For example, if a task returns a nested dictionary,
-# should it be stored as a single entity or unpacked into separate nodes?
+#   should it be stored as a single entity or unpacked into separate nodes?
 # - **Data lineage**: Where does the data come from? How does it flow between tasks in the workflow?
 #
-# This guide will walk you through the various ways to annotate your tasks—using both the
-# native annotation helpers and **Pydantic models**.
-#
+# This guide will walk you through the various ways to annotate your tasks.
 
 import typing as t
 
@@ -608,7 +606,6 @@ def UseMeta(
 
 # Attaching custom metadata
 # ~~~~~~~~~~~~~~~~~~~~~~~~~
-#
 # The ``meta`` helper also exposes a generic ``extras=`` dictionary if you need to carry
 # arbitrary metadata through the graph (for example, GUI hints or backend-specific flags).
 # These keys are preserved on the socket and available to downstream tooling.
@@ -629,35 +626,9 @@ def AnnotateExtras(
     return payload
 
 
-# Attaching ontology semantics
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#
-# When exchanging scientific data, it is often useful to attach ontology metadata to clarify
-# what a value represents. ``meta`` accepts a dedicated ``semantics=`` payload so you do not need
-# to funnel these details through ``extras``.
-
-
-@node()
-def AnnotateSemantics(
-    energy: float,
-) -> t.Annotated[
-    float,
-    meta(
-        semantics={
-            "label": "Potential energy",
-            "iri": "qudt:PotentialEnergy",
-            "rdf_types": ["qudt:QuantityValue"],
-            "context": {
-                "qudt": "http://qudt.org/schema/qudt/",
-                "qudt-unit": "http://qudt.org/vocab/unit/",
-            },
-            "attributes": {
-                "qudt:unit": "qudt-unit:EV",
-            },
-        }
-    ),
-]:
-    return energy
+# %%
+# ``meta`` also accepts a ``semantics=`` payload to attach ontology metadata;
+# see :doc:`annotate_semantics` for a dedicated walkthrough.
 
 
 # %%
