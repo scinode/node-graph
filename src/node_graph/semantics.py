@@ -453,25 +453,6 @@ def attach_semantics(
     stored on the in-memory graph for later resolution by the engine.
     """
 
-    def _resolve_manual_semantics_value(value: Any) -> Any:
-        """Leave unresolved values intact; engines resolve node references later."""
-
-        if isinstance(value, dict):
-            resolved: Dict[str, Any] = {}
-            for key, nested in value.items():
-                processed = _resolve_manual_semantics_value(nested)
-                if processed is not None:
-                    resolved[key] = processed
-            return resolved
-        if isinstance(value, list):
-            resolved_list: List[Any] = []
-            for item in value:
-                processed = _resolve_manual_semantics_value(item)
-                if processed is not None:
-                    resolved_list.append(processed)
-            return resolved_list
-        return value
-
     if isinstance(subject_or_relation, str) and semantics is None:
         relation = subject_or_relation
         if not values:

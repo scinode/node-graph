@@ -1,6 +1,6 @@
 """
-Ontology-aware semantics
-========================
+Use annotations to capture ontology semantics
+=============================================
 
 NodeGraph captures structural provenance out of the box, but structural links
 do not explain what a piece of data *means*. Semantics add domain ontology
@@ -50,31 +50,28 @@ how NodeGraph stores semantics, and provides runnable examples.
 # what a value represents. ``meta`` accepts a dedicated ``semantics=`` payload so you do not need
 # to funnel these details through ``extras``.
 
-from typing import Annotated
+from typing import Annotated, Any
 from node_graph import node
 from node_graph.socket_spec import meta, namespace
 
+energy_semantics_meta = meta(
+    semantics={
+        "label": "Potential energy",
+        "iri": "qudt:PotentialEnergy",
+        "rdf_types": ["qudt:QuantityValue"],
+        "context": {
+            "qudt": "http://qudt.org/schema/qudt/",
+            "qudt-unit": "http://qudt.org/vocab/unit/",
+        },
+        "attributes": {
+            "qudt:unit": "qudt-unit:EV",
+        },
+    }
+)
+
 
 @node()
-def AnnotateSemantics(
-    energy: float,
-) -> Annotated[
-    float,
-    meta(
-        semantics={
-            "label": "Potential energy",
-            "iri": "qudt:PotentialEnergy",
-            "rdf_types": ["qudt:QuantityValue"],
-            "context": {
-                "qudt": "http://qudt.org/schema/qudt/",
-                "qudt-unit": "http://qudt.org/vocab/unit/",
-            },
-            "attributes": {
-                "qudt:unit": "qudt-unit:EV",
-            },
-        }
-    ),
-]:
+def AnnotateSemantics(energy: float) -> Annotated[float, energy_semantics_meta]:
     return energy
 
 
@@ -92,26 +89,25 @@ def compute_band_structure(structure):
     return 1.0
 
 
-@node.graph(
-    inputs=namespace(
-        structure=meta(
-            semantics={
-                "label": "Crystal structure",
-                "context": {"mat": "https://example.org/mat#"},
-                "relations": {
-                    "mat:hasProperty": [
-                        {
-                            "socket": "outputs.result",
-                            "label": "Band structure property",
-                            "context": {"mat": "https://example.org/mat#"},
-                        }
-                    ]
-                },
-            }
-        )
-    )
+structure_meta = meta(
+    semantics={
+        "label": "Crystal structure",
+        "context": {"mat": "https://example.org/mat#"},
+        "relations": {
+            "mat:hasProperty": [
+                {
+                    "socket": "outputs.result",
+                    "label": "Band structure property",
+                    "context": {"mat": "https://example.org/mat#"},
+                }
+            ]
+        },
+    }
 )
-def workflow(structure):
+
+
+@node.graph()
+def workflow(structure: Annotated[Any, structure_meta]):
     return compute_band_structure(structure=structure).result
 
 
@@ -134,7 +130,9 @@ def compute_density_of_states(structure):
 
 
 @node.graph()
-def workflow_with_runtime_semantics(structure):
+def workflow_with_runtime_semantics(
+    structure,
+) -> Annotated[dict, namespace(output_structure=Any, bands=Any, dos=Any)]:
     mutated = generate(structure=structure).result
     bands = compute_band_structure(structure=mutated).result
     dos = compute_density_of_states(structure=mutated).result

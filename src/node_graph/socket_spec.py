@@ -578,7 +578,7 @@ class SocketSpecAPI:
         if item_type is None:
             return base
 
-        T, _ = _unwrap_annotated(item_type)
+        T, spec_meta = _unwrap_annotated(item_type)
         # Pydantic model
         leaf_override = _annot_is_leaf_marker(item_type)
         if leaf_override is not None and _is_struct_model_type(leaf_override):
@@ -589,7 +589,9 @@ class SocketSpecAPI:
             item_spec = (
                 T
                 if isinstance(T, SocketSpec)
-                else SocketSpec(identifier=cls._map_identifier(T), meta=SocketMeta())
+                else SocketSpec(
+                    identifier=cls._map_identifier(T), meta=spec_meta or SocketMeta()
+                )
             )
 
         return replace(base, item=item_spec)
