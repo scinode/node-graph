@@ -51,6 +51,7 @@ Then spin up your first graph:
 
    autogen/quick_start
    autogen/annotate_inputs_outputs
+   autogen/annotate_semantics
    concept/index
    yaml
    customize

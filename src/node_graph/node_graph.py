@@ -12,6 +12,7 @@ from node_graph.link import NodeLink
 from node_graph.utils import yaml_to_dict
 from .config import BuiltinPolicy, BUILTIN_NODES, MAX_LINK_LIMIT
 from .mixins import IOOwnerMixin, WidgetRenderableMixin
+from node_graph.semantics import serialize_semantics_buffer
 from dataclasses import dataclass
 from dataclasses import replace
 
@@ -124,6 +125,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         self._init_graph_spec(inputs, outputs, ctx)
         if init_graph_level_nodes:
             self._init_graph_level_nodes()
+        self.semantics_buffer = {"relations": [], "payloads": []}
 
         self.state = "CREATED"
         self.action = "NONE"
@@ -408,6 +410,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             "links": links,
             "description": self.description,
         }
+        data["semantics_buffer"] = serialize_semantics_buffer(self.semantics_buffer)
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -511,6 +514,9 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             ng.add_node_from_dict(ndata)
 
         ng.links_from_dict(ngdata.get("links", []))
+        semantics_buffer = ngdata.get("semantics_buffer")
+        if semantics_buffer is not None:
+            ng.semantics_buffer = semantics_buffer
         return ng
 
     def add_node_from_dict(self, ndata: Dict[str, Any]) -> Node:
