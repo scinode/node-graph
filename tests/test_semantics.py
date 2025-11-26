@@ -4,10 +4,13 @@ from node_graph import node, namespace
 from node_graph import dynamic
 from node_graph.semantics import (
     NodeSemantics,
+    OntologyEnum,
     SemanticsAnnotation,
     SemanticsPayload,
     SemanticsRelation,
     SemanticsTree,
+    SemanticTag,
+    namespace_registry,
     _capture_semantics_value,
     _normalize_semantics_buffer,
     _socket_ref_from_value,
@@ -33,7 +36,13 @@ def test_attach_semantics_records_relations():
     target = graph.nodes["emit"].outputs.result
     source = graph.nodes["emit1"].outputs.result
 
-    attach_semantics("mat:hasProperty", target, source, label="Relation label")
+    attach_semantics(
+        target,
+        objects=source,
+        predicate="mat:hasProperty",
+        label="Relation label",
+        context={"mat": "https://example.org/mat#"},
+    )
 
     buffer = graph.semantics_buffer
     assert len(buffer["relations"]) == 1
@@ -45,6 +54,65 @@ def test_attach_semantics_records_relations():
     assert rel.values[0].node_name == "emit1"
     assert rel.subject.graph_uuid == graph.uuid
     assert rel.values[0].graph_uuid == graph.uuid
+
+
+def test_attach_relation_helper_orders_args():
+    graph = simple_graph.build()
+    target = graph.nodes["emit"].outputs.result
+    source = graph.nodes["emit1"].outputs.result
+
+    attach_semantics(
+        target,
+        objects=source,
+        predicate="emmo:hasProperty",
+        label="Relation label",
+        context={"emmo": "https://emmo.info/emmo#"},
+    )
+
+    buffer = graph.semantics_buffer
+    assert len(buffer["relations"]) == 1
+    rel = buffer["relations"][0]
+    assert isinstance(rel, SemanticsRelation)
+    assert rel.predicate == "emmo:hasProperty"
+    assert rel.subject == _socket_ref_from_value(target)
+
+
+def test_attach_semantics_with_predicate_kw():
+    graph = simple_graph.build()
+    target = graph.nodes["emit"].outputs.result
+    source = graph.nodes["emit1"].outputs.result
+
+    attach_semantics(
+        target,
+        objects=source,
+        predicate="emmo:hasProperty",
+        label="Relation label",
+        context={"emmo": "https://emmo.info/emmo#"},
+    )
+
+    buffer = graph.semantics_buffer
+    assert len(buffer["relations"]) == 1
+    rel = buffer["relations"][0]
+    assert isinstance(rel, SemanticsRelation)
+    assert rel.predicate == "emmo:hasProperty"
+
+
+def test_attach_annotation_helper_adds_payload():
+    graph = simple_graph.build()
+    subject = graph.nodes["emit"].outputs.result
+
+    attach_semantics(
+        subject,
+        semantics={"label": "Generated structure", "iri": "emmo:Material"},
+        socket_label="result",
+    )
+
+    buffer = graph.semantics_buffer
+    assert len(buffer["payloads"]) == 1
+    payload = buffer["payloads"][0]
+    assert isinstance(payload, SemanticsPayload)
+    assert payload.socket_label == "result"
+    assert payload.semantics["label"] == "Generated structure"
 
 
 def test_attach_semantics_records_payloads():
@@ -154,3 +222,29 @@ def test_semantics_annotation_to_jsonld():
     assert payload["@context"]["qudt"].endswith("qudt/")
     assert payload["qudt:unit"] == "qudt-unit:EV"
     assert payload["schema:isDefinedBy"]["@id"] == "http://example.org/def"
+
+
+def test_semantic_tag_autofills_context_and_attributes():
+    class EnergyTerms(OntologyEnum):
+        PotentialEnergy = "qudt:PotentialEnergy"
+        QuantityValue = "qudt:QuantityValue"
+
+    tag = SemanticTag(
+        label="Cohesive energy",
+        iri=EnergyTerms.PotentialEnergy,
+        rdf_types=(EnergyTerms.QuantityValue,),
+        attributes={"qudt:unit": "qudt-unit:EV"},
+    )
+    annotation = SemanticsAnnotation.from_raw(tag)
+    assert annotation is not None
+    assert annotation.iri == "qudt:PotentialEnergy"
+    assert annotation.attributes["qudt:unit"] == "qudt-unit:EV"
+    assert "qudt" in annotation.context and "qudt-unit" in annotation.context
+
+
+def test_default_namespace_registry_injects_missing_context():
+    ann = SemanticsAnnotation.from_raw({"iri": "prov:Entity"})
+    assert ann is not None
+    registry = namespace_registry()
+    assert all(prefix in registry for prefix in ("prov", "schema", "qudt"))
+    assert ann.context["prov"] == registry["prov"]
