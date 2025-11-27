@@ -8,11 +8,11 @@ import importlib
 from enum import Enum
 
 if TYPE_CHECKING:
-    from node_graph.node import Node
+    from node_graph.task import Task
 
 
 class SchemaSource(str, Enum):
-    """Defines how a node's schema is stored and reconstructed."""
+    """Defines how a task's schema is stored and reconstructed."""
 
     EMBEDDED = "embedded"
     HANDLE = "handle"
@@ -21,10 +21,10 @@ class SchemaSource(str, Enum):
 
 
 @dataclass(frozen=True)
-class NodeSpec:
+class TaskSpec:
     identifier: str
     schema_source: str = SchemaSource.EMBEDDED
-    node_type: str = "Normal"
+    task_type: str = "Normal"
     catalog: str = "Others"
     inputs: Optional[SocketSpec] = None
     outputs: Optional[SocketSpec] = None
@@ -34,7 +34,7 @@ class NodeSpec:
     metadata: Dict[str, Any] = field(default_factory=dict)
     base_class_path: Optional[str] = None
     # not persisted directly; used at runtime
-    base_class: Optional["Node"] = None
+    base_class: Optional["Task"] = None
     version: Optional[str] = None
 
     def __post_init__(self):
@@ -65,7 +65,7 @@ class NodeSpec:
         data: Dict[str, Any] = {
             "schema_source": self.schema_source.value,
             "identifier": self.identifier,
-            "node_type": self.node_type,
+            "task_type": self.task_type,
             "catalog": self.catalog,
             "metadata": dict(self.metadata),
             "base_class_path": self.base_class_path,
@@ -92,9 +92,9 @@ class NodeSpec:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> NodeSpec:
+    def from_dict(cls, data: Dict[str, Any]) -> TaskSpec:
         """
-        Rebuild a NodeSpec from a DB-ready representation produced by to_dict.
+        Rebuild a TaskSpec from a DB-ready representation produced by to_dict.
         """
         from node_graph.socket_spec import SocketSpec
 
@@ -117,7 +117,7 @@ class NodeSpec:
             spec = cls(
                 identifier=data["identifier"],
                 catalog=data.get("catalog", "Others"),
-                node_type=data.get("node_type", "Normal"),
+                task_type=data.get("task_type", "Normal"),
                 schema_source=schema_source,
                 inputs=inputs,
                 outputs=outputs,
@@ -162,41 +162,41 @@ class NodeSpec:
 
     @staticmethod
     def get_base_class(base_class_path: str):
-        """Return the concrete Node subclass to instantiate."""
-        from node_graph.node import Node
+        """Return the concrete Task subclass to instantiate."""
+        from node_graph.task import Task
 
         if base_class_path:
             module_name, class_name = base_class_path.rsplit(".", 1)
             return getattr(importlib.import_module(module_name), class_name)
 
-        return Node
+        return Task
 
     @staticmethod
     def _resolve_decorator(decorator_path: Optional[str] = None) -> Callable:
         """Return the decorator callable if any."""
-        from node_graph.decorator import node
+        from node_graph.decorator import task
 
         if decorator_path:
             module_name, func_name = decorator_path.rsplit(".", 1)
             return getattr(importlib.import_module(module_name), func_name)
 
-        return node
+        return task
 
-    def to_node(
+    def to_task(
         self,
         name: str | None = None,
         uuid: str | None = None,
         graph=None,
         parent=None,
         metadata=None,
-    ) -> "Node":
+    ) -> "Task":
         """
-        Materialize a Node from a NodeSpec with smart persistence:
+        Materialize a Task from a TaskSpec with smart persistence:
           - If importable, default to compact persistence modes.
           - Otherwise, embed the schema to guarantee lossless restore.
         """
         Base = self.get_base_class(self.base_class_path)
-        node = Base(
+        task = Base(
             name=name or self.identifier,
             uuid=uuid,
             graph=graph,
@@ -204,11 +204,11 @@ class NodeSpec:
             metadata=metadata,
             spec=self,
         )
-        return node
+        return task
 
 
 class BaseHandle:
-    def __init__(self, spec: NodeSpec, get_current_graph, graph_class=None):
+    def __init__(self, spec: TaskSpec, get_current_graph, graph_class=None):
         self.identifier = spec.identifier
         self._spec = spec
         self._inputs_spec = spec.inputs
@@ -237,11 +237,11 @@ class BaseHandle:
             raise RuntimeError(
                 f"No active graph available for {self._spec.identifier}."
             )
-        node = graph.add_node(self._spec)
+        task = graph.add_task(self._spec)
         zone = getattr(graph, "_active_zone", None)
 
         if zone:
-            zone.children.add(node)
+            zone.children.add(task)
         exec_obj = self._spec.executor.callable if self._spec.executor else None
         if isinstance(exec_obj, BaseHandle) and hasattr(exec_obj, "_callable"):
             exec_obj = exec_obj._callable
@@ -255,14 +255,14 @@ class BaseHandle:
                 )
             prepared_inputs = dict(kwargs)
 
-        node.set_inputs(prepared_inputs)
+        task.set_inputs(prepared_inputs)
 
-        return node.outputs
+        return task.outputs
 
     def build(self, /, *args, **kwargs):
         from node_graph.utils.graph import materialize_graph
 
-        if self._spec.node_type.upper() != "GRAPH":
+        if self._spec.task_type.upper() != "GRAPH":
             raise TypeError(".build() is only available on graph specs")
         if self._spec.executor is None:
             raise RuntimeError("Spec has no executor")
@@ -283,7 +283,7 @@ class BaseHandle:
         )
 
 
-class NodeHandle(BaseHandle):
+class TaskHandle(BaseHandle):
     def __init__(self, spec):
         from node_graph.manager import get_current_graph
 

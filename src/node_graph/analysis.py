@@ -1,24 +1,24 @@
 from __future__ import annotations
 import numpy as np
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
-from node_graph.link import NodeLink
-from node_graph import Node
-from node_graph.socket import NodeSocketNamespace
+from node_graph.link import TaskLink
+from node_graph import Task
+from node_graph.socket import TaskSocketNamespace
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import depth_first_order
 
 if TYPE_CHECKING:
-    from node_graph import NodeGraph
+    from node_graph import Graph
 
 
-def build_adjacency_matrix(graph: NodeGraph):
+def build_adjacency_matrix(graph: Graph):
     """
     Build a sparse adjacency matrix where entry (i, j) == 1
-    if there is a link from node i to node j.
+    if there is a link from task i to task j.
     """
-    # 1) Map each node name -> integer index
-    nodes = list(graph.nodes)  # or however you get the Node list
-    name_to_index = {node.name: i for i, node in enumerate(nodes)}
+    # 1) Map each task name -> integer index
+    nodes = list(graph.tasks)  # or however you get the Task list
+    name_to_index = {task.name: i for i, task in enumerate(nodes)}
     n = len(nodes)
 
     # 2) Collect edges in "row, col" format
@@ -26,12 +26,12 @@ def build_adjacency_matrix(graph: NodeGraph):
     col = []
     for link in graph.links:
         if (
-            link.from_node.name not in name_to_index
-            or link.to_node.name not in name_to_index
+            link.from_task.name not in name_to_index
+            or link.to_task.name not in name_to_index
         ):
             continue
-        i = name_to_index[link.from_node.name]
-        j = name_to_index[link.to_node.name]
+        i = name_to_index[link.from_task.name]
+        j = name_to_index[link.to_task.name]
         row.append(i)
         col.append(j)
 
@@ -42,80 +42,80 @@ def build_adjacency_matrix(graph: NodeGraph):
     return adjacency, name_to_index, nodes
 
 
-class NodeGraphAnalysis:
+class GraphAnalysis:
     """
-    Utility to analyze a NodeGraph, with caching to handle large graphs:
+    Utility to analyze a Graph, with caching to handle large graphs:
       - get_input_links / get_output_links
       - get_direct_children / get_all_descendants
-      - compare_graphs by node name
+      - compare_graphs by task name
     """
 
-    def __init__(self, graph: NodeGraph):
+    def __init__(self, graph: Graph):
         self.graph = graph
 
         # A simple integer to track if our analysis cache is up to date
-        # We assume the NodeGraph increments some 'graph._version' each time
-        # a node or link is added/removed, etc. If you don't have that,
+        # We assume the Graph increments some 'graph._version' each time
+        # a task or link is added/removed, etc. If you don't have that,
         # you can implement your own triggers or approach.
         self._cached_version = -1
         self._adjacency = None
         self._name_to_idx = {}
-        self._nodes_list = []
+        self._tasks_list = []
         # Caches
         self._cache_input_links: Dict[str, List[str]] = {}
         self._cache_output_links: Dict[str, List[str]] = {}
         self._cache_descendants: Dict[str, Set[str]] = {}
         self._cache_zone: Dict[str, Dict[str, List[str]]] = {}
 
-    def get_input_links(self, node: Node) -> List[NodeLink]:
+    def get_input_links(self, task: Task) -> List[TaskLink]:
         """
-        Return all links leading INTO the given node (by name-based lookup).
+        Return all links leading INTO the given task (by name-based lookup).
         """
         self._ensure_cache_valid()
-        return self._cache_input_links.get(node.name, [])
+        return self._cache_input_links.get(task.name, [])
 
-    def get_output_links(self, node: Node) -> List[NodeLink]:
+    def get_output_links(self, task: Task) -> List[TaskLink]:
         """
-        Return all links leading OUT OF the given node (by name-based lookup).
+        Return all links leading OUT OF the given task (by name-based lookup).
         """
         self._ensure_cache_valid()
-        return self._cache_output_links.get(node.name, [])
+        return self._cache_output_links.get(task.name, [])
 
-    def get_direct_children(self, node: Node) -> List[Node]:
+    def get_direct_children(self, task: Task) -> List[Task]:
         """
-        Nodes that receive a link from `node`.
+        Nodes that receive a link from `task`.
         """
         self._ensure_cache_valid()
-        links = self._cache_output_links.get(node.name, [])
-        # Each link's 'to_node' is the child
+        links = self._cache_output_links.get(task.name, [])
+        # Each link's '.to_task' is the child
         return [lk for lk in links]
 
-    def get_all_descendants(self, node: Node) -> list[str]:
+    def get_all_descendants(self, task: Task) -> list[str]:
 
         self._ensure_cache_valid()
-        return self._cache_descendants.get(node.name, [])
+        return self._cache_descendants.get(task.name, [])
 
     @staticmethod
-    def compare_graphs(g1: NodeGraph, g2: NodeGraph) -> Dict[str, Any]:
+    def compare_graphs(g1: Graph, g2: Graph) -> Dict[str, Any]:
         """
-        Compare two NodeGraphs by NAME-based node identity. Return dict:
+        Compare two NodeGraphs by NAME-based task identity. Return dict:
         {
-            "added_nodes":    list of node names in g2 but not in g1
-            "removed_nodes":  list of node names in g1 but not in g2
-            "modified_nodes":  list of node names that appear in both but differ
+            "added_tasks":    list of task names in g2 but not in g1
+            "removed_tasks":  list of task names in g1 but not in g2
+            "modified_tasks":  list of task names that appear in both but differ
         }
 
         "differ" = input links differ OR input socket values differ (no output check).
         """
         summary = {
-            "added_nodes": [],
-            "removed_nodes": [],
-            "modified_nodes": [],
+            "added_tasks": [],
+            "removed_tasks": [],
+            "modified_tasks": [],
         }
 
         # Map by name
-        g1_nodes_by_name = {n.name: n for n in g1.nodes}
-        g2_nodes_by_name = {n.name: n for n in g2.nodes}
+        g1_nodes_by_name = {n.name: n for n in g1.tasks}
+        g2_nodes_by_name = {n.name: n for n in g2.tasks}
 
         set1 = set(g1_nodes_by_name.keys())
         set2 = set(g2_nodes_by_name.keys())
@@ -123,19 +123,19 @@ class NodeGraphAnalysis:
         # Identify added/removed
         removed = set1 - set2
         added = set2 - set1
-        summary["removed_nodes"] = sorted(list(removed))
-        summary["added_nodes"] = sorted(list(added))
+        summary["removed_tasks"] = sorted(list(removed))
+        summary["added_tasks"] = sorted(list(added))
 
         # For nodes present in both, check changes
         common = set1.intersection(set2)
         for nname in common:
-            node1 = g1_nodes_by_name[nname]
-            node2 = g2_nodes_by_name[nname]
-            if NodeGraphAnalysis._node_changed(g1, node1, g2, node2):
-                summary["modified_nodes"].append(nname)
+            task1 = g1_nodes_by_name[nname]
+            task2 = g2_nodes_by_name[nname]
+            if GraphAnalysis._task_changed(g1, task1, g2, task2):
+                summary["modified_tasks"].append(nname)
 
         # Sort changed nodes for consistent output
-        summary["modified_nodes"].sort()
+        summary["modified_tasks"].sort()
         return summary
 
     def build_connectivity(self):
@@ -152,7 +152,7 @@ class NodeGraphAnalysis:
         """
         Analyse *zones* (nodes that own a non-empty ``children`` list).
 
-        For each such node we return::
+        For each such task we return::
 
             {
                 zone_name: {
@@ -168,36 +168,36 @@ class NodeGraphAnalysis:
         return self._cache_zone
 
     @staticmethod
-    def _node_changed(g1: NodeGraph, n1: Node, g2: NodeGraph, n2: Node) -> bool:
+    def _task_changed(g1: Graph, n1: Task, g2: Graph, n2: Task) -> bool:
         """
         Decide if n1 and n2 differ by:
           - input links
           - input socket values
         """
-        if NodeGraphAnalysis._input_links_changed(g1, n1, g2, n2):
+        if GraphAnalysis._input_links_changed(g1, n1, g2, n2):
             return True
-        if NodeGraphAnalysis._input_values_changed(n1, n2):
+        if GraphAnalysis._input_values_changed(n1, n2):
             return True
         return False
 
     @staticmethod
-    def _input_links_changed(g1: NodeGraph, n1: Node, g2: NodeGraph, n2: Node) -> bool:
-        """Compare input links (all links where to_node == n1 vs. to_node == n2)."""
-        # We'll gather a set of (from_node_name, from_socket_name) for each
+    def _input_links_changed(g1: Graph, n1: Task, g2: Graph, n2: Task) -> bool:
+        """Compare input links (all links where .to_task == n1 vs. .to_task == n2)."""
+        # We'll gather a set of (.from_task_name, from_socket_name) for each
         in_links_1 = set()
         for lk in g1.links:
-            if lk.to_node == n1:
-                in_links_1.add((lk.from_node.name, lk.from_socket._name))
+            if lk.to_task == n1:
+                in_links_1.add((lk.from_task.name, lk.from_socket._name))
 
         in_links_2 = set()
         for lk in g2.links:
-            if lk.to_node == n2:
-                in_links_2.add((lk.from_node.name, lk.from_socket._name))
+            if lk.to_task == n2:
+                in_links_2.add((lk.from_task.name, lk.from_socket._name))
 
         return in_links_1 != in_links_2
 
     @staticmethod
-    def _input_values_changed(n1: Node, n2: Node) -> bool:
+    def _input_values_changed(n1: Task, n2: Task) -> bool:
         """
         Compare only *input* socket values.
         We skip output sockets, as requested.
@@ -211,11 +211,11 @@ class NodeGraphAnalysis:
 
         # For matching input names, compare values
         for name in in1:
-            if isinstance(n1.inputs[name], NodeSocketNamespace):
+            if isinstance(n1.inputs[name], TaskSocketNamespace):
                 continue
             v1 = n1.inputs[name].value
             v2 = n2.inputs[name].value
-            if NodeGraphAnalysis._values_different(v1, v2):
+            if GraphAnalysis._values_different(v1, v2):
                 return True
         return False
 
@@ -246,9 +246,9 @@ class NodeGraphAnalysis:
     def _ensure_cache_valid(self):
         """
         If the graph version changed, rebuild the adjacency-based caches:
-          - input_links[node.name]
-          - output_links[node.name]
-          - all_descendants[node.name]
+          - input_links[task.name]
+          - output_links[task.name]
+          - all_descendants[task.name]
         """
         current_version = getattr(self.graph, "_version", 0)
         if current_version != self._cached_version:
@@ -260,53 +260,53 @@ class NodeGraphAnalysis:
         Rebuild adjacency caches for all nodes:
           self._cache_input_links[name] = [links leading into name]
           self._cache_output_links[name] = [links from name]
-          self._cache_descendants[name] = set of all downstream node names
+          self._cache_descendants[name] = set of all downstream task names
         """
         self._cache_input_links.clear()
         self._cache_output_links.clear()
         self._cache_descendants.clear()
 
-        # Initialize empty lists for each node name
-        for node in self.graph.nodes:
-            self._cache_input_links[node.name] = []
-            self._cache_output_links[node.name] = []
+        # Initialize empty lists for each task name
+        for task in self.graph.tasks:
+            self._cache_input_links[task.name] = []
+            self._cache_output_links[task.name] = []
 
         # Populate input/output links
         for link in self.graph.links:
-            from_name = link.from_node.name
-            to_name = link.to_node.name
-            # in case the node does not belong to the graph
-            if from_name not in self.graph.nodes or to_name not in self.graph.nodes:
+            from_name = link.from_task.name
+            to_name = link.to_task.name
+            # in case the task does not belong to the graph
+            if from_name not in self.graph.tasks or to_name not in self.graph.tasks:
                 continue
             self._cache_output_links[from_name].append(to_name)
             self._cache_input_links[to_name].append(from_name)
 
-        # For descendants, do a DFS/BFS from each node
-        self._adjacency, self._name_to_idx, self._nodes_list = build_adjacency_matrix(
+        # For descendants, do a DFS/BFS from each task
+        self._adjacency, self._name_to_idx, self._tasks_list = build_adjacency_matrix(
             self.graph
         )
-        for node in self.graph.nodes:
-            if node.name not in self._name_to_idx:
-                self._cache_descendants[node.name] = []
+        for task in self.graph.tasks:
+            if task.name not in self._name_to_idx:
+                self._cache_descendants[task.name] = []
 
-            idx = self._name_to_idx[node.name]
+            idx = self._name_to_idx[task.name]
             order, _ = depth_first_order(self._adjacency, idx)
-            # Filter out the starting node
+            # Filter out the starting task
             order = [x for x in order if x != idx]
-            self._cache_descendants[node.name] = [
-                self._nodes_list[x].name for x in order
+            self._cache_descendants[task.name] = [
+                self._tasks_list[x].name for x in order
             ]
         # Build zone cache
         self._compute_zone_cache()
 
     def _compute_zone_cache(self):
         """
-        Populate ``_cache_zone`` for every node (each node is a "zone").
+        Populate ``_cache_zone`` for every task (each task is a "zone").
 
         This method faithfully implements the WorkGraphSaver logic:
 
         1) **Direct child / parent mapping**
-           - Build `direct_children[node]` from `node.children`.
+           - Build `direct_children[task]` from `task.children`.
            - Build `parent_of[child] = parent` for each child.
 
         2) **Parent chains**
@@ -338,14 +338,14 @@ class NodeGraphAnalysis:
                   'input_tasks': sorted unique final inputs
                 }.
 
-        Finally, invoke `zone_inputs` for every node to populate the cache.
+        Finally, invoke `zone_inputs` for every task to populate the cache.
         """
         # --- 1) build child / parent mappings --------------------------------
         direct_children: Dict[str, List[str]] = {
             n.name: [
-                c.name if isinstance(c, Node) else c for c in getattr(n, "children", [])
+                c.name if isinstance(c, Task) else c for c in getattr(n, "children", [])
             ]
-            for n in self.graph.nodes
+            for n in self.graph.tasks
         }
         parent_of: Dict[str, Optional[str]] = {}
         for parent, kids in direct_children.items():
@@ -421,8 +421,8 @@ class NodeGraphAnalysis:
             }
             return final_inputs
 
-        # build cache for *every* node (every task is a zone)
-        for n in self.graph.nodes:
+        # build cache for *every* task (every task is a zone)
+        for n in self.graph.tasks:
             zone_inputs(n.name)
 
         self._cache_zone = zone_cache

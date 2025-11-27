@@ -1,9 +1,9 @@
 import pytest
 from node_graph.error_handler import ErrorHandlerSpec, normalize_error_handlers
 from node_graph.executor import RuntimeExecutor, SafeExecutor, BaseExecutor
-from node_graph.node_spec import NodeSpec
+from node_graph.task_spec import TaskSpec
 from node_graph.socket_spec import infer_specs_from_callable
-from node_graph.node import Node
+from node_graph.task import Task
 
 
 def sample_handler(task):
@@ -111,16 +111,16 @@ def test_nodespec_roundtrip_preserves_error_handlers():
             },
         }
     )
-    spec = NodeSpec(
+    spec = TaskSpec(
         identifier="TestNode",
         catalog="Tests",
         inputs=in_spec,
         outputs=out_spec,
         executor=RuntimeExecutor.from_callable(lambda x: x),
         error_handlers=handlers,
-        metadata={"node_type": "Normal"},
+        metadata={"task_type": "Normal"},
         version="1.0.0",
-        base_class=Node,
+        base_class=Task,
     )
 
     d = spec.to_dict()
@@ -128,7 +128,7 @@ def test_nodespec_roundtrip_preserves_error_handlers():
     assert isinstance(d["error_handlers"], dict)
     assert all("handler" in eh for eh in d["error_handlers"])
 
-    spec2 = NodeSpec.from_dict(d)
+    spec2 = TaskSpec.from_dict(d)
     assert spec2.identifier == "TestNode"
     assert len(spec2.error_handlers) == 2
     assert all(
@@ -148,26 +148,26 @@ def test_node_roundtrip_preserves_error_handlers():
     handlers = normalize_error_handlers(
         {"test": {"executor": sample_handler, "exit_codes": [1, 2], "max_retries": 3}}
     )
-    spec = NodeSpec(
+    spec = TaskSpec(
         identifier="TestNode",
         inputs=in_spec,
         outputs=out_spec,
         executor=RuntimeExecutor.from_callable(lambda x: x),
         error_handlers=handlers,
-        base_class=Node,
+        base_class=Task,
     )
 
-    node = spec.to_node(name="n1")
-    data = node.to_dict()
+    task = spec.to_task(name="n1")
+    data = task.to_dict()
     assert "error_handlers" in data["spec"]
     assert len(data["spec"]["error_handlers"]) == 1
 
-    # mutate copy, then update_from_dict into a fresh node
+    # mutate copy, then update_from_dict into a fresh task
     # data2 = copy.deepcopy(data)
     # data2["error_handlers"][0]["max_retries"] = 7
     # data2["error_handlers"][0]["exit_codes"] = [5]
 
-    # fresh = Node(name="fresh")
+    # fresh = Task(name="fresh")
     # fresh.update_from_dict(data2)
     # assert len(fresh.error_handlers) == 1
     # eh = fresh.error_handlers[0]
@@ -179,14 +179,14 @@ def test_node_roundtrip_preserves_error_handlers():
 
 def test_decorator_node_applies_error_handlers(monkeypatch):
     try:
-        from node_graph.node_spec import NodeSpec
+        from node_graph.task_spec import TaskSpec
     except Exception:
         pytest.skip("Decorator infrastructure not available in this environment.")
 
     # wire a minimal decorator using the provided API
-    from node_graph import node
+    from node_graph import task
 
-    @node(
+    @task(
         identifier="DecoNode",
         error_handlers={
             "test": {"executor": sample_handler, "exit_codes": [123], "max_retries": 2}
@@ -196,11 +196,11 @@ def test_decorator_node_applies_error_handlers(monkeypatch):
     def fn(a: int) -> int:
         return a + 1
 
-    # The decorator returns a handle that wraps a NodeSpec (project’s API)
-    handle = fn  # usually NodeHandle
+    # The decorator returns a handle that wraps a TaskSpec (project’s API)
+    handle = fn  # usually TaskHandle
     # Introspect spec via the handle (assuming .spec or ._spec; adapt if needed)
     spec = getattr(handle, "spec", None) or getattr(handle, "_spec", None)
-    assert isinstance(spec, NodeSpec)
+    assert isinstance(spec, TaskSpec)
     assert spec.identifier == "DecoNode"
     assert len(spec.error_handlers) == 1
     eh = spec.error_handlers["test"]

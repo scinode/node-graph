@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 
-from node_graph.node import BuiltinPolicy, Node
-from node_graph.node_spec import NodeSpec
+from node_graph.task import BuiltinPolicy, Task
+from node_graph.task_spec import TaskSpec
 
 
 class _GraphIOSharedMixin:
@@ -13,7 +13,7 @@ class _GraphIOSharedMixin:
       - builtins are disabled for wait and default output
     """
 
-    # turn off framework builtins for these graph-level nodes
+    # turn off framework builtins for these graph-level tasks
     _BUILTINS_POLICY = BuiltinPolicy(
         input_wait=False, output_wait=False, default_output=False
     )
@@ -36,28 +36,25 @@ class _GraphIOSharedMixin:
 
     # keep the alias after deserialization
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], graph: "NodeGraph" = None):
-        obj = super().from_dict(
-            data, graph
-        )  # SpecNode/SpecTask uses cls(...) internally
+    def from_dict(cls, data: Dict[str, Any], graph: "Graph" = None):
+        obj = super().from_dict(data, graph)
         obj.outputs = obj.inputs
         return obj
 
 
-class GraphLevelNode(_GraphIOSharedMixin, Node):
-    """Graph level node where inputs and outputs are the same sockets."""
+class GraphLevelTask(_GraphIOSharedMixin, Task):
+    """Graph level task where inputs and outputs are the same sockets."""
 
     identifier: str = "node_graph.graph_level"
     catalog: str = "Builtins"
     is_dynamic: bool = True
 
-    _default_spec = NodeSpec(
+    _default_spec = TaskSpec(
         identifier="node_graph.graph_level",
         catalog="Builtins",
-        base_class_path="node_graph.nodes.builtins.GraphLevelNode",
+        base_class_path="node_graph.tasks.builtins.GraphLevelTask",
     )
 
     def __init__(self, *args, **kwargs):
-        # SpecNode handles spec application and may rebuild inputs/outputs
         super().__init__(*args, **kwargs)
         self._unify_io()

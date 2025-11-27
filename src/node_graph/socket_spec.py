@@ -13,7 +13,7 @@ import inspect
 from copy import deepcopy
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from node_graph.socket_meta import CallRole, SocketMeta, merge_meta
-from .socket import NodeSocketNamespace
+from .socket import TaskSocketNamespace
 import ast
 import textwrap
 import types
@@ -182,25 +182,25 @@ def _paths_to_tree(names: Iterable[str]) -> Dict[str, Optional[dict]]:
         parts = [p for p in str(raw).split(".") if p]
         if not parts:
             continue
-        node: Dict[str, Optional[dict]] = root
+        task: Dict[str, Optional[dict]] = root
         for i, seg in enumerate(parts):
             last = i == len(parts) - 1
             if last:
                 # Mark whole field at this level
-                node[seg] = None
+                task[seg] = None
             else:
-                if seg not in node:
-                    node[seg] = {}
+                if seg not in task:
+                    task[seg] = {}
                 else:
                     # If already selecting whole subtree, deeper spec is irrelevant
-                    if node[seg] is None:
+                    if task[seg] is None:
                         # parent marked as whole selection/removal: stop descending
                         break
                     # if it exists but isn't a dict (shouldn't happen), coerce to dict
-                    if not isinstance(node[seg], dict):
-                        node[seg] = {}
+                    if not isinstance(task[seg], dict):
+                        task[seg] = {}
                 # descend
-                node = node[seg]
+                task = task[seg]
     return root
 
 
@@ -492,7 +492,7 @@ class SocketSpecAPI:
     SocketMeta = SocketMeta
     SocketSpecSelect = SocketSpecSelect
     SocketView = SocketView
-    SocketNamespace = NodeSocketNamespace
+    SocketNamespace = TaskSocketNamespace
 
     DEFAULT_OUTPUT_KEY: str = "result"  # downstream override allowed
 
@@ -1118,7 +1118,7 @@ def _function_returns_value(func) -> bool:
     True iff the *top-level* function body contains `return <non-None>`.
 
     Conservative defaults:
-    - If source is unavailable, or AST parse fails, or the function node can't be found,
+    - If source is unavailable, or AST parse fails, or the function task can't be found,
       return True (assume it returns a value).
     """
     try:

@@ -1,15 +1,15 @@
 from __future__ import annotations
 from typing import List, Protocol
 from node_graph.collection import DependencyCollection
-from .socket import BaseSocket, NodeSocketNamespace
+from .socket import BaseSocket, TaskSocketNamespace
 from .socket_spec import SocketSpec, add_spec_field
-from .node_spec import SchemaSource
+from .task_spec import SchemaSource
 from dataclasses import replace
 
 
 class _HasSocketNamespaces(Protocol):
-    inputs: NodeSocketNamespace
-    outputs: NodeSocketNamespace
+    inputs: TaskSocketNamespace
+    outputs: TaskSocketNamespace
 
 
 class IOOwnerMixin(_HasSocketNamespaces):
@@ -29,8 +29,8 @@ class IOOwnerMixin(_HasSocketNamespaces):
 
     def add_input_spec(self, spec: str | SocketSpec, name: str, **kwargs) -> BaseSocket:
         """
-        Permanently adds an input socket to the node's spec.
-        This marks the node as modified and will be persisted.
+        Permanently adds an input socket to the task's spec.
+        This marks the task as modified and will be persisted.
         """
         if isinstance(spec, str):
             spec = SocketSpec(identifier=spec, **kwargs)
@@ -44,7 +44,7 @@ class IOOwnerMixin(_HasSocketNamespaces):
             self.inputs,
             name,
             spec,
-            node=self.inputs._node,
+            task=self.inputs._task,
             graph=self.inputs._graph,
             role="input",
         )
@@ -54,8 +54,8 @@ class IOOwnerMixin(_HasSocketNamespaces):
         self, spec: str | SocketSpec, name: str, **kwargs
     ) -> BaseSocket:
         """
-        Permanently adds an output socket to the node's spec.
-        This marks the node as modified and will be persisted.
+        Permanently adds an output socket to the task's spec.
+        This marks the task as modified and will be persisted.
         """
         if isinstance(spec, str):
             spec = SocketSpec(identifier=spec, **kwargs)
@@ -69,7 +69,7 @@ class IOOwnerMixin(_HasSocketNamespaces):
             self.outputs,
             name,
             spec,
-            node=self.outputs._node,
+            task=self.outputs._task,
             graph=self.outputs._graph,
             role="output",
         )
@@ -86,7 +86,7 @@ class WidgetRenderableMixin:
         from node_graph_widget import NodeGraphWidget
 
         if self._widget is None:
-            # Node currently sets custom settings; keep defaults generic here.
+            # Task currently sets custom settings; keep defaults generic here.
             self._widget = NodeGraphWidget()
         return self._widget
 
@@ -106,7 +106,7 @@ class WidgetRenderableMixin:
 class WaitableMixin:
     """Share >> / << dependency chaining using WaitingOn helper."""
 
-    def __rshift__(self, other: "Node" | BaseSocket | DependencyCollection):
+    def __rshift__(self, other: "Task" | BaseSocket | DependencyCollection):
         """
         Called when we do: self >> other
         So we link them or mark that 'other' must wait for 'self'.
@@ -118,7 +118,7 @@ class WaitableMixin:
             other._waiting_on.add(self)
         return other
 
-    def __lshift__(self, other: "Node" | BaseSocket | DependencyCollection):
+    def __lshift__(self, other: "Task" | BaseSocket | DependencyCollection):
         """
         Called when we do: self << other
         Means the same as: other >> self

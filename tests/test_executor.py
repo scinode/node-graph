@@ -30,7 +30,7 @@ def test_executor_source_code():
     assert e.source_code == inspect.getsource(add)
 
 
-def test_executor_from_node_graph(ng):
+def test_executor_from_task_graph(ng):
     e = RuntimeExecutor.from_graph(ng)
     assert e.mode == "graph"
     assert e.graph_data == ng.to_dict()

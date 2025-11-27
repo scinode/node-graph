@@ -1,30 +1,30 @@
 """
-Node graph
+Graph
 ==========
 
-The :class:`node_graph.NodeGraph` object is a collection of nodes and links.
-This example shows how to create a node graph, add nodes and links,
+The :class:`node_graph.Graph` object is a collection of tasks and links.
+This example shows how to create a graph, add tasks and links,
 and export it to a dictionary.
 """
 
 # %%
-# Create a node graph
+# Create a graph
 # -------------------
 #
-# Create an empty node graph.
+# Create an empty graph.
 
-from node_graph import NodeGraph
+from node_graph import Graph
 
-ng = NodeGraph(name="my_first_nodegraph")
+g = Graph(name="my_first_nodegraph")
 
 # %%
 # Add nodes
 # ---------
 #
-# Add a `float` node and an `add` node.
+# Add a `float` task and an `add` task.
 
-float1 = ng.add_node("node_graph.test_float", name="float1")
-add1 = ng.add_node("node_graph.test_add", name="add1")
+float1 = g.add_task("node_graph.test_float", name="float1")
+add1 = g.add_task("node_graph.test_add", name="add1")
 
 # %%
 # Add link between nodes
@@ -32,15 +32,15 @@ add1 = ng.add_node("node_graph.test_add", name="add1")
 #
 # Connect the output of ``float1`` to the input of ``add1``.
 
-ng.add_link(float1.outputs.result, add1.inputs.x)
+g.add_link(float1.outputs.result, add1.inputs.x)
 
-ng.to_html()
+g.to_html()
 # %%
 # Save to dict
 # ------------
 #
-# Convert the node graph to a Python dictionary representation.
+# Convert the graph to a Python dictionary representation.
 
-d = ng.to_dict()
-print("NodeGraph as dict:")
+d = g.to_dict()
+print("Graph as dict:")
 print(d)

@@ -4,7 +4,7 @@ WAIT_SOCKET_NAME = "_wait"
 OUTPUT_SOCKET_NAME = "_outputs"
 MAX_LINK_LIMIT = 1000000
 
-BUILTIN_NODES = ["graph_ctx", "graph_inputs", "graph_outputs"]
+BUILTIN_TASKS = ["graph_ctx", "graph_inputs", "graph_outputs"]
 
 
 @dataclass(frozen=True)

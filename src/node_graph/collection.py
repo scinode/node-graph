@@ -6,7 +6,7 @@ import sys
 import logging
 
 if TYPE_CHECKING:
-    from node_graph.node import Node
+    from node_graph.task import Task
     from node_graph.socket import BaseSocket
 
 logger = logging.getLogger(__name__)
@@ -29,9 +29,9 @@ def get_entries(entry_point_name: str) -> Dict[str, EntryPoint]:
 
 
 def get_item_class(
-    identifier: EntryPoint | Node,
+    identifier: EntryPoint | Task,
     pool: Dict[str, EntryPoint],
-) -> Node:
+) -> Task:
     """Get the item class from the identifier."""
 
     if isinstance(identifier, str):
@@ -252,21 +252,21 @@ class DependencyCollection:
     strictly for creating/chaining dependencies.
     """
 
-    def __init__(self, *items: Node | BaseSocket) -> None:
+    def __init__(self, *items: Task | BaseSocket) -> None:
         self.items = list(items)
 
     def __rshift__(
         self,
-        other: Node | BaseSocket | "DependencyCollection",
-    ) -> Node | BaseSocket | "DependencyCollection":
+        other: Task | BaseSocket | "DependencyCollection",
+    ) -> Task | BaseSocket | "DependencyCollection":
         for item in self.items:
             item >> other
         return other
 
     def __lshift__(
         self,
-        other: Node | BaseSocket | "DependencyCollection",
-    ) -> Node | BaseSocket | "DependencyCollection":
+        other: Task | BaseSocket | "DependencyCollection",
+    ) -> Task | BaseSocket | "DependencyCollection":
         for item in self.items:
             item << other
         return other
@@ -310,14 +310,14 @@ def decorator_check_identifier_name(func: Callable) -> Callable:
     return wrapper_func
 
 
-class NodeCollection(Collection):
-    """Node colleciton"""
+class TaskCollection(Collection):
+    """Task collection"""
 
     def __init__(
         self,
         graph: Optional[object] = None,
         pool: Optional[object] = None,
-        entry_point: Optional[str] = "node_graph.node",
+        entry_point: Optional[str] = "node_graph.task",
         post_creation_hooks: Optional[List[Callable]] = None,
     ) -> None:
         super().__init__(
@@ -336,38 +336,38 @@ class NodeCollection(Collection):
         uuid: Optional[str] = None,
         _metadata: Optional[dict] = None,
         **kwargs,
-    ) -> Node:
-        from node_graph.node import Node
-        from node_graph.node_spec import NodeSpec, BaseHandle
+    ) -> Task:
+        from node_graph.task import Task
+        from node_graph.task_spec import TaskSpec, BaseHandle
 
-        if isinstance(identifier, Node):
-            node = identifier
-            node.name = self._generate_item_name(identifier=name)
-        elif isinstance(identifier, NodeSpec):
+        if isinstance(identifier, Task):
+            task = identifier
+            task.name = self._generate_item_name(identifier=name)
+        elif isinstance(identifier, TaskSpec):
             name = name or self._generate_item_name(identifier=identifier.identifier)
-            node = identifier.to_node(name=name, graph=self.graph)
+            task = identifier.to_task(name=name, graph=self.graph)
         elif isinstance(identifier, BaseHandle):
             name = name or self._generate_item_name(identifier=identifier.identifier)
-            node = identifier._spec.to_node(name=name, graph=self.graph)
+            task = identifier._spec.to_task(name=name, graph=self.graph)
         else:
             ItemClass = get_item_class(identifier, self.pool)
             if isinstance(ItemClass, BaseHandle):
                 name = name or self._generate_item_name(identifier=ItemClass.identifier)
-                node = ItemClass._spec.to_node(name=name, graph=self.graph)
+                task = ItemClass._spec.to_task(name=name, graph=self.graph)
             else:
                 name = name or self._generate_item_name(ItemClass)
-                node = ItemClass(
+                task = ItemClass(
                     name=name,
                     uuid=uuid,
                     graph=self.graph,
                     metadata=_metadata,
                 )
-        self._append(node)
-        node.set_inputs(kwargs)
-        logger.debug(f"Created new node '{node.name}' with identifier={identifier}.")
+        self._append(task)
+        task.set_inputs(kwargs)
+        logger.debug(f"Created new task '{task.name}' with identifier={identifier}.")
         # Execute post creation hooks
-        self._execute_post_creation_hooks(node)
-        return node
+        self._execute_post_creation_hooks(task)
+        return task
 
     def _append(self, item: object) -> None:
         """Append item into this collection."""
@@ -385,7 +385,7 @@ class NodeCollection(Collection):
     def __repr__(self) -> str:
         s = ""
         parent_name = self.parent.name if self.parent else ""
-        s += f'NodeCollection(parent = "{parent_name}", nodes = ['
+        s += f'TaskCollection(parent = "{parent_name}", tasks = ['
         s += ", ".join([f'"{x}"' for x in self._get_keys()])
         s += "])"
         return s
@@ -414,8 +414,8 @@ class PropertyCollection(Collection):
 
     def __repr__(self) -> str:
         s = ""
-        node_name = self.parent.name if self.parent else ""
-        s += f'PropertyCollection(node = "{node_name}", properties = ['
+        task_name = self.parent.name if self.parent else ""
+        s += f'PropertyCollection(task = "{task_name}", properties = ['
         s += ", ".join([f'"{x}"' for x in self._get_keys()])
         s += "])"
         return s
@@ -428,9 +428,9 @@ class LinkCollection(Collection):
         super().__init__(graph=graph, parent=graph)
 
     def _new(self, input: object, output: object, type: int = 1) -> object:
-        from node_graph.link import NodeLink
+        from node_graph.link import TaskLink
 
-        item = NodeLink(input, output)
+        item = TaskLink(input, output)
         self._append(item)
         # Execute post creation hooks
         self._execute_post_creation_hooks(item)

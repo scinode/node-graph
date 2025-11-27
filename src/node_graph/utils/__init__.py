@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Dict, Any, Union, List
 
 
-def nodegaph_to_short_json(
+def gaph_to_short_json(
     ngdata: Dict[str, Union[str, List, Dict]]
 ) -> Dict[str, Union[str, Dict]]:
     """Export a nodegaph to a rete js editor data."""
@@ -10,51 +10,51 @@ def nodegaph_to_short_json(
         "name": ngdata["name"],
         "uuid": ngdata["uuid"],
         "state": ngdata["state"],
-        "nodes": {},
+        "tasks": {},
         "links": ngdata["links"],
     }
     #
-    for name, node in ngdata["nodes"].items():
-        # Add required inputs to nodes
+    for name, task in ngdata["tasks"].items():
+        # Add required inputs to tasks
         inputs = []
-        for input in node["input_sockets"]["sockets"].values():
+        for input in task["input_sockets"]["sockets"].values():
             metadata = input.get("metadata", {}) or {}
             if metadata.get("required", False):
                 inputs.append(
                     {"name": input["name"], "identifier": input["identifier"]}
                 )
 
-        ngdata_short["nodes"][name] = {
-            "label": node["name"],
-            "node_type": node["spec"]["node_type"].upper(),
+        ngdata_short["tasks"][name] = {
+            "label": task["name"],
+            "task_type": task["spec"]["task_type"].upper(),
             "inputs": inputs,
             "properties": {},
             "outputs": [],
-            "position": node["position"],
-            "children": node.get("children", []),
+            "position": task["position"],
+            "children": task.get("children", []),
         }
 
-    # Add links to nodes
+    # Add links to tasks
     for link in ngdata_short["links"]:
-        ngdata_short["nodes"][link["to_node"]]["inputs"].append(
+        ngdata_short["tasks"][link["to_task"]]["inputs"].append(
             {
                 "name": link["to_socket"],
             }
         )
-        ngdata_short["nodes"][link["from_node"]]["outputs"].append(
+        ngdata_short["tasks"][link["from_task"]]["outputs"].append(
             {
                 "name": link["from_socket"],
             }
         )
     # remove the inputs socket of "graph_inputs"
-    if "graph_inputs" in ngdata_short["nodes"]:
-        ngdata_short["nodes"]["graph_inputs"]["inputs"] = []
-    # remove the empty graph-level nodes
+    if "graph_inputs" in ngdata_short["tasks"]:
+        ngdata_short["tasks"]["graph_inputs"]["inputs"] = []
+    # remove the empty graph-level tasks
     for name in ["graph_inputs", "graph_outputs", "graph_ctx"]:
-        if name in ngdata_short["nodes"]:
-            node = ngdata_short["nodes"][name]
-            if len(node["inputs"]) == 0 and len(node["outputs"]) == 0:
-                del ngdata_short["nodes"][name]
+        if name in ngdata_short["tasks"]:
+            task = ngdata_short["tasks"][name]
+            if len(task["inputs"]) == 0 and len(task["outputs"]) == 0:
+                del ngdata_short["tasks"][name]
 
     return ngdata_short
 
@@ -62,15 +62,15 @@ def nodegaph_to_short_json(
 def yaml_to_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     """Convert yaml data into dict."""
     ntdata = data
-    nodes = ntdata.pop("nodes")
-    ntdata["nodes"] = {}
-    for node in nodes:
-        node.setdefault("metadata", {})
-        node["metadata"]["identifier"] = node.pop("identifier", None)
-        node["properties"] = node.get("properties", {})
-        node["inputs"] = node.get("inputs", {})
-        node["outputs"] = node.get("outputs", {})
-        ntdata["nodes"][node["name"]] = node
+    tasks = ntdata.pop("tasks")
+    ntdata["tasks"] = {}
+    for task in tasks:
+        task.setdefault("metadata", {})
+        task["metadata"]["identifier"] = task.pop("identifier", None)
+        task["properties"] = task.get("properties", {})
+        task["inputs"] = task.get("inputs", {})
+        task["outputs"] = task.get("outputs", {})
+        ntdata["tasks"][task["name"]] = task
     return ntdata
 
 
@@ -134,11 +134,11 @@ def valid_name_string(s: str) -> bool:
         )
 
 
-def tag_socket_value(socket: "NodeSocket", only_uuid: bool = False) -> "NodeSocket":
+def tag_socket_value(socket: "TaskSocket", only_uuid: bool = False) -> "TaskSocket":
     """Use a tagged object for the socket's property value."""
-    from node_graph.socket import NodeSocketNamespace, TaggedValue
+    from node_graph.socket import TaskSocketNamespace, TaggedValue
 
-    if isinstance(socket, NodeSocketNamespace):
+    if isinstance(socket, TaskSocketNamespace):
         for sub_socket in socket._sockets.values():
             tag_socket_value(sub_socket, only_uuid=only_uuid)
     else:

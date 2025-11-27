@@ -21,7 +21,7 @@ Use annotations to control data provenance
 
 import typing as t
 
-from node_graph import dynamic, namespace, node
+from node_graph import dynamic, namespace, task
 
 
 # %%
@@ -34,18 +34,18 @@ from node_graph import dynamic, namespace, node
 # Let's define two tasks that perform the same calculation but have different output annotations.
 #
 # The first task, ``add_multiply1``, has no output specification.
-# Consequently, the returned dictionary will be stored as a single ``Dict`` node.
+# Consequently, the returned dictionary will be stored as a single ``Dict`` task.
 # The second task, ``add_multiply2``, uses an output namespace to specify that each key-value pair
-# in the dictionary should be stored as a separate node.
+# in the dictionary should be stored as a separate task.
 
 
-@node()
+@task()
 def add_multiply1(x, y):
-    """Return a dictionary, which will be stored as a single Dict node."""
+    """Return a dictionary, which will be stored as a single Dict task."""
     return {"sum": x + y, "product": x * y}
 
 
-@node()
+@task()
 def add_multiply2(
     x: int,
     y: int,
@@ -54,7 +54,7 @@ def add_multiply2(
     return {"sum": x + y, "product": x * y}
 
 
-@node.graph()
+@task.graph()
 def AddMultiply(x: int, y: int):
     """A graph to run both versions of the add_multiply task."""
     add_multiply1(x=x, y=y)
@@ -77,7 +77,7 @@ wg.run()
 wg.engine.recorder
 
 # %%
-# As the provenance graph shows, ``add_multiply1`` has a single output node (``result``),
+# As the provenance graph shows, ``add_multiply1`` has a single output task (``result``),
 # while ``add_multiply2`` has two separate output nodes (``sum`` and ``product``), as defined in its namespace.
 #
 # Static namespaces for inputs
@@ -87,7 +87,7 @@ wg.engine.recorder
 # We use Python's standard ``typing.Annotated`` to attach the `node-graph` namespace metadata to the input type.
 
 
-@node()
+@task()
 def add_multiply3(
     data: t.Annotated[
         dict,
@@ -98,7 +98,7 @@ def add_multiply3(
     return {"sum": data["x"] + data["y"], "product": data["x"] * data["y"]}
 
 
-@node.graph()
+@task.graph()
 def AddMultiplyInputs(x: int, y: int):
     add_multiply3(data={"x": x, "y": y})
 
@@ -132,7 +132,7 @@ wg.engine.recorder
 # This is particularly useful for tasks that generate a variable number of outputs based on their inputs.
 
 
-@node()
+@task()
 def generate_square_numbers(
     n: int,
 ) -> t.Annotated[dict, dynamic(t.Any),]:
@@ -140,7 +140,7 @@ def generate_square_numbers(
     return {f"square_{i}": i**2 for i in range(n)}
 
 
-@node.graph()
+@task.graph()
 def SquareNumbersGenerator(n: int):
     generate_square_numbers(n=n)
 
@@ -156,7 +156,7 @@ wg.engine.recorder
 # %%
 # The graph shows that the ``generate_square_numbers`` task has multiple output nodes,
 # one for each entry in the dynamically generated dictionary.
-# The ``dynamic(typing.Any)`` specification instructs the NodeGraph to treat each value in
+# The ``dynamic(typing.Any)`` specification treats each value in
 # the returned dictionary as a separate output node of any type.
 #
 # .. note::
@@ -172,7 +172,7 @@ wg.engine.recorder
 # Let's define a task that returns a nested dictionary.
 
 
-@node()
+@task()
 def generate_nested_dict(
     x: int,
     y: int,
@@ -181,7 +181,7 @@ def generate_nested_dict(
     return {"sum": x + y, "nested": {"diff": x - y, "product": x * y}}
 
 
-@node.graph()
+@task.graph()
 def NestedDictGenerator(x: int, y: int):
     generate_nested_dict(x=x, y=y)
 
@@ -201,7 +201,7 @@ wg.engine.recorder
 # We can also combine dynamic and nested namespaces.
 
 
-@node()
+@task()
 def generate_dynamic_nested_dict(
     n: int,
 ) -> t.Annotated[dict, dynamic(namespace(square=int, cube=int)),]:
@@ -209,7 +209,7 @@ def generate_dynamic_nested_dict(
     return {f"data_{i}": {"square": i**2, "cube": i**3} for i in range(n)}
 
 
-@node.graph()
+@task.graph()
 def DynamicNestedDictGenerator(n: int):
     generate_dynamic_nested_dict(n=n)
 
@@ -246,12 +246,12 @@ class OutputsModel(BaseModel):
     product: int
 
 
-@node()
+@task()
 def add_multiply_pydantic_in_out(x, y) -> OutputsModel:
     return {"sum": x + y, "product": x * y}
 
 
-@node.graph()
+@task.graph()
 def AddMultiplyPydantic():
     # IMPORTANT: pass a plain dict, not OutputsModel(x=3, y=4)
     add_multiply_pydantic_in_out(x=3, y=4)
@@ -275,13 +275,13 @@ class DynamicOut(BaseModel):
     header: int = 42  # fixed (non-dynamic) field
 
 
-@node()
+@task()
 def make_dynamic_with_model(n: int) -> DynamicOut:
     # fixed field + dynamic keys with int values
     return {"header": 100, **{f"k{i}": i * i for i in range(n)}}
 
 
-@node.graph()
+@task.graph()
 def GraphDynamicOut(n: int):
     make_dynamic_with_model(n=n)
 
@@ -309,7 +309,7 @@ class BlobModel(BaseModel):
     b: int
 
 
-@node()
+@task()
 def consume_blob(m: BlobModel) -> dict:
     # 'm' is validated by Pydantic but stored/treated as one leaf node
     return {"sum": m["a"] + m["b"]}
@@ -321,12 +321,12 @@ class AnotherModel(BaseModel):
     b: int
 
 
-@node()
+@task()
 def consume_blob_per_use(m: Leaf[AnotherModel]) -> dict:
     return {"sum": m["a"] + m["b"]}
 
 
-@node.graph()
+@task.graph()
 def BlobExamples():
     consume_blob(m={"a": 1, "b": 2})
     consume_blob_per_use(m={"a": 3, "b": 4})
@@ -371,12 +371,12 @@ class DCOutputs:
     product: int
 
 
-@node()
+@task()
 def add_multiply_dc_in_out(x, y) -> DCOutputs:
     return {"sum": x + y, "product": x * y}
 
 
-@node.graph()
+@task.graph()
 def AddMultiplyDataclass():
     # IMPORTANT: pass a plain dict, not DCInputs(...)
     add_multiply_dc_in_out(x=2, y=5)
@@ -393,11 +393,11 @@ wg.engine.recorder
 #    Even when you annotate with BaseModel or @dataclass, do not pass instances of these types to
 #    tasks/graphs. Always pass plain dictionaries:
 #
-#    - This lets NodeGraph expand inputs/outputs into individual sockets, so it can wire provenance
+#    - This lets Graph expand inputs/outputs into individual sockets, so it can wire provenance
 #      edges precisely (e.g., data.x --> task.data.x).
 #    - It allows graph inputs to be collected from task outputs as a dict of AiiDA ORM nodes,
 #      preserving AiiDA links between nodes.
-#    - Validation still happens via the NodeGraph spec (derived from your annotations)--you’re
+#    - Validation still happens via the Graph spec (derived from your annotations)--you’re
 #      just not constructing runtime model/dataclass objects.
 #
 # Data linkage
@@ -414,7 +414,7 @@ wg.engine.recorder
 # This is a powerful feature for building complex, modular, and self-consistent workflows.
 
 
-@node()
+@task()
 def add_multiply(
     data: t.Annotated[
         dict,
@@ -425,7 +425,7 @@ def add_multiply(
     return {"sum": data["x"] + data["y"], "product": data["x"] * data["y"]}
 
 
-@node.graph()
+@task.graph()
 def AddMultiplyFinal(
     n: int,
     data: t.Annotated[
@@ -473,7 +473,7 @@ wg.to_html()
 # - **Graph inputs:** The ``data`` input is annotated with a nested namespace that reuses ``add_multiply.inputs``.
 #   This allows `node-graph` to validate the complex input dictionary and create the correct data links.
 #
-# In the GUI representation of the NodeGraph, you will see how the nested inputs are correctly wired.
+# In the GUI representation of the Graph, you will see how the nested inputs are correctly wired.
 # For instance, there is a direct link from the graph input socket ``data.add_multiply1.data.x`` to the
 # task input socket ``add_multiply_task_1.data.x``, guaranteeing perfect data lineage.
 #
@@ -483,7 +483,7 @@ wg.to_html()
 #
 #    .. code-block::
 #
-#       @node.graph()
+#       @task.graph()
 #       def SomeGraph(...) - t.Annotated[dict, some_task.outputs]:
 #           return some_task(...)
 #
@@ -494,7 +494,7 @@ wg.run()
 wg.engine.recorder
 
 # %%
-# Note how the outputs of the various tasks are exposed (linked) to the graph, making accessible via the graph node.
+# Note how the outputs of the various tasks are exposed (linked) to the graph.
 #
 # Reshaping specifications with ``select``
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -521,7 +521,7 @@ wg.engine.recorder
 from node_graph.socket_spec import meta, select
 
 
-@node()
+@task()
 def consume_complex(
     data: t.Annotated[
         dict,
@@ -537,7 +537,7 @@ def consume_complex(
 # Exclude a nested field (drop data.pw.structure)
 # because it's provided separately as a graph input
 # and shared between the two task calls.
-@node.graph()
+@task.graph()
 def UseExclude(
     structure,
     inputs: t.Annotated[
@@ -592,7 +592,7 @@ wg.to_html()
 # It is attached alongside ``select`` in the same ``Annotated`` metadata list.
 
 
-@node.graph()
+@task.graph()
 def UseMeta(
     data: t.Annotated[
         dict,
@@ -611,7 +611,7 @@ def UseMeta(
 # These keys are preserved on the socket and available to downstream tooling.
 
 
-@node()
+@task()
 def AnnotateExtras(
     payload: dict,
 ) -> t.Annotated[

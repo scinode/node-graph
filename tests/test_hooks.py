@@ -1,21 +1,21 @@
-def node_deletion_hook(self, node):
-    """Hook for node deletion.
+def task_deletion_hook(self, task):
+    """Hook for task deletion.
 
     Args:
-        node (Node): a node to be deleted.
+        task (Task): a task to be deleted.
     """
-    # remove all links to the node
+    # remove all links to the task
     link_index = []
     for index, link in enumerate(self.parent.links):
-        if link.from_node.name == node.name or link.to_node.name == node.name:
+        if link.from_task.name == task.name or link.to_task.name == task.name:
             link_index.append(index)
     del self.parent.links[link_index]
 
 
 def test_from_dict(ng_decorator):
-    """Export NodeGraph to dict."""
+    """Export Graph to dict."""
     ng = ng_decorator
     assert len(ng.links) == 3
-    ng.nodes.post_deletion_hooks = [node_deletion_hook]
-    ng.delete_nodes("add2")
+    ng.tasks.post_deletion_hooks = [task_deletion_hook]
+    ng.delete_tasks("add2")
     assert len(ng.links) == 1

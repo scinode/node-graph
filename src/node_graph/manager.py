@@ -31,10 +31,10 @@ class CurrentGraphManager:
         """
         Retrieve the current graph, or create a new one if none is set.
         """
-        from node_graph.node_graph import NodeGraph
+        from node_graph.graph import Graph
 
         if self._graph is None:
-            self._graph = NodeGraph()
+            self._graph = Graph()
         return self._graph
 
     def set_current_graph(self, graph):
@@ -59,9 +59,7 @@ class CurrentGraphManager:
 
 # Create a global manager instance
 _manager = CurrentGraphManager()
-_current_graph: ContextVar["NodeGraph | None"] = ContextVar(
-    "current_graph", default=None
-)
+_current_graph: ContextVar["Graph | None"] = ContextVar("current_graph", default=None)
 
 
 def peek_current_graph():
@@ -69,11 +67,11 @@ def peek_current_graph():
 
 
 def get_current_graph():
-    from node_graph.node_graph import NodeGraph
+    from node_graph.graph import Graph
 
     g = _current_graph.get()
     if g is None:
-        g = NodeGraph()  # fallback to a default core graph
+        g = Graph()  # fallback to a default core graph
         _current_graph.set(g)
     return g
 

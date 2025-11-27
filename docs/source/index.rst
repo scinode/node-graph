@@ -1,14 +1,12 @@
-Welcome to NodeGraph's documentation!
-=====================================
 
 .. image:: /_static/images/node-graph-logo.png
-   :alt: NodeGraph logo
+   :alt: node-graph logo
    :align: center
-   :width: 220px
+   :width: 420px
 
-NodeGraph is an open-source platform for designing node-based workflows with provenance you can trust.
+node-graph is an open-source platform for designing node-based workflows with provenance you can trust.
 
-**Why teams use NodeGraph**
+**Why teams use node-graph**
 
 - Python APIs for rapid workflow design
 - Rich provenance tracking for audits, debugging, and review
@@ -29,17 +27,17 @@ Then spin up your first graph:
 
 .. code-block:: python
 
-    from node_graph import NodeGraph, node
+    from node_graph import task
 
-    @node()
+    @task()
     def add(x, y):
         return x + y
 
-    @node()
+    @task()
     def multiply(x, y):
         return x * y
 
-    @node.graph()
+    @task.graph()
     def AddMultiply(x, y, z):
         the_sum = add(x=x, y=y).result
         return multiply(x=the_sum, y=z).result

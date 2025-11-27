@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 
-from node_graph import NodeGraph
-from node_graph.node_graph import BUILTIN_NODES
+from node_graph import Graph
+from node_graph.graph import BUILTIN_TASKS
 from .provenance import ProvenanceRecorder
 from .base import BaseEngine
 
@@ -18,9 +18,9 @@ class LocalEngine(BaseEngine):
     """
     Sync, dependency-free runner with provenance:
 
-    - @node: calls the underlying python function, normalizes to {result: ...}
-    - @node.graph: builds & runs a sub-NodeGraph, resolves returned socket-handles to values
-    - Provenance: records runtime *flattened* inputs & outputs around each node run
+    - @task: calls the underlying python function, normalizes to {result: ...}
+    - @task.graph: builds & runs a sub-Graph, resolves returned socket-handles to values
+    - Provenance: records runtime *flattened* inputs & outputs around each task run
     - Link semantics from utils: _wait, _outputs, and multi-fan-in bundling
     """
 
@@ -34,7 +34,7 @@ class LocalEngine(BaseEngine):
 
     def run(
         self,
-        ng: NodeGraph,
+        ng: Graph,
         parent_pid: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute ``ng`` and return the graph outputs as plain values."""
@@ -49,12 +49,12 @@ class LocalEngine(BaseEngine):
 
         try:
             for name in order:
-                if name in BUILTIN_NODES:
+                if name in BUILTIN_TASKS:
                     continue
 
-                node = ng.nodes[name]
+                task = ng.tasks[name]
 
-                kw = dict(_collect_literals(node))
+                kw = dict(_collect_literals(task))
                 link_kwargs = self._build_link_kwargs(
                     target_name=name,
                     links=incoming.get(name, []),
@@ -63,8 +63,8 @@ class LocalEngine(BaseEngine):
                 kw.update(link_kwargs)
                 kw = update_nested_dict_with_special_keys(kw)
 
-                label_kind = "return" if self._is_graph_node(node) else "create"
-                executor = self._build_node_executor(node, label_kind=label_kind)
+                label_kind = "return" if self._is_graph_task(task) else "create"
+                executor = self._build_task_executor(task, label_kind=label_kind)
                 tagged_out = executor(graph_pid, **kw)
                 values[name] = tagged_out
 
@@ -80,19 +80,19 @@ class LocalEngine(BaseEngine):
         finally:
             self._graph_pid = previous_pid
 
-    def _build_node_executor(self, node, label_kind: str):
-        fn = self._unwrap_callable(node)
-        is_graph = self._is_graph_node(node)
+    def _build_task_executor(self, task, label_kind: str):
+        fn = self._unwrap_callable(task)
+        is_graph = self._is_graph_task(task)
 
         def _executor(parent_pid: Optional[str], **kwargs: Any) -> Dict[str, Any]:
             pid: Optional[str] = None
             run_kwargs = dict(kwargs)
             if not is_graph:
                 pid = self.recorder.process_start(
-                    task_name=node.name,
+                    task_name=task.name,
                     callable_obj=fn,
                     flow_run_id=f"{self.engine_kind}:{self.name}",
-                    task_run_id=f"{self.engine_kind}:{node.name}",
+                    task_run_id=f"{self.engine_kind}:{task.name}",
                     parent_pid=parent_pid,
                 )
                 self.recorder.record_inputs_payload(pid, run_kwargs)
@@ -106,7 +106,7 @@ class LocalEngine(BaseEngine):
                 else:
                     res = fn(**raw_kwargs)
 
-                tagged_out = self._normalize_outputs(node, res, strict=False)
+                tagged_out = self._normalize_outputs(task, res, strict=False)
 
                 if pid is not None:
                     self.recorder.record_outputs_payload(
@@ -122,8 +122,8 @@ class LocalEngine(BaseEngine):
 
         return _executor
 
-    def _run_subgraph(self, node, sub_ng: NodeGraph, parent_pid: Optional[str]) -> None:
-        LocalEngine(name=f"{self.name}::{node.name}", recorder=self.recorder).run(
+    def _run_subgraph(self, task, sub_ng: Graph, parent_pid: Optional[str]) -> None:
+        LocalEngine(name=f"{self.name}::{task.name}", recorder=self.recorder).run(
             sub_ng, parent_pid=parent_pid
         )
 

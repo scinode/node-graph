@@ -3,7 +3,7 @@ import pytest
 from node_graph import socket_spec as ss
 from node_graph.orm.mapping import type_mapping
 from typing import Any, Annotated
-from node_graph import node
+from node_graph import task
 from dataclasses import dataclass, MISSING
 from pydantic import BaseModel
 from node_graph.materialize import runtime_meta_from_spec
@@ -386,18 +386,18 @@ def test_is_namespace():
     assert not ss.SocketSpec("any").is_namespace()
 
 
-def test_expose_node_spec():
-    from node_graph.socket import NodeSocket, NodeSocketNamespace
+def test_expose_task_spec():
+    from node_graph.socket import TaskSocket, TaskSocketNamespace
 
-    @node()
+    @task()
     def test_calc(x: int) -> Annotated[dict, ss.namespace(square=int, double=int)]:
         return {"square": x * x, "double": x + x}
 
-    @node(outputs=ss.namespace(sum=int, product=int))
+    @task(outputs=ss.namespace(sum=int, product=int))
     def add_multiply(data: Annotated[dict, ss.namespace(x=int, y=int)]) -> dict:
         return {"sum": data["x"] + data["y"], "product": data["x"] * data["y"]}
 
-    @node.graph(
+    @task.graph(
         outputs=ss.namespace(
             out1=add_multiply.outputs, out2=test_calc.outputs["square"]
         )
@@ -410,9 +410,9 @@ def test_expose_node_spec():
     ng = test_graph.build(x=1, data={"y": 2})
     assert "sum" in ng.outputs.out1
     assert "out2" in ng.outputs
-    assert isinstance(ng.outputs.out1, NodeSocketNamespace)
-    assert isinstance(ng.outputs.out1.sum, NodeSocket)
-    assert isinstance(ng.outputs.out2, NodeSocket)
+    assert isinstance(ng.outputs.out1, TaskSocketNamespace)
+    assert isinstance(ng.outputs.out1.sum, TaskSocket)
+    assert isinstance(ng.outputs.out2, TaskSocket)
 
 
 def test_default():

@@ -1,8 +1,8 @@
-from .node_graph import NodeGraph
-from .node import Node
-from .decorator import node
+from .graph import Graph
+from .task import Task
+from .decorator import task
 from .executor import SafeExecutor, RuntimeExecutor
-from .nodes import NodePool
+from .tasks import TaskPool
 from .collection import group
 from .socket_spec import namespace, dynamic
 
@@ -10,12 +10,12 @@ __version__ = "0.4.5"
 
 
 __all__ = [
-    "NodeGraph",
-    "Node",
-    "node",
+    "Graph",
+    "Task",
+    "task",
     "SafeExecutor",
     "RuntimeExecutor",
-    "NodePool",
+    "TaskPool",
     "group",
     "namespace",
     "dynamic",

@@ -23,25 +23,25 @@ Quick Start
 #
 
 # %%
-# Create node
+# Create task
 # ------------------
-# Node is the basic building block of a workflow. One can create a node from a Python function using the `decorator`:
+# Task is the basic building block of a workflow. One can create a task from a Python function using the `decorator`:
 
 # %%
-from node_graph.decorator import node
+from node_graph.decorator import task
 
 
-@node()
+@task()
 def add(x, y):
     return x + y
 
 
-@node()
+@task()
 def multiply(x, y):
     return x * y
 
 
-@node.graph()
+@task.graph()
 def AddMultiply(x, y, z):
     the_sum = add(x=x, y=y).result
     return multiply(x=the_sum, y=z).result
@@ -73,19 +73,19 @@ engine.recorder
 # %%
 # Node graph programming
 # ===========================
-# You can also create a node graph programmatically. Three steps:
+# You can also create a graph programmatically. Three steps:
 #
-# - create a empty `NodeGraph`
+# - create a empty `Graph`
 # - add nodes: `add` and `multiply`.
-# - link the output of the `add` node to one of the `x` input of the `multiply` node.
+# - link the output of the `add` task to one of the `x` input of the `multiply` task.
 
 # %%
-from node_graph import NodeGraph
+from node_graph import Graph
 
-ng = NodeGraph("first_workflow")
-ng.add_node(add, name="add", x=2, y=3)
-ng.add_node(multiply, name="multiply", y=4)
-ng.add_link(ng.nodes.add.outputs.result, ng.nodes.multiply.inputs.x)
+ng = Graph("first_workflow")
+ng.add_task(add, name="add", x=2, y=3)
+ng.add_task(multiply, name="multiply", y=4)
+ng.add_link(ng.tasks.add.outputs.result, ng.tasks.multiply.inputs.x)
 ng.to_html()
 
 # %%
@@ -95,5 +95,5 @@ ng.to_html()
 # +--------------------------------------+----------------------------------------------------+
 # | Topic                                | Description                                        |
 # +--------------------------------------+----------------------------------------------------+
-# | `Concepts <../concept/index.rst>`__  | A brief introduction of NodeGraph main concepts.   |
+# | `Concepts <../concept/index.rst>`__  | A brief introduction of main concepts.   |
 # +--------------------------------------+----------------------------------------------------+

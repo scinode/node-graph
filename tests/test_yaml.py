@@ -1,4 +1,4 @@
-from node_graph import NodeGraph
+from node_graph import Graph
 import yaml
 
 
@@ -7,12 +7,12 @@ def test_export_yaml(ng):
     ng.name = "test_export_yaml"
     s = ng.to_yaml()
     ntdata = yaml.safe_load(s)
-    assert len(ntdata["nodes"]) == 6
+    assert len(ntdata["tasks"]) == 6
 
 
 def test_load_yaml_file():
     """Test yaml"""
-    ng = NodeGraph.from_yaml("datas/test_yaml.yaml")
-    assert len(ng.nodes) == 5
-    assert ng.nodes.float1.inputs.value.value == 2.0
-    assert ng.nodes.add1.inputs.y.value == 3.0
+    ng = Graph.from_yaml("datas/test_yaml.yaml")
+    assert len(ng.tasks) == 5
+    assert ng.tasks.float1.inputs.value.value == 2.0
+    assert ng.tasks.add1.inputs.y.value == 3.0

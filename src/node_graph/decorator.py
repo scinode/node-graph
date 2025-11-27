@@ -2,58 +2,58 @@ from __future__ import annotations
 from typing import Any, Optional, Callable, List, Dict
 import inspect
 from .error_handler import ErrorHandlerSpec
-from .node import Node
-from .node_spec import NodeHandle, BaseHandle
+from .task import Task
+from .task_spec import TaskHandle, BaseHandle
 from .socket_spec import SocketSpec
 
 
-def build_node_from_callable(
+def build_task_from_callable(
     executor: Callable,
     inputs: Optional[SocketSpec | List[str]] = None,
     outputs: Optional[SocketSpec | List[str]] = None,
-) -> Node:
+) -> Task:
     """Build task from a callable object.
     First, check if the executor is already a task.
     If not, check if it is a function or a class.
     If it is a function, build task from function.
     """
 
-    # if it already has Node class, return it
+    # if it already has Task class, return it
     if (
         isinstance(executor, BaseHandle)
         or inspect.isclass(executor)
-        and issubclass(executor, Node)
+        and issubclass(executor, Task)
     ):
         return executor
     if callable(executor):
-        return node(inputs=inputs, outputs=outputs)(executor)
+        return task(inputs=inputs, outputs=outputs)(executor)
 
     raise ValueError(f"The executor {executor} is not supported.")
 
 
-def decorator_node(
+def decorator_task(
     identifier: Optional[str] = None,
     inputs: Optional[SocketSpec | List[str]] = None,
     outputs: Optional[SocketSpec | List[str]] = None,
     error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Generate a decorator that register a function as a NodeGraph node.
+    """Generate a decorator that register a function as a Graph task.
     After decoration, calling that function `func(x, y, ...)`
-    dynamically creates a node in the current NodeGraph context
+    dynamically creates a task in the current Graph context
     instead of executing Python code directly.
 
     Attributes:
-        indentifier (str): node identifier
-        catalog (str): node catalog
-        inputs (dict): node inputs
-        outputs (dict): node outputs
+        indentifier (str): task identifier
+        catalog (str): task catalog
+        inputs (dict): task inputs
+        outputs (dict): task outputs
     """
 
-    def wrap(func) -> NodeHandle:
-        from node_graph.nodes.function_node import FunctionNode
+    def wrap(func) -> TaskHandle:
+        from node_graph.tasks.function_task import FunctionTask
 
-        return FunctionNode.build(
+        return FunctionTask.build(
             obj=func,
             identifier=identifier or func.__name__,
             catalog=catalog,
@@ -71,22 +71,22 @@ def decorator_graph(
     outputs: Optional[SocketSpec | list] = None,
     catalog: str = "Others",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Generate a decorator that register a function as a graph node.
+    """Generate a decorator that register a function as a graph task.
 
     Attributes:
-        indentifier (str): node identifier
-        catalog (str): node catalog
-        inputs (dict): node inputs
-        outputs (dict): node outputs
+        indentifier (str): task identifier
+        catalog (str): task catalog
+        inputs (dict): task inputs
+        outputs (dict): task outputs
     """
 
-    def wrap(func) -> NodeHandle:
-        from node_graph.nodes.function_node import FunctionNode
+    def wrap(func) -> TaskHandle:
+        from node_graph.tasks.function_task import FunctionTask
 
-        return FunctionNode.build(
+        return FunctionTask.build(
             obj=func,
             identifier=identifier or func.__name__,
-            node_type="graph",
+            task_type="graph",
             catalog=catalog,
             input_spec=inputs,
             output_spec=outputs,
@@ -95,15 +95,15 @@ def decorator_graph(
     return wrap
 
 
-class NodeDecoratorCollection:
-    """Collection of node decorators."""
+class TaskDecoratorCollection:
+    """Collection of task decorators."""
 
-    node: Callable[..., Any] = staticmethod(decorator_node)
+    task: Callable[..., Any] = staticmethod(decorator_task)
     graph: Callable[..., Any] = staticmethod(decorator_graph)
 
-    # Alias '@node' to '@node.node'.
+    # Alias '@task' to '@task.task'.
     def __call__(self, *args, **kwargs):
-        return self.node(*args, **kwargs)
+        return self.task(*args, **kwargs)
 
 
-node: NodeDecoratorCollection = NodeDecoratorCollection()
+task: TaskDecoratorCollection = TaskDecoratorCollection()

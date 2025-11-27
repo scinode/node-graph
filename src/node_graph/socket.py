@@ -1,7 +1,7 @@
 from __future__ import annotations
 from uuid import uuid4
 from node_graph.collection import DependencyCollection
-from node_graph.property import NodeProperty
+from node_graph.property import TaskProperty
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class
 from dataclasses import MISSING, replace
@@ -11,9 +11,9 @@ from node_graph.registry import EntryPointPool
 import wrapt
 
 if TYPE_CHECKING:
-    from node_graph.node import Node
-    from node_graph.link import NodeLink
-    from node_graph.node_graph import NodeGraph
+    from node_graph.task import Task
+    from node_graph.link import TaskLink
+    from node_graph.graph import Graph
 
 
 def has_socket(data: dict):
@@ -83,22 +83,22 @@ def op_ne(x, y):
 def _raise_illegal(sock, what: str, tips: list[str]):
     from .errors import GraphDeferredIllegalOperationError
 
-    node = getattr(sock, "_node", None)
-    node_name = getattr(node, "name", None) or "<unknown-node>"
+    task = getattr(sock, "_task", None)
+    task_name = getattr(task, "name", None) or "<unknown-task>"
     socket_name = (
         getattr(sock, "_name", None) or getattr(sock, "name", None) or "<socket>"
     )
 
     common = [
         "General guidance:",
-        "  • Wrap logic in a nested @node.graph.",
+        "  • Wrap logic in a nested @task.graph.",
         "  • Or use the WorkGraph If zone for branching on predicates.",
         "  • Or for loops, use the While zone or Map zone.",
     ]
 
     msg = (
         f"Illegal operation on a future value (Socket): {what}\n"
-        f"Socket: {socket_name} of node '{node_name}'"
+        f"Socket: {socket_name} of task '{task_name}'"
     )
     msg += "\n\nFix:\n" + "\n".join(tips + [""] + common)
     raise GraphDeferredIllegalOperationError(msg)
@@ -107,21 +107,21 @@ def _raise_illegal(sock, what: str, tips: list[str]):
 def _tip_cast(kind):  # numeric/bytes/path-like casts
     return [
         f"Avoid {kind} on futures. Compute the value inside the graph, then cast afterwards.",
-        "If you need a cast during execution, use a dedicated cast node.",
+        "If you need a cast during execution, use a dedicated cast task.",
     ]
 
 
 def _tip_iter():  # iteration/len/container-ish
     return [
         "You tried to iterate or take len()/index a future.",
-        "Use @node.graph to build logic that needs to iterate over values.",
+        "Use @task.graph to build logic that needs to iterate over values.",
     ]
 
 
 def _tip_bool():
     return [
         "You used a future in a boolean context (if/while/assert/and/or).",
-        "Wrap logic in a nested @node.graph.",
+        "Wrap logic in a nested @task.graph.",
     ]
 
 
@@ -129,42 +129,42 @@ def _tip_numpy():
     return [
         "NumPy tried to coerce or operate on a future.",
         "Use built-in operator sockets (+, -, *, <, …) to build predicates/expressions,",
-        "or use a dedicated numpy/ufunc node.",
+        "or use a dedicated numpy/ufunc task.",
     ]
 
 
 def _tip_ctxmgr():
     return [
         "You tried to use a future as a context manager.",
-        "Wrap side effects in a graph node or zone instead.",
+        "Wrap side effects in a graph task or zone instead.",
     ]
 
 
 def _tip_indexing():
     return [
         "You tried to subscript a future (obj[idx]).",
-        "Index inside the graph (node/zone) where the value is concrete.",
+        "Index inside the graph (task/zone) where the value is concrete.",
     ]
 
 
 class OperatorSocketMixin:
     @property
     def _decorator(self):
-        from node_graph.decorator import node
+        from node_graph.decorator import task
 
-        return node
+        return task
 
-    def _create_operator_node(self, op_func, x, y):
-        """Create a "hidden" operator Node in the WorkGraph,
+    def _create_operator_task(self, op_func, x, y):
+        """Create a "hidden" operator Task in the WorkGraph,
         hooking `self` up as 'x' and `other` as 'y'.
-        Return the output socket from that new Node.
+        Return the output socket from that new Task.
         """
 
-        graph = self._node.graph
+        graph = self._task.graph
         if not graph:
             raise ValueError("Socket does not belong to a WorkGraph.")
 
-        new_node = graph.nodes._new(
+        new_node = graph.tasks._new(
             self._decorator()(op_func),
             x=x,
             y=y,
@@ -176,68 +176,68 @@ class OperatorSocketMixin:
 
     # Arithmetic Operations
     def __add__(self, other):
-        return self._create_operator_node(op_add, self, other)
+        return self._create_operator_task(op_add, self, other)
 
     def __sub__(self, other):
-        return self._create_operator_node(op_sub, self, other)
+        return self._create_operator_task(op_sub, self, other)
 
     def __mul__(self, other):
-        return self._create_operator_node(op_mul, self, other)
+        return self._create_operator_task(op_mul, self, other)
 
     def __truediv__(self, other):
-        return self._create_operator_node(op_truediv, self, other)
+        return self._create_operator_task(op_truediv, self, other)
 
     def __floordiv__(self, other):
-        return self._create_operator_node(op_floordiv, self, other)
+        return self._create_operator_task(op_floordiv, self, other)
 
     def __mod__(self, other):
-        return self._create_operator_node(op_mod, self, other)
+        return self._create_operator_task(op_mod, self, other)
 
     def __pow__(self, other):
-        return self._create_operator_node(op_pow, self, other)
+        return self._create_operator_task(op_pow, self, other)
 
     # Reverse Arithmetic Operations
     def __radd__(self, other):
-        return self._create_operator_node(op_add, other, self)
+        return self._create_operator_task(op_add, other, self)
 
     def __rsub__(self, other):
-        return self._create_operator_node(op_sub, other, self)
+        return self._create_operator_task(op_sub, other, self)
 
     def __rmul__(self, other):
-        return self._create_operator_node(op_mul, other, self)
+        return self._create_operator_task(op_mul, other, self)
 
     def __rtruediv__(self, other):
-        return self._create_operator_node(op_truediv, other, self)
+        return self._create_operator_task(op_truediv, other, self)
 
     def __rfloordiv__(self, other):
-        return self._create_operator_node(op_floordiv, other, self)
+        return self._create_operator_task(op_floordiv, other, self)
 
     def __rmod__(self, other):
-        return self._create_operator_node(op_mod, other, self)
+        return self._create_operator_task(op_mod, other, self)
 
     def __rpow__(self, other):
-        return self._create_operator_node(op_pow, other, self)
+        return self._create_operator_task(op_pow, other, self)
 
     # Comparison Operations
     def __lt__(self, other):
-        return self._create_operator_node(op_lt, self, other)
+        return self._create_operator_task(op_lt, self, other)
 
     def __le__(self, other):
-        return self._create_operator_node(op_le, self, other)
+        return self._create_operator_task(op_le, self, other)
 
     def __gt__(self, other):
-        return self._create_operator_node(op_gt, self, other)
+        return self._create_operator_task(op_gt, self, other)
 
     def __ge__(self, other):
-        return self._create_operator_node(op_ge, self, other)
+        return self._create_operator_task(op_ge, self, other)
 
     def __eq__(self, other):
-        return self._create_operator_node(op_eq, self, other)
+        return self._create_operator_task(op_eq, self, other)
 
     def __ne__(self, other):
-        return self._create_operator_node(op_ne, self, other)
+        return self._create_operator_task(op_ne, self, other)
 
-    def __rshift__(self, other: BaseSocket | Node | DependencyCollection):
+    def __rshift__(self, other: BaseSocket | Task | DependencyCollection):
         """
         Called when we do: self >> other
         So we link them or mark that 'other' must wait for 'self'.
@@ -249,7 +249,7 @@ class OperatorSocketMixin:
             other._waiting_on.add(self)
         return other
 
-    def __lshift__(self, other: BaseSocket | Node | DependencyCollection):
+    def __lshift__(self, other: BaseSocket | Task | DependencyCollection):
         """
         Called when we do: self << other
         Means the same as: other >> self
@@ -355,7 +355,7 @@ class OperatorSocketMixin:
         _raise_illegal(
             self,
             "await on a future (__await__)",
-            ["Awaiting is not supported; use @node.graph to build logic instead."],
+            ["Awaiting is not supported; use @task.graph to build logic instead."],
         )
 
     def __aiter__(self):
@@ -363,7 +363,7 @@ class OperatorSocketMixin:
             self,
             "async iteration (__aiter__)",
             [
-                "Async iteration is not supported; use @node.graph to build logic instead."
+                "Async iteration is not supported; use @task.graph to build logic instead."
             ],
         )
 
@@ -372,7 +372,7 @@ class OperatorSocketMixin:
             self,
             "async next (__anext__)",
             [
-                "Async iteration is not supported; use @node.graph to build logic instead."
+                "Async iteration is not supported; use @task.graph to build logic instead."
             ],
         )
 
@@ -395,23 +395,23 @@ class WaitingOn:
     A small helper class that manages 'waiting on' dependencies for a Socket.
     """
 
-    def __init__(self, node: "BaseSocket", graph: "NodeGraph") -> None:
-        self.node = node
+    def __init__(self, task: "BaseSocket", graph: "Graph") -> None:
+        self.task = task
         self.graph = graph
 
-    def add(self, other: "BaseSocket" | "Node") -> None:
+    def add(self, other: "BaseSocket" | "Task") -> None:
         """Add a socket to the waiting list."""
-        from node_graph.node import Node
+        from node_graph.task import Task
 
         if isinstance(other, BaseSocket):
-            node = other._node
-        elif isinstance(other, Node):
-            node = other
+            task = other._task
+        elif isinstance(other, Task):
+            task = other
         else:
-            raise TypeError(f"Expected BaseSocket or Node, got {type(other).__name__}.")
-        link_name = f"{node.name}._wait -> {self.node.name}._wait"
+            raise TypeError(f"Expected BaseSocket or Task, got {type(other).__name__}.")
+        link_name = f"{task.name}._wait -> {self.task.name}._wait"
         if link_name not in self.graph.links:
-            self.graph.add_link(node.outputs._wait, self.node.inputs._wait)
+            self.graph.add_link(task.outputs._wait, self.task.inputs._wait)
         else:
             print(f"Link {link_name} already exists, skipping creation.")
 
@@ -496,14 +496,14 @@ class TaggedValue(wrapt.ObjectProxy):
 
 
 class BaseSocket:
-    """Socket object for input and output sockets of a Node.
+    """Socket object for input and output sockets of a Task.
 
     Attributes:
         name (str): Socket name.
-        node (Node): Node this socket belongs to.
+        task (Task): Task this socket belongs to.
         type (str): Socket type, either "INPUT" or "OUTPUT".
         links (List[Link]): Connected links.
-        property (Optional[NodeProperty]): Associated property.
+        property (Optional[TaskProperty]): Associated property.
         link_limit (int): Maximum number of links.
     """
 
@@ -512,18 +512,18 @@ class BaseSocket:
     def __init__(
         self,
         name: str,
-        node: Optional["Node"] = None,
-        parent: Optional["NodeSocketNamespace"] = None,
-        graph: Optional["NodeGraph"] = None,
+        task: Optional["Task"] = None,
+        parent: Optional["TaskSocketNamespace"] = None,
+        graph: Optional["Graph"] = None,
         link_limit: int = 1,
         metadata: Union[SocketMeta, Dict[str, Any], None] = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize an instance of NodeSocket.
+        """Initialize an instance of TaskSocket.
 
         Args:
             name (str): Name of the socket.
-            parent (Optional[Node]): Parent node. Defaults to None.
+            parent (Optional[Task]): Parent task. Defaults to None.
             type (str, optional): Socket type. Defaults to "INPUT".
             link_limit (int, optional): Maximum number of links. Defaults to 1.
         """
@@ -531,13 +531,13 @@ class BaseSocket:
 
         valid_name_string(name)
         self._name = name
-        self._node = node
+        self._task = task
         self._parent = parent
         self._graph = graph
         self._links = []
         self._link_limit = link_limit
         self._metadata: SocketMeta = _normalize_meta(metadata)
-        self._waiting_on = WaitingOn(node=self._node, graph=self._graph)
+        self._waiting_on = WaitingOn(task=self._task, graph=self._graph)
 
     @property
     def _full_name(self) -> str:
@@ -552,10 +552,10 @@ class BaseSocket:
         return self._full_name.split(".", 1)[-1]
 
     @property
-    def _full_name_with_node(self) -> str:
-        """Full hierarchical name, including node name and all parent namespaces."""
-        if self._node is not None:
-            return f"{self._node.name}.{self._full_name}"
+    def _full_name_with_task(self) -> str:
+        """Full hierarchical name, including task name and all parent namespaces."""
+        if self._task is not None:
+            return f"{self._task.name}.{self._full_name}"
         return self._full_name
 
     def _to_dict(self) -> Dict[str, Any]:
@@ -571,14 +571,14 @@ class BaseSocket:
             if self._metadata.socket_type.upper() == "INPUT":
                 data["links"].append(
                     {
-                        "from_node": link.from_node.name,
+                        "from_task": link.from_task.name,
                         "from_socket": link.from_socket._name,
                     }
                 )
             else:
                 data["links"].append(
                     {
-                        "to_node": link.to_node.name,
+                        "to_task": link.to_task.name,
                         "to_socket": link.to_socket._name,
                     }
                 )
@@ -592,36 +592,36 @@ class BaseSocket:
         return data
 
 
-class NodeSocket(BaseSocket, OperatorSocketMixin):
-    _identifier: str = "NodeSocket"
+class TaskSocket(BaseSocket, OperatorSocketMixin):
+    _identifier: str = "TaskSocket"
 
-    _socket_property_class = NodeProperty
+    _socket_property_class = TaskProperty
 
     _socket_property_identifier: Optional[str] = None
 
     def __init__(
         self,
         name: str,
-        node: Optional["Node"] = None,
-        parent: Optional["NodeSocketNamespace"] = None,
-        graph: Optional["NodeGraph"] = None,
+        task: Optional["Task"] = None,
+        parent: Optional["TaskSocketNamespace"] = None,
+        graph: Optional["Graph"] = None,
         link_limit: int = 1,
         metadata: Optional[dict] = None,
         property: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize an instance of NodeSocket.
+        """Initialize an instance of TaskSocket.
 
         Args:
             name (str): Name of the socket.
-            parent (Optional[Node]): Parent node. Defaults to None.
+            parent (Optional[Task]): Parent task. Defaults to None.
             type (str, optional): Socket type. Defaults to "INPUT".
             link_limit (int, optional): Maximum number of links. Defaults to 1.
         """
         BaseSocket.__init__(
             self,
             name=name,
-            node=node,
+            task=task,
             parent=parent,
             graph=graph,
             link_limit=link_limit,
@@ -629,7 +629,7 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
             **kwargs,
         )
         # Conditionally add a property if property_identifier is provided
-        self.property: Optional[NodeProperty] = None
+        self.property: Optional[TaskProperty] = None
         if self._socket_property_identifier:
             property = property or {}
             property["identifier"] = self._socket_property_identifier
@@ -662,14 +662,14 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
     def _set_socket_value(self, value: Any) -> None:
         if isinstance(value, BaseSocket):
             if (
-                isinstance(value, NodeSocketNamespace)
+                isinstance(value, TaskSocketNamespace)
                 and value._parent is None
                 and "_outputs" in value
             ):
                 value = value._outputs
-            self._node.graph.add_link(value, self)
+            self._task.graph.add_link(value, self)
         elif isinstance(value, TaggedValue) and value._socket is not None:
-            self._node.graph.add_link(value._socket, self)
+            self._task.graph.add_link(value._socket, self)
         elif self.property:
             self.property.value = value
         else:
@@ -737,23 +737,23 @@ class NodeSocket(BaseSocket, OperatorSocketMixin):
 
     def _copy(
         self,
-        node: Optional["Node"] = None,
-        parent: Optional["Node"] = None,
+        task: Optional["Task"] = None,
+        parent: Optional["Task"] = None,
         **kwargs: Any,
-    ) -> "NodeSocket":
+    ) -> "TaskSocket":
         """Copy this socket.
 
         Args:
-            parent (Node, optional): Node that this socket will belong to. Defaults to None.
+            parent (Task, optional): Task that this socket will belong to. Defaults to None.
 
         Returns:
-            NodeSocket: The copied socket.
+            TaskSocket: The copied socket.
         """
-        node = self._node if node is None else node
+        task = self._task if task is None else task
         parent = self._parent if parent is None else parent
         socket_copy = self.__class__(
             name=self._name,
-            node=node,
+            task=task,
             parent=parent,
             link_limit=self._link_limit,
         )
@@ -780,13 +780,13 @@ def check_identifier_name(identifier: str, pool: dict) -> None:
 
 def _raise_namespace_assignment_error(
     *,
-    target_ns: "NodeSocketNamespace",
+    target_ns: "TaskSocketNamespace",
     incoming_desc: str,
     reason: str,
     fixes: list[str],
 ) -> None:
     """Raise a ValueError guiding users when setting/linking values into a namespace."""
-    where = getattr(target_ns, "_full_name_with_node", "<namespace>")
+    where = getattr(target_ns, "_full_name_with_task", "<namespace>")
     msg = [
         f"Invalid assignment into namespace socket: {where}",
         "",
@@ -804,8 +804,8 @@ def _raise_namespace_assignment_error(
     raise ValueError("\n".join(msg))
 
 
-class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
-    """A NodeSocket that also acts as a namespace (collection) of other sockets."""
+class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
+    """A TaskSocket that also acts as a namespace (collection) of other sockets."""
 
     _identifier: str = "node_graph.namespace"
     _type_mapping: dict = type_mapping
@@ -815,7 +815,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         "_IDENTIFIER",
         "_VALUE",
         "_NAME",
-        "_NODE",
+        "_TASK",
         "_PARENT",
         "_LINKS",
         "_LINK_LIMIT",
@@ -825,8 +825,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def __init__(
         self,
         name: str,
-        node: Optional["Node"] = None,
-        parent: Optional["NodeSocket"] = None,
+        task: Optional["Task"] = None,
+        parent: Optional["TaskSocket"] = None,
         link_limit: int = 1000000,
         metadata: Union[SocketMeta, Dict[str, Any], None] = None,
         sockets: Optional[Dict[str, object]] = None,
@@ -834,11 +834,11 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         entry_point: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
-        # Initialize NodeSocket first
+        # Initialize TaskSocket first
         BaseSocket.__init__(
             self,
             name=name,
-            node=node,
+            task=task,
             parent=parent,
             link_limit=link_limit,
             metadata=metadata,
@@ -888,7 +888,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         except KeyError:
             avail = ", ".join(self._sockets.keys()) or "<none>"
             raise AttributeError(
-                f"{self.__class__.__name__}: '{self._full_name_with_node}' has no sub-socket '{name}'.\n"
+                f"{self.__class__.__name__}: '{self._full_name_with_task}' has no sub-socket '{name}'.\n"
                 f"Available: {avail}\n"
                 f"Tip: If '{name}' should exist, add it to the SocketSpec (or make this namespace dynamic)."
             )
@@ -974,7 +974,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             kwargs.setdefault("link_limit", self._metadata.child_default_link_limit)
             item = ItemClass(
                 name,
-                node=self._node,
+                task=self._task,
                 parent=self,
                 graph=self._graph,
                 metadata=meta_payload,
@@ -991,7 +991,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _collect_values(self, raw: bool = True) -> Dict[str, Any]:
         data = {}
         for name, item in self._sockets.items():
-            if isinstance(item, NodeSocketNamespace):
+            if isinstance(item, TaskSocketNamespace):
                 value = item._collect_values(raw=raw)
                 if value:
                     data[name] = value
@@ -1070,13 +1070,13 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         identifier = snapshot.get("identifier", "node_graph.any")
 
         fields = {
-            name: NodeSocketNamespace._spec_from_shape_snapshot(child_snapshot)
+            name: TaskSocketNamespace._spec_from_shape_snapshot(child_snapshot)
             for name, child_snapshot in snapshot.get("sockets", {}).items()
         }
 
         item_snapshot = snapshot.get("item")
         item_spec = (
-            NodeSocketNamespace._spec_from_shape_snapshot(item_snapshot)
+            TaskSocketNamespace._spec_from_shape_snapshot(item_snapshot)
             if isinstance(item_snapshot, dict)
             else None
         )
@@ -1101,7 +1101,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
 
-    def _set_socket_value(self, value: Dict[str, Any] | NodeSocket) -> None:
+    def _set_socket_value(self, value: Dict[str, Any] | TaskSocket) -> None:
         """Set value(s) into this namespace.
 
         Supports:
@@ -1120,13 +1120,13 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
         # Link another socket directly to this namespace
         if isinstance(value, BaseSocket):
-            self._node.graph.add_link(value, self)
+            self._task.graph.add_link(value, self)
             return
 
         if isinstance(value, TaggedValue):
             src = getattr(
                 getattr(value, "_socket", None),
-                "_full_name_with_node",
+                "_full_name_with_task",
                 "<unknown-socket>",
             )
             _raise_namespace_assignment_error(
@@ -1137,7 +1137,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     "Annotate the graph-level parameter as a namespace, e.g.:",
                     f"    def your_graph({self._name}: Annotated[dict, namespace({list(self._sockets.keys())[0]}=, ...)]):",
                     "",
-                    "Or reuse the node’s own input spec, e.g.:",
+                    "Or reuse the task’s own input spec, e.g.:",
                     f"    def your_graph({self._name}: Annotated[dict, add_multiply.inputs.data]):",
                     "        add_multiply(data=data)",
                     "",
@@ -1184,7 +1184,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     )
 
                 child = self._sockets[head]
-                if not isinstance(child, NodeSocketNamespace):
+                if not isinstance(child, TaskSocketNamespace):
                     _raise_namespace_assignment_error(
                         target_ns=self,
                         incoming_desc=f"nested key '{key}' under leaf '{head}'",
@@ -1216,7 +1216,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 extras = self._metadata.extras or {}
                 item_snapshot = extras.get("item") if isinstance(extras, dict) else None
                 if item_snapshot is None:
-                    if isinstance(val, (dict, NodeSocketNamespace)):
+                    if isinstance(val, (dict, TaskSocketNamespace)):
                         item_snapshot = {
                             "identifier": self._type_mapping["namespace"],
                             "dynamic": True,
@@ -1232,19 +1232,19 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     self,
                     key,
                     item_spec,
-                    node=self._node,
+                    task=self._task,
                     graph=self._graph,
                     role="input",
                 )
 
             # Now we’re guaranteed the key exists; delegate appropriately
             target = self._sockets[key]
-            if isinstance(target, NodeSocketNamespace):
+            if isinstance(target, TaskSocketNamespace):
                 # If incoming val is a dict, recurse. If it’s a socket, link to the namespace.
                 if isinstance(val, dict):
                     target._set_socket_value(val)
                 elif isinstance(val, BaseSocket):
-                    self._node.graph.add_link(val, target)
+                    self._task.graph.add_link(val, target)
                 else:
                     # Treat setting a leaf value into a namespace as error for clarity
                     _raise_namespace_assignment_error(
@@ -1260,11 +1260,11 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 target._set_socket_value(val)
 
     @property
-    def _all_links(self) -> List["NodeLink"]:
+    def _all_links(self) -> List["TaskLink"]:
         links = []
         for item in self._sockets.values():
             links.extend(item._links)
-            if isinstance(item, NodeSocketNamespace):
+            if isinstance(item, TaskSocketNamespace):
                 links.extend(item._all_links)
         return links
 
@@ -1280,8 +1280,8 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _from_dict(
         cls,
         data: Dict[str, Any],
-        node: Optional["Node"] = None,
-        parent: Optional["NodeSocket"] = None,
+        task: Optional["Task"] = None,
+        parent: Optional["TaskSocket"] = None,
         pool: Optional[object] = None,
         **kwargs: Any,
     ) -> None:
@@ -1290,7 +1290,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             name=data["name"],
             link_limit=data.get("link_limit", 1),
             metadata=data.get("metadata", {}),
-            node=node,
+            task=task,
             parent=parent,
             graph=kwargs.pop("graph", None),
             pool=pool,
@@ -1308,12 +1308,12 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         name: str,
         spec: "SocketSpec",
         *,
-        node: Optional["Node"],
-        graph: Optional["NodeGraph"],
-        parent: Optional["NodeSocket"] = None,
+        task: Optional["Task"],
+        graph: Optional["Graph"],
+        parent: Optional["TaskSocket"] = None,
         pool: Optional[object] = None,
         role: str = "input",
-    ) -> "NodeSocketNamespace":
+    ) -> "TaskSocketNamespace":
         """
         Materialize a runtime namespace (and children) from a SocketSpec.
         The *spec* must be a namespace.
@@ -1330,27 +1330,27 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         )
         ns = cls(
             name=name,
-            node=node,
+            task=task,
             parent=parent,
             graph=graph,
             link_limit=spec.link_limit or 1,
             metadata=ns_meta,
-            pool=pool or (node._REGISTRY.socket_pool if node else None),
+            pool=pool or (task._REGISTRY.socket_pool if task else None),
         )
 
         # materialize fixed fields
         for fname, f_spec in (spec.fields or {}).items():
-            cls._append_from_spec(ns, fname, f_spec, node=node, graph=graph, role=role)
+            cls._append_from_spec(ns, fname, f_spec, task=task, graph=graph, role=role)
         return ns
 
     @classmethod
     def _append_from_spec(
         cls,
-        parent_ns: "NodeSocketNamespace",
+        parent_ns: "TaskSocketNamespace",
         name: str,
         spec: "SocketSpec",
         *,
-        node,
+        task,
         graph,
         role: str,
     ) -> None:
@@ -1363,7 +1363,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     f"Cannot assign nested field '{tail}' under missing socket '{head}'."
                 )
 
-            if not isinstance(existing, NodeSocketNamespace):
+            if not isinstance(existing, TaskSocketNamespace):
                 raise TypeError(
                     f"Cannot assign nested field '{tail}' under non-namespace socket '{head}'."
                 )
@@ -1372,7 +1372,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                 existing,
                 tail,
                 spec,
-                node=node,
+                task=task,
                 graph=graph,
                 role=role,
             )
@@ -1387,7 +1387,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             )
             child = cls(
                 name=name,
-                node=node,
+                task=task,
                 parent=parent_ns,
                 graph=graph,
                 metadata=child_meta,
@@ -1400,7 +1400,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     child,
                     fname,
                     f_spec,
-                    node=node,
+                    task=task,
                     graph=graph,
                     role=role,
                 )
@@ -1417,7 +1417,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             ItemClass = get_item_class(spec.identifier, parent_ns._SocketPool)
             sock = ItemClass(
                 name=name,
-                node=node,
+                task=task,
                 parent=parent_ns,
                 graph=graph,
                 metadata=leaf_meta,
@@ -1428,16 +1428,16 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
 
     def _copy(
         self,
-        node: Optional[Node] = None,
-        parent: Optional[NodeSocket] = None,
+        task: Optional[Task] = None,
+        parent: Optional[TaskSocket] = None,
         skip_linked: bool = False,
         skip_builtin: bool = False,
-    ) -> "NodeSocketNamespace":
+    ) -> "TaskSocketNamespace":
         # Copy as parentSocket
         parent = self._parent if parent is None else parent
         ns_copy = self.__class__(
             self._name,
-            node=node,
+            task=task,
             parent=parent,
             link_limit=self._link_limit,
             metadata=self._metadata,
@@ -1449,7 +1449,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
             if skip_builtin and item._name in ["_wait", "_outputs"]:
                 continue
             ns_copy._append(
-                item._copy(node=node, parent=ns_copy, skip_linked=skip_linked)
+                item._copy(task=task, parent=ns_copy, skip_linked=skip_linked)
             )
         return ns_copy
 
@@ -1469,7 +1469,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
                     return item[keys[1]]
                 return item
             raise AttributeError(
-                f""""{key}" is not in this namespace: {self._full_name_with_node}. Acceptable names are {self._get_keys()}."""
+                f""""{key}" is not in this namespace: {self._full_name_with_task}. Acceptable names are {self._get_keys()}."""
             )
 
     def __contains__(self, name: str) -> bool:
@@ -1485,7 +1485,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         if keys[0] in self._sockets:
             if len(keys) > 1:
                 child = self._sockets[keys[0]]
-                if isinstance(child, NodeSocketNamespace):
+                if isinstance(child, TaskSocketNamespace):
                     return keys[1] in child
                 return False  # cannot have nested under a non-namespace
             return True
@@ -1513,7 +1513,7 @@ class NodeSocketNamespace(BaseSocket, OperatorSocketMixin):
         # keys in the collection, with the option to include nested keys
         keys = [item._scoped_name for item in self._sockets.values()]
         for item in self._sockets.values():
-            if isinstance(item, NodeSocketNamespace):
+            if isinstance(item, TaskSocketNamespace):
                 keys.extend(item._get_all_keys())
         return keys
 

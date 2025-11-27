@@ -3,40 +3,40 @@ import pytest
 from types import SimpleNamespace
 
 from node_graph.socket_spec import namespace as ns
-from node_graph.node_spec import (
-    NodeSpec,
+from node_graph.task_spec import (
+    TaskSpec,
     BaseHandle,
     SchemaSource,
 )
 from node_graph.executor import RuntimeExecutor, SafeExecutor
-from node_graph.node import Node
+from node_graph.task import Task
 
 
-def test_nodespec_serialize_roundtrip_embedded():
+def test_taskspec_serialize_roundtrip_embedded():
     """Importable callable without decorator_path falls back to 'embedded' (safe)."""
     inp = ns(x=int, y=(int, 2))
     out = ns(sum=int)
     ex = RuntimeExecutor(mode="module", module_path="math", callable_name="sqrt")
 
-    spec = NodeSpec(
+    spec = TaskSpec(
         identifier="pkg.add",
         catalog="Math",
-        node_type="MyType",
+        task_type="MyType",
         inputs=inp,
         outputs=out,
         executor=ex,
         metadata={"k": "v"},
         version="1.0",
-        base_class=Node,
+        base_class=Task,
     )
     d = spec.to_dict()
     assert d["schema_source"] == SchemaSource.EMBEDDED
     assert "inputs" in d and "outputs" in d
 
-    spec2 = NodeSpec.from_dict(copy.deepcopy(d))
+    spec2 = TaskSpec.from_dict(copy.deepcopy(d))
     assert spec2.identifier == spec.identifier
     assert spec2.catalog == spec.catalog
-    assert spec2.node_type == spec.node_type
+    assert spec2.task_type == spec.task_type
     assert spec2.inputs == spec.inputs
     assert spec2.outputs == spec.outputs
     assert spec2.metadata == spec.metadata
@@ -48,15 +48,15 @@ def test_nodespec_serialize_roundtrip_embedded():
     assert spec2.schema_source == SchemaSource.EMBEDDED
 
 
-def test_nodespec_to_dict_module_handle_strips_schema():
+def test_taskspec_to_dict_module_handle_strips_schema():
     """If executor.callable is a BaseHandle, store compactly as 'module_handle'."""
-    inner = NodeSpec(
-        identifier="inner.node",
+    inner = TaskSpec(
+        identifier="inner.task",
         catalog="Test",
         inputs=ns(a=int),
         outputs=ns(b=int),
         metadata={"inner": True},
-        base_class=Node,
+        base_class=Task,
     )
 
     class DummyHandle(BaseHandle):
@@ -75,15 +75,15 @@ def test_nodespec_to_dict_module_handle_strips_schema():
                 "schema_source": "module"
             }  # shape consistent with SafeExecutor/RuntimeExecutor
 
-    outer = NodeSpec(
-        identifier="outer.node",
+    outer = TaskSpec(
+        identifier="outer.task",
         schema_source=SchemaSource.HANDLE,
         catalog="Test",
         inputs=ns(x=int),
         outputs=ns(y=int),
         executor=FakeExec(handle),
         metadata={"k": "v"},
-        base_class=Node,
+        base_class=Task,
     )
 
     d = outer.to_dict()
@@ -97,11 +97,11 @@ def test_validate_base_class_path_required():
     with pytest.raises(
         ValueError, match="Either base_class or base_class_path must be provided."
     ):
-        NodeSpec(identifier="demo.id")
+        TaskSpec(identifier="demo.id")
 
 
-def test_nodespecget_base_class_custom():
-    s = NodeSpec(identifier="demo.id", base_class_path="builtins.object")
+def test_taskspecget_base_class_custom():
+    s = TaskSpec(identifier="demo.id", base_class_path="builtins.object")
     bc = s.get_base_class(s.base_class_path)
     assert bc is object
 
@@ -112,21 +112,21 @@ def test_from_dict_callable_requires_executor_raises():
         "identifier": "x.y",
         "catalog": "Test",
         # executor intentionally omitted
-        "base_class_path": "node_graph.node.Node",
+        "base_class_path": "node_graph.task.Task",
     }
     with pytest.raises(ValueError, match="requires an executor"):
-        NodeSpec.from_dict(copy.deepcopy(d))
+        TaskSpec.from_dict(copy.deepcopy(d))
 
 
 def test_from_dict_callable_basehandler(monkeypatch):
     # Build the inner spec that the handle should return
-    inner = NodeSpec(
-        identifier="inner.node",
+    inner = TaskSpec(
+        identifier="inner.task",
         catalog="Test",
         inputs=ns(a=int),
         outputs=ns(b=int),
         metadata={"inner": True},
-        base_class=Node,
+        base_class=Task,
     )
 
     class DummyHandle(BaseHandle):
@@ -139,26 +139,26 @@ def test_from_dict_callable_basehandler(monkeypatch):
     def _dummy_safe_executor(**kwargs):
         return SimpleNamespace(callable=handle)
 
-    monkeypatch.setattr("node_graph.node_spec.SafeExecutor", _dummy_safe_executor)
+    monkeypatch.setattr("node_graph.task_spec.SafeExecutor", _dummy_safe_executor)
 
     d = {
         "schema_source": SchemaSource.HANDLE,
-        "identifier": "outer.node",
+        "identifier": "outer.task",
         "catalog": "Test",
         "executor": {},  # contents ignored by our dummy
-        "base_class_path": "node_graph.node.Node",
+        "base_class_path": "node_graph.task.Task",
     }
 
-    spec = NodeSpec.from_dict(copy.deepcopy(d))
+    spec = TaskSpec.from_dict(copy.deepcopy(d))
     assert spec is inner
-    assert spec.identifier == "inner.node"
+    assert spec.identifier == "inner.task"
 
 
 def test_from_dict_unrecognized_mode_raises():
     d = {
         "schema_source": "weird_mode",
         "identifier": "x.y",
-        "base_class_path": "node_graph.node.Node",
+        "base_class_path": "node_graph.task.Task",
     }
     with pytest.raises(ValueError, match="'weird_mode' is not a valid SchemaSource"):
-        NodeSpec.from_dict(copy.deepcopy(d))
+        TaskSpec.from_dict(copy.deepcopy(d))

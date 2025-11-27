@@ -1,9 +1,9 @@
 .. _custom_nodegraph:
 
 ============================================
-Customize your own NodeGraph
+Customize your own Graph
 ============================================
-One can easily customize their own NodeGraph by creating a new package and defining their own Nodes, Sockets, Properties, Executors and Serializers.
+One can easily customize their own Graph by creating a new package and defining their own Tasks, Sockets, Properties, Executors and Serializers.
 Additionally, one can also provide the method to run the graph using their own executors and database.
 
 Package structure
@@ -15,7 +15,7 @@ Your package should follow the following structure similar to this:
 
     <your_package_name>/
     ├── __init__.py
-    ├── nodes/
+    ├── tasks/
     │   ├── __init__.py
     │   ├── test.py
     │   ├── ...
@@ -32,20 +32,20 @@ Your package should follow the following structure similar to this:
     │   ├── test.py
     │   ├── ...
 
-Define your new Node, Socket and Property in the folders ``nodes``, ``sockets`` and ``properties`` respectively. Define your executor, serialization methods in the folders ``executors`` and ``serialization``. For example, in the ``nodes.test.py`` file, define your test Node class.
+Define your new Task, Socket and Property in the folders ``tasks``, ``sockets`` and ``properties`` respectively. Define your executor, serialization methods in the folders ``executors`` and ``serialization``. For example, in the ``tasks.test.py`` file, define your test Task class.
 
 
 Entry point
 -------------------
 
-In the ``pyproject.toml`` file of your packages, you should define the entry points for your nodes, sockets and properties. For example, if your package name is ``abc``, you should define the entry points like this:
+In the ``pyproject.toml`` file of your packages, you should define the entry points for your tasks, sockets and properties. For example, if your package name is ``abc``, you should define the entry points like this:
 
 
 .. code:: toml
 
     [project.entry-points."abc.task"]
-    "abc.add" = "abc.nodes.test:Add"
-    "abc.multiply" = "abc.nodes.test:Multiply"
+    "abc.add" = "abc.tasks.test:Add"
+    "abc.multiply" = "abc.tasks.test:Multiply"
 
     [project.entry-points."abc.property"]
     "abc.any" = "abc.properties.test:SocketAny"

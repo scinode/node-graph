@@ -69,7 +69,7 @@ def test_provenance_recorder_save_graphviz(tmp_path):
         task_name="task",
         callable_obj=lambda x: x,
         flow_run_id="flow-graphviz",
-        task_run_id="task-graphviz",
+        task_run_id="node-graphviz",
     )
 
     recorder.record_inputs_payload(pid, {"x": TaggedValue(1)})

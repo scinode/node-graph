@@ -1,7 +1,5 @@
-# NodeGraph
-
 <div align="center">
-  <img src="docs/source/_static/images/node-graph-logo.png" alt="NodeGraph logo" width="220" />
+  <img src="docs/source/_static/images/node-graph-logo.png" alt="ndoe-graph logo" width="220" />
 
   <p><strong>Build data-driven workflows with clean provenance and a friendly syntax.</strong></p>
 
@@ -21,17 +19,17 @@ Please refer to [online docs](https://node-graph.readthedocs.io/en/latest/).
 **A simple math calculation**
 
 ```python
-from node_graph import NodeGraph, node
+from node_graph import task
 
-@node()
+@task()
 def add(x, y):
     return x + y
 
-@node()
+@task()
 def multiply(x, y):
     return x * y
 
-@node.graph()
+@task.graph()
 def AddMultiply(x, y, z):
     the_sum = add(x=x, y=y).result
     return multiply(x=the_sum, y=z).result

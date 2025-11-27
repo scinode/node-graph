@@ -1,14 +1,14 @@
 import pytest
-from node_graph import NodeGraph, Node, node
+from node_graph import Graph, Task, task
 from node_graph.socket_spec import namespace as ns, dynamic as dyn
 from typing import Any
-from node_graph.nodes.tests import test_add, test_float
+from node_graph.tasks.tests import test_add, test_float
 from dataclasses import replace
 
 
 @pytest.fixture
-def node_with_namespace_socket():
-    n = Node()
+def task_with_namespace_socket():
+    n = Task()
     input_spec = ns(
         x=float,
         non_dynamic=ns(sub=ns(y=float, z=float)),
@@ -29,7 +29,7 @@ def node_with_namespace_socket():
 
 @pytest.fixture
 def func_with_namespace_socket():
-    @node(
+    @task(
         outputs=ns(sum=Any, product=Any, nested=ns(sum=Any, product=Any)),
     )
     def func(a, b=1, nested: ns(d=Any, f=ns(g=Any, h=Any)) = {}):
@@ -48,19 +48,19 @@ def func_with_namespace_socket():
 @pytest.fixture
 def ng():
     """A test node_graph."""
-    ng = NodeGraph(name="test_nodegraph")
-    float1 = ng.add_node(test_float, "float1", value=3.0)
-    add1 = ng.add_node(test_add, "add1", x=2)
-    add2 = ng.add_node(test_add, "add2", x=2)
+    ng = Graph(name="test_graph")
+    float1 = ng.add_task(test_float, "float1", value=3.0)
+    add1 = ng.add_task(test_add, "add1", x=2)
+    add2 = ng.add_task(test_add, "add2", x=2)
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
     return ng
 
 
 @pytest.fixture
-def ng_complex(func_with_namespace_socket) -> NodeGraph:
+def ng_complex(func_with_namespace_socket) -> Graph:
     """
-    Create a small NodeGraph:
+    Create a small Graph:
         n1 -> n2
         n1 -> n3
         n1 -> n4
@@ -68,12 +68,12 @@ def ng_complex(func_with_namespace_socket) -> NodeGraph:
         n4 -> n5
     """
 
-    ng = NodeGraph(name="test_graph")
-    n1 = ng.add_node(func_with_namespace_socket, name="n1")
-    n2 = ng.add_node(func_with_namespace_socket, name="n2")
-    n3 = ng.add_node(func_with_namespace_socket, name="n3")
-    n4 = ng.add_node(func_with_namespace_socket, name="n4")
-    n5 = ng.add_node(func_with_namespace_socket, name="n5")
+    ng = Graph(name="test_graph")
+    n1 = ng.add_task(func_with_namespace_socket, name="n1")
+    n2 = ng.add_task(func_with_namespace_socket, name="n2")
+    n3 = ng.add_task(func_with_namespace_socket, name="n3")
+    n4 = ng.add_task(func_with_namespace_socket, name="n4")
+    n5 = ng.add_task(func_with_namespace_socket, name="n5")
 
     ng.add_link(n1.outputs.sum, n2.inputs.nested.d)
     ng.add_link(n1.outputs.nested.sum, n3.inputs.nested.f.g)
@@ -86,9 +86,9 @@ def ng_complex(func_with_namespace_socket) -> NodeGraph:
 
 
 @pytest.fixture
-def ng_with_zone() -> NodeGraph:
+def ng_with_zone() -> Graph:
     """
-    Create a small NodeGraph:
+    Create a small Graph:
     zone1: n1, n2
     zone2: n3, n4
         n1 -> n2
@@ -97,14 +97,14 @@ def ng_with_zone() -> NodeGraph:
         n4 -> n5
     """
 
-    ng = NodeGraph(name="test_graph")
-    zone1 = ng.add_node(test_add, name="zone1")
-    zone2 = ng.add_node(test_add, name="zone2")
-    n1 = ng.add_node(test_add, name="n1")
-    n2 = ng.add_node(test_add, name="n2")
-    n3 = ng.add_node(test_add, name="n3")
-    n4 = ng.add_node(test_add, name="n4")
-    n5 = ng.add_node(test_add, name="n5")
+    ng = Graph(name="test_graph")
+    zone1 = ng.add_task(test_add, name="zone1")
+    zone2 = ng.add_task(test_add, name="zone2")
+    n1 = ng.add_task(test_add, name="n1")
+    n2 = ng.add_task(test_add, name="n2")
+    n3 = ng.add_task(test_add, name="n3")
+    n4 = ng.add_task(test_add, name="n4")
+    n5 = ng.add_task(test_add, name="n5")
     zone1.children = [n2, n3]
     zone2.children = [n3, n4]
     ng.add_link(n1.outputs.result, n2.inputs.x)
@@ -117,14 +117,14 @@ def ng_with_zone() -> NodeGraph:
 
 @pytest.fixture
 def ng_group():
-    ng = NodeGraph(name="test_node_group")
-    # auto generate name for the node
-    float1 = ng.add_node(test_float, "float1", value=4.0, t=3)
-    float2 = ng.add_node(test_float, "float2", value=3.0)
-    sqrt_power_add1 = ng.add_node(
+    ng = Graph(name="test_task_group")
+    # auto generate name for the task
+    float1 = ng.add_task(test_float, "float1", value=4.0, t=3)
+    float2 = ng.add_task(test_float, "float2", value=3.0)
+    sqrt_power_add1 = ng.add_task(
         "TestSqrtPowerAdd", "sqrt_power_add1", t1=3, t2=2, y=3
     )
-    add1 = ng.add_node(test_add, "add1")
+    add1 = ng.add_task(test_add, "add1")
     ng.add_link(float1.outputs[0], sqrt_power_add1.inputs[0])
     ng.add_link(float2.outputs[0], sqrt_power_add1.inputs[1])
     ng.add_link(sqrt_power_add1.outputs[0], add1.inputs[1])
@@ -133,9 +133,9 @@ def ng_group():
 
 @pytest.fixture
 def decorated_myadd():
-    """Generate a decorated node for test."""
+    """Generate a decorated task for test."""
 
-    @node()
+    @task()
     def myadd(x: float, y: float, t: float = 1):
         import time
 
@@ -147,10 +147,10 @@ def decorated_myadd():
 
 @pytest.fixture
 def decorated_myadd_group(decorated_myadd):
-    """Generate a decorated node group for test."""
+    """Generate a decorated task group for test."""
     myadd = decorated_myadd
 
-    @node.graph()
+    @task.graph()
     def myaddgroup(x, y):
         add1 = myadd(t=3, x=x, y=2)
         add2 = myadd(x=y, y=3)
@@ -161,31 +161,31 @@ def decorated_myadd_group(decorated_myadd):
 
 
 @pytest.fixture
-def node_with_decorated_node(decorated_myadd):
-    """Generate a node with decorated node for test."""
+def task_with_decorated_task(decorated_myadd):
+    """Generate a task with decorated task for test."""
 
-    @node(
-        identifier="node_with_decorated_node",
+    @task(
+        identifier="task_with_decorated_task",
     )
-    def node_with_decorated_node(x, y):
-        ng = NodeGraph("node_in_decorated_node")
-        add1 = ng.add_node(decorated_myadd, x=x)
-        add2 = ng.add_node(decorated_myadd, y=y)
+    def task_with_decorated_task(x, y):
+        ng = Graph("node_in_decorated_node")
+        add1 = ng.add_task(decorated_myadd, x=x)
+        add2 = ng.add_task(decorated_myadd, y=y)
         ng.add_link(add1.outputs[0], add2.inputs[0])
         ng.launch(wait=True)
         return add2.results[0]["value"]
 
-    return node_with_decorated_node
+    return task_with_decorated_task
 
 
 @pytest.fixture
 def ng_decorator(decorated_myadd):
     """A test node_graph."""
-    ng = NodeGraph(name="test_decorator_node")
-    float1 = ng.add_node(test_float, "float1", value=3.0)
-    add1 = ng.add_node(decorated_myadd, "add1", x=2)
-    add2 = ng.add_node(decorated_myadd, "add2", x=2)
-    add3 = ng.add_node(test_add, "add3")
+    ng = Graph(name="test_decorator_node")
+    float1 = ng.add_task(test_float, "float1", value=3.0)
+    add1 = ng.add_task(decorated_myadd, "add1", x=2)
+    add2 = ng.add_task(decorated_myadd, "add2", x=2)
+    add3 = ng.add_task(test_add, "add3")
     ng.add_link(float1.outputs[0], add1.inputs["y"])
     ng.add_link(add1.outputs[0], add2.inputs["y"])
     ng.add_link(add2.outputs[0], add3.inputs[0])
