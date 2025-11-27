@@ -6,7 +6,7 @@ from .nodes import NodePool
 from .collection import group
 from .socket_spec import namespace, dynamic
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 
 
 __all__ = [
