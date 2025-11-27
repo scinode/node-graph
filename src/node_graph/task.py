@@ -12,28 +12,28 @@ from .executor import SafeExecutor, BaseExecutor
 from .error_handler import ErrorHandlerSpec
 from node_graph.socket_spec import SocketSpecAPI
 from .config import BuiltinPolicy
-from .node_spec import NodeSpec
+from .task_spec import TaskSpec
 from dataclasses import replace
 from .mixins import IOOwnerMixin, WidgetRenderableMixin, WaitableMixin
 
 
-class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
-    """Base class for Node.
+class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
+    """Base class for Task.
 
     Attributes:
-        identifier (str): The identifier is used for loading the Node.
-        node_type (str): Type of this node. Possible values are "Normal", "REF", "GROUP".
+        identifier (str): The identifier is used for loading the Task.
+        task_type (str): Type of this task. Possible values are "Normal", "REF", "GROUP".
 
     Examples:
-        Add nodes:
-        >>> float1 = ng.add_node("TestFloat", name="float1")
-        >>> add1 = ng.add_node("TestDelayAdd", name="add1")
+        Add tasks:
+        >>> float1 = ng.add_task("TestFloat", name="float1")
+        >>> add1 = ng.add_task("TestDelayAdd", name="add1")
 
-        Copy node:
-        >>> n = node.copy(name="new_name")
+        Copy task:
+        >>> n = task.copy(name="new_name")
 
-        Append node to node graph:
-        >>> ng.append_node(node)
+        Append task to task graph:
+        >>> ng.append_task(task)
 
     """
 
@@ -42,35 +42,35 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
     _SOCKET_SPEC_API = SocketSpecAPI
     _BUILTINS_POLICY = BuiltinPolicy()
 
-    _default_spec = NodeSpec(
-        identifier="node_graph.node",
-        node_type="Normal",
+    _default_spec = TaskSpec(
+        identifier="node_graph.task",
+        task_type="Normal",
         inputs=_SOCKET_SPEC_API.namespace(),
         outputs=_SOCKET_SPEC_API.namespace(),
         catalog="Base",
-        base_class_path="node_graph.node.Node",
+        base_class_path="node_graph.task.Task",
     )
 
     def __init__(
         self,
         name: Optional[str] = None,
         uuid: Optional[str] = None,
-        graph: Optional["NodeGraph"] = None,
-        spec: Optional[NodeSpec] = None,
-        parent: Optional[Node] = None,
+        graph: Optional["Graph"] = None,
+        spec: Optional[TaskSpec] = None,
+        parent: Optional[Task] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Initialize the Node.
+        """Initialize the Task.
 
         Args:
-            name (str, optional): Name of the node. Defaults to None.
-            uuid (str, optional): UUID of the node. Defaults to None.
-            graph (Any, optional): The node graph this node belongs to. Defaults to None.
+            name (str, optional): Name of the task. Defaults to None.
+            uuid (str, optional): UUID of the task. Defaults to None.
+            graph (Any, optional): The task graph this task belongs to. Defaults to None.
         """
 
         self.spec = spec or self._default_spec
         self.identifier = self.spec.identifier
-        self.node_type = self.spec.node_type
+        self.task_type = self.spec.task_type
         self.name = name or self.spec.identifier
         self.uuid = uuid or str(uuid1())
         self.graph = graph
@@ -94,7 +94,7 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
         self._args_data = None
         self._widget = None
-        self._waiting_on = WaitingOn(node=self, graph=self.graph)
+        self._waiting_on = WaitingOn(task=self, graph=self.graph)
 
     def _materialize_from_spec(self) -> None:
         """
@@ -106,11 +106,11 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         output_spec = self.spec.outputs or self._SOCKET_SPEC_API.namespace()
         if input_spec is not None:
             self.inputs = self._SOCKET_SPEC_API.SocketNamespace._from_spec(
-                "inputs", input_spec, node=self, graph=self.graph, role="input"
+                "inputs", input_spec, task=self, graph=self.graph, role="input"
             )
         if output_spec is not None:
             self.outputs = self._SOCKET_SPEC_API.SocketNamespace._from_spec(
-                "outputs", output_spec, node=self, graph=self.graph, role="output"
+                "outputs", output_spec, task=self, graph=self.graph, role="output"
             )
 
         self._ensure_builtins()
@@ -168,14 +168,14 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         return self.properties._get_keys()
 
     def create_properties(self) -> None:
-        """Create properties for this node."""
+        """Create properties for this task."""
 
     def update_spec(self) -> None:
-        """Create input and output sockets for this node."""
+        """Create input and output sockets for this task."""
         pass
 
     def reset(self) -> None:
-        """Reset this node and all its child nodes to "CREATED"."""
+        """Reset this task and all its child tasks to "CREATED"."""
 
     def to_dict(
         self, include_sockets: bool = False, should_serialize: bool = False
@@ -203,7 +203,7 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         if include_sockets:
             data["input_sockets"] = self.inputs._to_dict()
             data["output_sockets"] = self.outputs._to_dict()
-        # to avoid some dict has the same address with others nodes
+        # to avoid some dict has the same address with others tasks
         # which happens when {} is used as default value
         # we copy the value only
         data = deep_copy_only_dicts(data)
@@ -212,7 +212,7 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         return data
 
     def serialize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Serialize the node for database storage.
+        """Serialize the task for database storage.
         This should be overrided by the subclass."""
         pass
 
@@ -275,28 +275,28 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         return executor.to_dict()
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], graph: "NodeGraph" = None) -> Any:
+    def from_dict(cls, data: Dict[str, Any], graph: "Graph" = None) -> Any:
         """
-        Factory method to rebuild a Node from dict data, handling persistence modes.
+        Factory method to rebuild a Task from dict data, handling persistence modes.
         """
         if "spec" in data:
             spec_dict = data["spec"]
-            spec = NodeSpec.from_dict(spec_dict)
-            node = spec.to_node(name=data["name"], graph=graph, uuid=data.get("uuid"))
-            graph.nodes._append(node)
+            spec = TaskSpec.from_dict(spec_dict)
+            task = spec.to_task(name=data["name"], graph=graph, uuid=data.get("uuid"))
+            graph.tasks._append(task)
         else:
             identifier = data["metadata"]["identifier"]
-            node = graph.add_node(
+            task = graph.add_task(
                 identifier,
                 name=data["name"],
                 uuid=data.pop("uuid", None),
             )
         # then load the properties
-        node.update_from_dict(data)
-        return node
+        task.update_from_dict(data)
+        return task
 
     def update_from_dict(self, data: Dict[str, Any]) -> None:
-        """udpate node from dict data. Set metadata and properties.
+        """udpate task from dict data. Set metadata and properties.
         This method can be overrided.
         """
 
@@ -311,31 +311,31 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
     @classmethod
     def load(cls, uuid: str) -> None:
-        """Load Node data from database."""
+        """Load Task data from database."""
 
     @classmethod
     def new(
         cls,
         identifier: str,
         name: Optional[str] = None,
-        NodePool: Optional[Dict[str, Any]] = None,
+        TaskPool: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:
-        """Create a node from a identifier.
-        When a plugin create a node, it should provide its own node pool.
-        Then call super().new(identifier, name, NodePool) to create a node.
+        """Create a task from a identifier.
+        When a plugin create a task, it should provide its own task pool.
+        Then call super().new(identifier, name, TaskPool) to create a task.
         """
         from node_graph.collection import get_item_class
 
-        if NodePool is None:
-            from node_graph.nodes import NodePool
+        if TaskPool is None:
+            from node_graph.tasks import TaskPool
 
-        ItemClass = get_item_class(identifier, NodePool)
-        node = ItemClass(name=name, metadata=metadata)
-        return node
+        ItemClass = get_item_class(identifier, TaskPool)
+        task = ItemClass(name=name, metadata=metadata)
+        return task
 
     def _new_for_copy(
-        self, name: Optional[str], graph: Optional[Any], spec: NodeSpec
+        self, name: Optional[str], graph: Optional[Any], spec: TaskSpec
     ) -> Any:
         """Factory hook used by copy(); subclasses can override to supply ctor args."""
         return self.__class__(name=name, uuid=None, graph=graph, spec=spec)
@@ -345,34 +345,34 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         name: Optional[str] = None,
         graph: Optional[Any] = None,
     ) -> Any:
-        """Copy a node.
+        """Copy a task.
 
-        Copy a node to a new node. If graph is None, the node will be copied inside the same graph,
-        otherwise the node will be copied to a new graph.
+        Copy a task to a new task. If graph is None, the task will be copied inside the same graph,
+        otherwise the task will be copied to a new graph.
         The properties, inputs and outputs will be copied.
 
         Args:
             name (str, optional): _description_. Defaults to None.
-            graph (NodeGraph, optional): _description_. Defaults to None.
+            graph (Graph, optional): _description_. Defaults to None.
 
         Returns:
-            Node: _description_
+            Task: _description_
         """
         if graph is not None:
-            # copy node to a new graph, keep the name
+            # copy task to a new graph, keep the name
             name = self.name if name is None else name
         else:
-            # copy node inside the same graph, change the name
+            # copy task inside the same graph, change the name
             graph = self.graph
             name = f"{self.name}_copy" if name is None else name
-        node = self._new_for_copy(name=name, graph=graph, spec=self.spec)
+        task = self._new_for_copy(name=name, graph=graph, spec=self.spec)
         # becareful when copy the properties, the value should be copied
         # it will update the sockets, so we copy the properties first
         # then overwrite the sockets
         for i in range(len(self.properties)):
-            node.properties[i].value = self.properties[i].value
-        node.inputs._set_socket_value(self.inputs._value)
-        return node
+            task.properties[i].value = self.properties[i].value
+        task.inputs._set_socket_value(self.inputs._value)
+        return task
 
     def get_executor(self) -> Optional[BaseExecutor]:
         """Get the default executor."""
@@ -389,7 +389,7 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         return error_handlers
 
     def add_error_handler(self, error_handler: ErrorHandlerSpec | dict) -> None:
-        """Add an error handler to this node."""
+        """Add an error handler to this task."""
         from node_graph.error_handler import normalize_error_handlers
 
         error_handlers = normalize_error_handlers(error_handler)
@@ -398,8 +398,8 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         self.spec = replace(self.spec, attached_error_handlers=attached_error_handlers)
 
     def execute(self):
-        """Execute the node."""
-        from node_graph.node_spec import BaseHandle
+        """Execute the task."""
+        from node_graph.task_spec import BaseHandle
 
         executor = self.get_executor().callable
         # the imported executor could be a wrapped function
@@ -423,7 +423,7 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         """Item data from database"""
 
     def update(self) -> None:
-        """Update node state."""
+        """Update task state."""
 
     @property
     def results(self) -> None:
@@ -445,10 +445,10 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
         data = deep_copy_only_dicts(data)
         for key, value in data.items():
-            # if the value is a node, link the node's top-level output to the input
+            # if the value is a task, link the task's top-level output to the input
             if value is None:
                 continue
-            if isinstance(value, Node):
+            if isinstance(value, Task):
                 self.graph.add_link(value.outputs["_outputs"], self.inputs[key])
                 continue
             if key in self.properties:
@@ -468,12 +468,12 @@ class Node(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         return self.properties[key].value
 
     def save(self) -> None:
-        """Modify and save a node to database."""
+        """Modify and save a task to database."""
 
     def to_widget_value(self):
         tdata = self.to_dict(include_sockets=True)
 
-        for key in ("properties", "executor", "node_class", "process", "input_values"):
+        for key in ("properties", "executor", "task_class", "process", "input_values"):
             tdata.pop(key, None)
         inputs = []
         for input in tdata["input_sockets"]["sockets"].values():

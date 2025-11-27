@@ -2,11 +2,11 @@
 Use annotations to capture ontology semantics
 =============================================
 
-NodeGraph captures structural provenance out of the box, but structural links
+node-graph captures structural provenance out of the box, but structural links
 do not explain what a piece of data *means*. Semantics add domain ontology
-context—labels, IRIs, units, and relations—so every ``Data`` node carries a
+context—labels, IRIs, units, and relations—so every ``Data`` task carries a
 machine-readable JSON-LD breadcrumb. This page introduces ontologies, shows
-how NodeGraph stores semantics, and provides runnable examples.
+how node-graph stores semantics, and provides runnable examples.
 """
 
 # %%
@@ -33,7 +33,7 @@ how NodeGraph stores semantics, and provides runnable examples.
 # Context and namespaces
 # ----------------------
 # Semantics payloads carry an ``@context`` map so CURIE-style identifiers such
-# as ``qudt:Energy`` resolve to full IRIs. NodeGraph comes with a small default
+# as ``qudt:Energy`` resolve to full IRIs. node-graph comes with a small default
 # registry (``qudt``, ``qudt-unit``, ``prov``, ``schema``). When it sees those
 # prefixes in ``iri`` / ``rdf_types`` / keys, it automatically injects their
 # URLs into ``@context`` unless you provided a value already.
@@ -46,11 +46,11 @@ how NodeGraph stores semantics, and provides runnable examples.
 #   refine the URL per annotation if needed.
 
 # %%
-# How NodeGraph stores semantics
+# How node-graph stores semantics
 # ------------------------------
 # 1. **Authoring**: sockets declare ``meta(semantics={...})`` (label, iri,
 #    rdf_types, context, attributes, relations). The graph keeps these in
-#    ``NodeGraph.semantics_buffer`` so they survive serialization.
+#    ``Graph.semantics_buffer`` so they survive serialization.
 # 2. **Execution**: engines match sockets to produced/consumed ``Data`` nodes,
 #    build JSON-LD snippets, and store them under ``node.base.extras['semantics']``.
 # 3. **Cross-socket references**: values inside ``relations`` or ``attributes``
@@ -67,7 +67,7 @@ how NodeGraph stores semantics, and provides runnable examples.
 # to funnel these details through ``extras``.
 
 from typing import Annotated, Any
-from node_graph import node
+from node_graph import task
 from node_graph.socket_spec import meta, namespace
 
 energy_semantics_meta = meta(
@@ -86,7 +86,7 @@ energy_semantics_meta = meta(
 )
 
 
-@node()
+@task()
 def AnnotateSemantics(energy: float) -> Annotated[float, energy_semantics_meta]:
     return energy
 
@@ -116,7 +116,7 @@ EnergyEV = SemanticTag(
 )
 
 
-@node()
+@task()
 def TypedSemantics(energy: float) -> Annotated[float, meta(semantics=EnergyEV)]:
     return energy
 
@@ -127,10 +127,10 @@ def TypedSemantics(energy: float) -> Annotated[float, meta(semantics=EnergyEV)]:
 # One can also declare relations between sockets using dotted paths to refer to sibling inputs/outputs.
 # For example, the following workflow declares that the input
 # ``structure`` has a relation ``mat:hasProperty`` pointing to the output of the
-# ``compute_band_structure`` node.
+# ``compute_band_structure`` task.
 
 
-@node()
+@task()
 def compute_band_structure(structure):
     return 1.0
 
@@ -152,7 +152,7 @@ structure_meta = meta(
 )
 
 
-@node.graph()
+@task.graph()
 def workflow(structure: Annotated[Any, structure_meta]):
     return compute_band_structure(structure=structure).result
 
@@ -167,17 +167,17 @@ def workflow(structure: Annotated[Any, structure_meta]):
 from node_graph.semantics import attach_semantics
 
 
-@node()
+@task()
 def generate(structure):
     return structure
 
 
-@node()
+@task()
 def compute_density_of_states(structure):
     return 1.0
 
 
-@node.graph()
+@task.graph()
 def workflow_with_runtime_semantics(
     structure,
 ) -> Annotated[dict, namespace(output_structure=Any, bands=Any, dos=Any)]:

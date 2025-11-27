@@ -1,7 +1,7 @@
 import pytest
-from node_graph import NodeGraph
-from node_graph.property import NodeProperty
-from node_graph.node import Node
+from node_graph import Graph
+from node_graph.property import TaskProperty
+from node_graph.task import Task
 
 
 @pytest.mark.parametrize(
@@ -18,7 +18,7 @@ from node_graph.node import Node
 def test_base_type(id, data):
     """Test base type property."""
 
-    p = NodeProperty.new(id)
+    p = TaskProperty.new(id)
     p.value = data
     assert p.value == data
     # copy
@@ -40,7 +40,7 @@ def test_base_type(id, data):
 def test_base_type_validation(id, data):
     """Test base type validation."""
 
-    p = NodeProperty.new(id)
+    p = TaskProperty.new(id)
     try:
         p.value = data
     except Exception as e:
@@ -51,8 +51,8 @@ def test_base_type_validation(id, data):
 def test_enum_type():
     """Test simple math."""
 
-    ng = NodeGraph(name="test_enum_type")
-    nd = ng.add_node("node_graph.test_enum")
+    ng = Graph(name="test_enum_type")
+    nd = ng.add_task("node_graph.test_enum")
     assert nd.properties["function"].content == "pow"
     nd.properties["function"].value = "sqrt"
     assert nd.properties["function"].content == "sqrt"
@@ -61,8 +61,8 @@ def test_enum_type():
 def test_enum_update_type():
     """Test simple math."""
 
-    ng = NodeGraph(name="test_enum_update_type")
-    nd = ng.add_node("node_graph.test_enum_update")
+    ng = Graph(name="test_enum_update_type")
+    nd = ng.add_task("node_graph.test_enum_update")
     assert nd.properties["function"].content == "pow"
     print("inputs: ", nd.inputs)
     assert len(nd.inputs) == 3
@@ -86,8 +86,8 @@ def test_enum_update_type():
 def test_vector(id, size, default, data):
     """Test simple math."""
 
-    ng = NodeGraph(name="test_vector")
-    nd = ng.add_node(Node)
+    ng = Graph(name="test_vector")
+    nd = ng.add_task(Task)
     nd.executor = {"module_path": "numpy.sqrt"}
     nd.args = ["x"]
     nd.add_property(id, "x", **{"size": size, "default": default})
@@ -103,8 +103,8 @@ def test_vector(id, size, default, data):
     (("node_graph.float_matrix", [2, 2], [0.0, 0.0, 0.0, 0.0], [1.0, 2.0, 3.0, 4.0]),),
 )
 def test_matrix(id, size, default, data):
-    ng = NodeGraph(name="test_vector")
-    nd = ng.add_node(Node)
+    ng = Graph(name="test_vector")
+    nd = ng.add_task(Task)
     nd.executor = {"module_path": "numpy.sqrt"}
     nd.args = ["x"]
     nd.add_property(id, "x", **{"size": size, "default": default})
@@ -117,9 +117,9 @@ def test_matrix(id, size, default, data):
 
 def test_repr():
     """Test __repr__ method."""
-    ng = NodeGraph(name="test_repr")
-    node = ng.add_node("node_graph.test_enum", "node1")
+    ng = Graph(name="test_repr")
+    task = ng.add_task("node_graph.test_enum", "task1")
     assert (
-        repr(node.properties)
-        == 'PropertyCollection(node = "node1", properties = ["t", "function"])'
+        repr(task.properties)
+        == 'PropertyCollection(task = "task1", properties = ["t", "function"])'
     )

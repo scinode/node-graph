@@ -1,10 +1,10 @@
-from ..node_graph import NodeGraph
+from ..graph import Graph
 from typing import Any, Optional, Callable
 from node_graph.socket_spec import SocketSpec
 from node_graph.socket import (
     BaseSocket,
-    NodeSocket,
-    NodeSocketNamespace,
+    TaskSocket,
+    TaskSocketNamespace,
     TaggedValue,
 )
 
@@ -18,13 +18,13 @@ def format_invalid_graph_payload_error(subpath: str, vtype: str) -> str:
         "Invalid graph return payload.\n"
         f"- Location: {subpath}\n"
         f"- Got: {vtype}\n"
-        "- Expected: BaseSocket (a node's socket) or TaggedValue\n\n"
+        "- Expected: BaseSocket (a task's socket) or TaggedValue\n\n"
         "Why this fails:\n"
-        "You're returning a raw Python value computed inside the graph node. "
-        "This bypasses NodeGraph's provenance tracking and breaks data lineage.\n\n"
+        "You're returning a raw Python value computed inside the graph task. "
+        "This bypasses Graph's provenance tracking and breaks data lineage.\n\n"
         "How to fix:\n"
-        "1) Wrap the computation in a node and return its OUTPUT SOCKET:\n"
-        "   @node()\n"
+        "1) Wrap the computation in a task and return its OUTPUT SOCKET:\n"
+        "   @task()\n"
         "   def compute(x, y):\n"
         "       return x + y\n"
         "\n"
@@ -47,13 +47,13 @@ def _ensure_all_sockets_in_dict(d: dict, path: str = "outputs") -> None:
             raise TypeError(format_invalid_graph_payload_error(subpath, vtype))
 
 
-def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
+def _assign_graph_outputs(outputs: Any, graph: Graph) -> None:
     """
-    Inspect the raw outputs from the function and attach them to the NodeGraph.
+    Inspect the raw outputs from the function and attach them to the Graph.
 
     Rules:
       - None        -> no outputs
-      - NodeSocket  -> map to first declared output
+      - TaskSocket  -> map to first declared output
       - Namespace   -> iterate sockets; assign by name (respect non-dynamic outputs)
       - dict        -> every leaf value (including nested dicts) must be BaseSocket
       - tuple       -> every item must be BaseSocket; length must match declared outputs
@@ -62,16 +62,16 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
     if outputs is None:
         if len(graph.outputs) != 0:
             raise ValueError(
-                "The function returned None, but the Graph node declares outputs. "
+                "The function returned None, but the Graph task declares outputs. "
                 "Either remove the declared outputs or ensure the function returns them."
             )
         return
 
-    elif isinstance(outputs, (NodeSocket, TaggedValue)):
+    elif isinstance(outputs, (TaskSocket, TaggedValue)):
         # Single socket -> assign to first declared output slot
         graph.outputs[0] = outputs
 
-    elif isinstance(outputs, NodeSocketNamespace):
+    elif isinstance(outputs, TaskSocketNamespace):
         # if this is a dynamic namespace, we should link the top-level outputs
         if outputs._metadata.dynamic:
             graph.outputs = outputs
@@ -88,7 +88,7 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
                     continue
                 raise ValueError(
                     "Output socket name "
-                    f"'{socket._name}' not declared in Graph node outputs.Available outputs: "
+                    f"'{socket._name}' not declared in Graph task outputs.Available outputs: "
                     f"{list(graph.outputs._get_keys())}\n\n"
                     "How to fix:\n"
                     "1) Make graph outputs dynamic if you want to return arbitrary names:\n"
@@ -110,7 +110,7 @@ def _assign_graph_outputs(outputs: Any, graph: NodeGraph) -> None:
         if len(outputs) != len(graph.outputs):
             raise ValueError(
                 f"The length of the outputs {len(outputs)} does not match the length of the "
-                f"Graph node outputs {len(graph.outputs)}."
+                f"Graph task outputs {len(graph.outputs)}."
             )
         for i, output in enumerate(outputs):
             if not isinstance(output, (BaseSocket, TaggedValue)):
@@ -144,18 +144,18 @@ def materialize_graph(
     args: tuple,
     kwargs: dict,
     var_kwargs: Optional[dict] = None,
-) -> NodeGraph:
+) -> Graph:
     """
-    Run func(*args, **kwargs, **(var_kwargs or {})) inside a NodeGraph,
-    assign its outputs and return the NodeGraph.
+    Run func(*args, **kwargs, **(var_kwargs or {})) inside a Graph,
+    assign its outputs and return the Graph.
     """
     from node_graph.utils import tag_socket_value, clean_socket_reference
     from node_graph.utils.function import prepare_function_inputs
 
     if graph_class is None:
-        from node_graph import NodeGraph
+        from node_graph import Graph
 
-        graph_class = NodeGraph
+        graph_class = Graph
 
     merged = {**kwargs, **(var_kwargs or {})}
     name = identifier or func.__name__

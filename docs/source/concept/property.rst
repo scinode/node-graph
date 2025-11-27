@@ -3,7 +3,7 @@
 ============
 Property
 ============
-This module defines the properties of a Node. Property is a node data one can edit directly using a text editor, e.g. a string, a number or a combination of strings and numbers etc.
+This module defines the properties of a Task. Property is a task data one can edit directly using a text editor, e.g. a string, a number or a combination of strings and numbers etc.
 
 
 Data type
@@ -34,14 +34,14 @@ One can set the value of a property by:
 
 .. code:: Python
 
-   float1 = ng.add_node("node_graph.test_float")
+   float1 = ng.add_task("node_graph.test_float")
    # set the value for Float property
    float1.properties["Float"].value = 2.0
    # or by
    float1.set_inputs({"Float": 2.0})
 
 
-Create properties for a new Node
+Create properties for a new Task
 ----------------------------------------
 
 .. code:: Python
@@ -58,13 +58,13 @@ Add properties to a input socket
          inp = self.add_input("node_graph.any", "x")
          inp.add_property("FloatVector", size=3, default=[0, 0, 0])
 
-Assigning to Existing Node
+Assigning to Existing Task
 --------------------------------
 
 .. code:: Python
 
-   node1 = ng.add_node(Node, "pow")
-   node1.add_property("node_graph.float", "x")
+   task1 = ng.add_task(Task, "pow")
+   task1.add_property("node_graph.float", "x")
 
 
 Update Example

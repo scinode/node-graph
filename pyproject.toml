@@ -58,18 +58,18 @@ tests = [
 
 
 
-[project.entry-points."node_graph.node"]
-"node_graph.node" = "node_graph.node:Node"
-"node_graph.graph_level" = "node_graph.nodes.builtins:GraphLevelNode"
-"node_graph.test_float" = "node_graph.nodes.tests:test_float"
-"node_graph.test_string" = "node_graph.nodes.tests:test_string"
-"node_graph.test_add" = "node_graph.nodes.tests:test_add"
-"node_graph.test_enum" = "node_graph.nodes.tests:TestEnum"
-"node_graph.test_enum_update" = "node_graph.nodes.tests:TestEnumUpdate"
+[project.entry-points."node_graph.task"]
+"node_graph.task" = "node_graph.task:Task"
+"node_graph.graph_level" = "node_graph.tasks.builtins:GraphLevelTask"
+"node_graph.test_float" = "node_graph.tasks.tests:test_float"
+"node_graph.test_string" = "node_graph.tasks.tests:test_string"
+"node_graph.test_add" = "node_graph.tasks.tests:test_add"
+"node_graph.test_enum" = "node_graph.tasks.tests:TestEnum"
+"node_graph.test_enum_update" = "node_graph.tasks.tests:TestEnumUpdate"
 
 [project.entry-points."node_graph.socket"]
 "node_graph.any" = "node_graph.sockets.builtins:SocketAny"
-"node_graph.namespace" = "node_graph.socket:NodeSocketNamespace"
+"node_graph.namespace" = "node_graph.socket:TaskSocketNamespace"
 "node_graph.int" = "node_graph.sockets.builtins:SocketInt"
 "node_graph.float" = "node_graph.sockets.builtins:SocketFloat"
 "node_graph.string" = "node_graph.sockets.builtins:SocketString"

@@ -1,6 +1,6 @@
 from __future__ import annotations
-from node_graph import NodeGraph, node, dynamic
-from node_graph.nodes.tests import test_add
+from node_graph import Graph, task, dynamic
+from node_graph.tasks.tests import test_add
 from node_graph.socket_spec import namespace as ns
 
 from node_graph.engine.local import LocalEngine
@@ -8,26 +8,26 @@ from node_graph.engine.provenance import ProvenanceRecorder
 from typing import Annotated, Any
 
 
-@node()
+@task()
 def double(x: float) -> float:
     return x * 2
 
 
-@node.graph(outputs=ns(final=float))
+@task.graph(outputs=ns(final=float))
 def double_chain(x: float):
     first = double(x=x)
     second = double(x=first.result)
     return {"final": second.result}
 
 
-@node()
+@task()
 def generate_square_numbers(
     n: int,
 ) -> Annotated[dict, dynamic(int)]:
     return {f"square_{i}": i**2 for i in range(n)}
 
 
-@node()
+@task()
 def add_multiply(
     data: Annotated[dict, ns(x=int, y=int)],
 ) -> Annotated[dict, ns(sum=int, product=int)]:
@@ -35,9 +35,9 @@ def add_multiply(
 
 
 def test_local_engine_executes_basic_graph():
-    ng = NodeGraph(name="local-basic", outputs=ns(total=Any))
-    add1 = ng.add_node(test_add, "add1", x=1, y=2)
-    add2 = ng.add_node(test_add, "add2", x=3, y=add1.outputs.result)
+    ng = Graph(name="local-basic", outputs=ns(total=Any))
+    add1 = ng.add_task(test_add, "add1", x=1, y=2)
+    add2 = ng.add_task(test_add, "add2", x=3, y=add1.outputs.result)
     ng.add_link(add2.outputs.result, ng.outputs.total)
 
     engine = LocalEngine()
@@ -59,9 +59,9 @@ def test_local_engine_executes_basic_graph():
 
 
 def test_local_engine_records_subgraph_provenance():
-    ng = NodeGraph(name="local-subgraph", outputs=ns(result=Any))
-    graph_node = ng.add_node(double_chain, "chain", x=2)
-    final_node = ng.add_node(double, "final", x=graph_node.outputs.final)
+    ng = Graph(name="local-subgraph", outputs=ns(result=Any))
+    graph_node = ng.add_task(double_chain, "chain", x=2)
+    final_node = ng.add_task(double, "final", x=graph_node.outputs.final)
     ng.add_link(final_node.outputs.result, ng.outputs.result)
 
     recorder = ProvenanceRecorder("local-subgraph-test")
@@ -82,7 +82,7 @@ def test_local_engine_records_subgraph_provenance():
 
 
 def test_local_engine_handles_nested_and_dynamic_outputs():
-    @node.graph(
+    @task.graph(
         outputs=ns(
             square=generate_square_numbers.outputs,
             add_multiply=add_multiply.outputs,
@@ -134,9 +134,9 @@ def test_local_engine_handles_nested_and_dynamic_outputs():
 
 
 def test_local_engine_records_call_edges():
-    ng = NodeGraph(name="call-graph")
-    chain_node = ng.add_node(double_chain, "chain", x=2)
-    ng.add_node(double, "final", x=chain_node.outputs.final)
+    ng = Graph(name="call-graph")
+    chain_node = ng.add_task(double_chain, "chain", x=2)
+    ng.add_task(double, "final", x=chain_node.outputs.final)
 
     engine = LocalEngine(name="call-engine")
     engine.run(ng)

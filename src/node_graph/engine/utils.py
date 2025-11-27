@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Set
 from collections import defaultdict, deque
-from node_graph.link import NodeLink
-from node_graph import NodeGraph
+from node_graph.link import TaskLink
+from node_graph import Graph
 from node_graph.socket_spec import SocketSpec
 
 
@@ -110,15 +110,15 @@ def update_nested_dict_with_special_keys(data: Dict[str, Any]) -> Dict[str, Any]
     return data
 
 
-def _collect_literals(node, raw=False) -> Dict[str, Any]:
+def _collect_literals(task, raw=False) -> Dict[str, Any]:
     """
-    Recursively collect literal values from the node's input namespace, excluding
+    Recursively collect literal values from the task's input namespace, excluding
     values that are overridden by links at schedule time.
     """
     from node_graph.utils import tag_socket_value
 
-    tag_socket_value(node.inputs, only_uuid=True)
-    return node.inputs._collect_values(raw=raw)
+    tag_socket_value(task.inputs, only_uuid=True)
+    return task.inputs._collect_values(raw=raw)
 
 
 def _resolve_tagged_value(value: Any) -> Any:
@@ -139,25 +139,25 @@ def _resolve_tagged_value(value: Any) -> Any:
 
 
 def _scan_links_topology(
-    ng: NodeGraph,
-) -> Tuple[List[str], Dict[str, List[NodeLink]], Dict[str, Set[str]]]:
+    ng: Graph,
+) -> Tuple[List[str], Dict[str, List[TaskLink]], Dict[str, Set[str]]]:
     """
-    Build (1) a topological order, (2) incoming-links-per-node, and (3) a per-node set
+    Build (1) a topological order, (2) incoming-links-per-task, and (3) a per-task set
     of required *output socket names* based on downstream edges.
 
     required_out_sockets helps us pre-register futures for only keys that will be needed
     by downstream nodes (plus DEFAULT_OUT, commonly used).
     """
-    indeg: Dict[str, int] = {n: 0 for n in ng.get_node_names()}
-    incoming: Dict[str, List[NodeLink]] = defaultdict(list)
+    indeg: Dict[str, int] = {n: 0 for n in ng.get_task_names()}
+    incoming: Dict[str, List[TaskLink]] = defaultdict(list)
     outgoing: Dict[str, List[Tuple[str, str]]] = defaultdict(
         list
     )  # src -> [(dst, to_sock_name)]
     required_out_sockets: Dict[str, Set[str]] = defaultdict(set)
 
     for lk in ng.links:
-        src = lk.from_node.name
-        dst = lk.to_node.name
+        src = lk.from_task.name
+        dst = lk.to_task.name
         incoming[dst].append(lk)
         outgoing[src].append((dst, lk.to_socket._scoped_name))
         indeg[dst] = indeg.get(dst, 0) + 1
@@ -187,9 +187,9 @@ def _scan_links_topology(
     return order, incoming, required_out_sockets
 
 
-def _build_node_link_kwargs(
+def _build_task_link_kwargs(
     target_name: str,
-    links_into_node: Iterable[NodeLink],
+    links_into_task: Iterable[TaskLink],
     source_map: Dict[str, Any],
     *,
     resolve_socket: Callable[[str, str, Dict[str, Any]], Any],
@@ -203,9 +203,9 @@ def _build_node_link_kwargs(
       - resolves upstream socket references with ``resolve_socket``,
       - bundles multi-fan-in edges via ``bundle_factory``.
     """
-    grouped: Dict[str, List[NodeLink]] = defaultdict(list)
-    for lk in links_into_node:
-        if lk.to_node.name == target_name:
+    grouped: Dict[str, List[TaskLink]] = defaultdict(list)
+    for lk in links_into_task:
+        if lk.to_task.name == target_name:
             grouped[lk.to_socket._scoped_name].append(lk)
 
     kwargs: Dict[str, Any] = {}
@@ -217,7 +217,7 @@ def _build_node_link_kwargs(
 
         if len(active_links) == 1:
             lk = active_links[0]
-            from_name = lk.from_node.name
+            from_name = lk.from_task.name
             from_sock = lk.from_socket._scoped_name
             if from_sock == "_outputs":
                 kwargs[to_sock] = resolve_whole(from_name, source_map)
@@ -227,7 +227,7 @@ def _build_node_link_kwargs(
 
         bundle_payload: Dict[str, Any] = {}
         for lk in active_links:
-            from_name = lk.from_node.name
+            from_name = lk.from_task.name
             from_sock = lk.from_socket._scoped_name
             if from_sock in ("_wait", "_outputs"):
                 continue

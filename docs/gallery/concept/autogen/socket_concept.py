@@ -3,7 +3,7 @@ Socket
 ======
 
 Sockets are used to indicate the type of data that can be transferred
-from one node to another. You can only connect inputs and outputs with
+from one task to another. You can only connect inputs and outputs with
 the same socket type.
 """
 
@@ -16,13 +16,13 @@ the same socket type.
 # - Input
 # - Output
 #
-# Each node can have input sockets and output sockets.
+# Each task can have input sockets and output sockets.
 
-from node_graph import NodeGraph
+from node_graph import Graph
 
-ng = NodeGraph(name="socket_example")
-float1 = ng.add_node("node_graph.test_float", name="float1")
-float2 = ng.add_node("node_graph.test_float", name="float2")
+ng = Graph(name="socket_example")
+float1 = ng.add_task("node_graph.test_float", name="float1")
+float2 = ng.add_task("node_graph.test_float", name="float2")
 
 # connect output of float1 to input of float2
 ng.add_link(float1.outputs.result, float2.inputs.value)
@@ -52,12 +52,12 @@ ng.add_link(float1.outputs.result, float2.inputs.value)
 # object. You can add properties when defining a custom socket or later with
 # ``add_property`` for ``SocketAny``.
 
-from node_graph.node import Node
+from node_graph.task import Task
 
 
-class SymbolNode(Node):
-    identifier = "SymbolNode"
-    name = "SymbolNode"
+class SymbolTask(Task):
+    identifier = "SymbolTask"
+    name = "SymbolTask"
 
     def update_spec(self):
         # create an Any type socket
@@ -66,8 +66,8 @@ class SymbolNode(Node):
         inp.add_property("node_graph.string", "default", default="H")
 
 
-node = SymbolNode(parent=ng)
-print("Custom node with Any socket and property:", node.inputs.symbols.value)
+task = SymbolTask(parent=ng)
+print("Custom task with Any socket and property:", task.inputs.symbols.value)
 
 # %%
 # Serialization

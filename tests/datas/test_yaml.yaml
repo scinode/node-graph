@@ -3,7 +3,7 @@ description: 'This is a test to create a ndoe graph using yaml file.'
 metadata:
   version: node_graph@0.1.0
   platform: node_graph
-nodes:
+tasks:
   - identifier: node_graph.test_float
     name: float1
     inputs:
@@ -13,7 +13,7 @@ nodes:
     inputs:
       y: 3.0
 links:
-  - to_node: add1
+  - to_task: add1
     to_socket: "x"
-    from_node: float1
+    from_task: float1
     from_socket: 0

@@ -129,7 +129,7 @@ class EntryPointPool:
         return getattr(super().__getattribute__("_items"), name)
 
     def __dir__(self):
-        """Enable tab completion for the node pool instance."""
+        """Enable tab completion for the task pool instance."""
         return dir(self._items)
 
     def __repr__(self):
@@ -155,7 +155,7 @@ class EntryPointPool:
 class RegistryHub:
     """Aggregates entry-point pools, a type-mapping, and identifier-level promotions."""
 
-    node_pool: Any
+    task_pool: Any
     socket_pool: Any
     property_pool: Any
     type_mapping: Dict[Any, str]
@@ -169,15 +169,15 @@ class RegistryHub:
     @classmethod
     def from_prefix(
         cls,
-        node_group: str = "node_graph.node",
+        task_group: str = "node_graph.task",
         socket_group: str = "node_graph.socket",
         property_group: str = "node_graph.property",
         type_mapping_group: str = "node_graph.type_mapping",
         type_promotion_group: str = "node_graph.type_promotion",
         identifier_prefix: str = "node_graph",
     ) -> "RegistryHub":
-        node_pool = EntryPointPool(entry_point_group=node_group, name="NodePool")
-        node_pool["graph_level"] = node_pool[f"{identifier_prefix}.graph_level"]
+        task_pool = EntryPointPool(entry_point_group=task_group, name="TaskPool")
+        task_pool["graph_level"] = task_pool[f"{identifier_prefix}.graph_level"]
 
         socket_pool = EntryPointPool(entry_point_group=socket_group, name="SocketPool")
         socket_pool["any"] = socket_pool[f"{identifier_prefix}.any"]
@@ -211,7 +211,7 @@ class RegistryHub:
             except Exception:
                 pass
 
-        return cls(node_pool, socket_pool, property_pool, tm, tp)
+        return cls(task_pool, socket_pool, property_pool, tm, tp)
 
 
 registry_hub = RegistryHub.from_prefix()

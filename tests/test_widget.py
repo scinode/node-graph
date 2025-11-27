@@ -13,11 +13,11 @@ def test_nodegraph_widget(ng):
 
 
 def test_nodegraph_node(ng):
-    """Test the node widget"""
-    value = ng.nodes["add1"].to_widget_value()
+    """Test the task widget"""
+    value = ng.tasks["add1"].to_widget_value()
     assert len(value["nodes"]) == 1
-    assert len(value["nodes"]["add1"]["inputs"]) == len(ng.nodes["add1"].inputs)
+    assert len(value["nodes"]["add1"]["inputs"]) == len(ng.tasks["add1"].inputs)
     assert len(value["links"]) == 0
     # to html
-    data = ng.nodes["add1"].to_html()
+    data = ng.tasks["add1"].to_html()
     assert isinstance(data, IFrame)

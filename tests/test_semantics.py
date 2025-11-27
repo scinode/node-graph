@@ -1,9 +1,9 @@
 from typing import Any, Annotated
 
-from node_graph import node, namespace
+from node_graph import task, namespace
 from node_graph import dynamic
 from node_graph.semantics import (
-    NodeSemantics,
+    TaskSemantics,
     OntologyEnum,
     SemanticsAnnotation,
     SemanticsPayload,
@@ -19,12 +19,12 @@ from node_graph.semantics import (
 from node_graph.socket_spec import meta
 
 
-@node()
+@task()
 def emit(value):
     return value
 
 
-@node.graph()
+@task.graph()
 def simple_graph() -> Annotated[dict, namespace(first=Any, second=Any)]:
     first = emit(value=1).result
     second = emit(value=2).result
@@ -33,8 +33,8 @@ def simple_graph() -> Annotated[dict, namespace(first=Any, second=Any)]:
 
 def test_attach_semantics_records_relations():
     graph = simple_graph.build()
-    target = graph.nodes["emit"].outputs.result
-    source = graph.nodes["emit1"].outputs.result
+    target = graph.tasks["emit"].outputs.result
+    source = graph.tasks["emit1"].outputs.result
 
     attach_semantics(
         target,
@@ -50,16 +50,16 @@ def test_attach_semantics_records_relations():
     assert isinstance(rel, SemanticsRelation)
     assert rel.predicate == "mat:hasProperty"
     assert rel.label == "Relation label"
-    assert rel.subject.node_name == "emit"
-    assert rel.values[0].node_name == "emit1"
+    assert rel.subject.task_name == "emit"
+    assert rel.values[0].task_name == "emit1"
     assert rel.subject.graph_uuid == graph.uuid
     assert rel.values[0].graph_uuid == graph.uuid
 
 
 def test_attach_relation_helper_orders_args():
     graph = simple_graph.build()
-    target = graph.nodes["emit"].outputs.result
-    source = graph.nodes["emit1"].outputs.result
+    target = graph.tasks["emit"].outputs.result
+    source = graph.tasks["emit1"].outputs.result
 
     attach_semantics(
         target,
@@ -79,8 +79,8 @@ def test_attach_relation_helper_orders_args():
 
 def test_attach_semantics_with_predicate_kw():
     graph = simple_graph.build()
-    target = graph.nodes["emit"].outputs.result
-    source = graph.nodes["emit1"].outputs.result
+    target = graph.tasks["emit"].outputs.result
+    source = graph.tasks["emit1"].outputs.result
 
     attach_semantics(
         target,
@@ -99,7 +99,7 @@ def test_attach_semantics_with_predicate_kw():
 
 def test_attach_annotation_helper_adds_payload():
     graph = simple_graph.build()
-    subject = graph.nodes["emit"].outputs.result
+    subject = graph.tasks["emit"].outputs.result
 
     attach_semantics(
         subject,
@@ -117,7 +117,7 @@ def test_attach_annotation_helper_adds_payload():
 
 def test_attach_semantics_records_payloads():
     graph = simple_graph.build()
-    subject = graph.nodes["emit"].outputs.result
+    subject = graph.tasks["emit"].outputs.result
 
     attach_semantics(subject, semantics={"label": "Sample", "iri": "qudt:Energy"})
 
@@ -128,13 +128,13 @@ def test_attach_semantics_records_payloads():
     assert payload.socket_label is None
     assert payload.semantics["label"] == "Sample"
     assert payload.semantics["iri"] == "qudt:Energy"
-    assert payload.subject.node_name == "emit"
+    assert payload.subject.task_name == "emit"
     assert payload.subject.graph_uuid == graph.uuid
 
 
 def test_serialization_roundtrip_preserves_semantics_buffer():
     graph = simple_graph.build()
-    subject = graph.nodes["emit"].outputs.result
+    subject = graph.tasks["emit"].outputs.result
     attach_semantics(subject, semantics={"label": "Sample"})
 
     serialized = graph.to_dict()
@@ -168,7 +168,7 @@ def test_semantics_tree_resolves_paths_with_dynamic_namespace():
 
 def test_socket_ref_capture_and_normalize():
     graph = simple_graph.build()
-    target_socket = graph.nodes["emit"].outputs.result
+    target_socket = graph.tasks["emit"].outputs.result
     captured = _capture_semantics_value({"s": target_socket, "list": [target_socket]})
     ref = captured["s"]
     assert _socket_ref_from_value(target_socket) == ref
@@ -194,16 +194,16 @@ def test_socket_ref_capture_and_normalize():
     assert isinstance(normalized["payloads"][0], SemanticsPayload)
 
 
-def test_node_semantics_from_specs_and_dict():
+def test_task_semantics_from_specs_and_dict():
     inputs = namespace(
         x=Annotated[Any, meta(semantics={"label": "X"})],
     )
     outputs = namespace(result=Annotated[Any, meta(semantics={"label": "R"})])
-    spec_semantics = NodeSemantics.from_specs(inputs, outputs)
+    spec_semantics = TaskSemantics.from_specs(inputs, outputs)
     assert spec_semantics.resolve_input("x").label == "X"
     assert spec_semantics.resolve_output("result").label == "R"
 
-    back = NodeSemantics.from_dict(spec_semantics.to_dict())
+    back = TaskSemantics.from_dict(spec_semantics.to_dict())
     assert back.resolve_output("result").label == "R"
 
 

@@ -1,44 +1,44 @@
-from node_graph.property import NodeProperty
+from node_graph.property import TaskProperty
 from node_graph.serializer import SerializeJson
 from typing import Any
 
 
-class PropertyAny(NodeProperty, SerializeJson):
+class PropertyAny(TaskProperty, SerializeJson):
     """A new class for Any type."""
 
     identifier: str = "node_graph.any"
     allowed_types = (object,)  # Allow any type
 
 
-class PropertyInt(NodeProperty, SerializeJson):
+class PropertyInt(TaskProperty, SerializeJson):
     """A new class for integer type."""
 
     identifier: str = "node_graph.int"
     allowed_types = (int, type(None))
 
 
-class PropertyFloat(NodeProperty, SerializeJson):
+class PropertyFloat(TaskProperty, SerializeJson):
     """A new class for float type."""
 
     identifier: str = "node_graph.float"
     allowed_types = (int, float, type(None))
 
 
-class PropertyBool(NodeProperty, SerializeJson):
+class PropertyBool(TaskProperty, SerializeJson):
     """A new class for bool type."""
 
     identifier: str = "node_graph.bool"
     allowed_types = (bool, int, type(None))
 
 
-class PropertyString(NodeProperty, SerializeJson):
+class PropertyString(TaskProperty, SerializeJson):
     """A new class for string type."""
 
     identifier: str = "node_graph.string"
     allowed_types = (str, type(None))
 
 
-class PropertyEnum(NodeProperty, SerializeJson):
+class PropertyEnum(TaskProperty, SerializeJson):
     """A new class for enumeration type.
 
     Each option has:
@@ -104,7 +104,7 @@ class PropertyEnum(NodeProperty, SerializeJson):
 
 # ====================================
 # Vector
-class PropertyVector(NodeProperty, SerializeJson):
+class PropertyVector(TaskProperty, SerializeJson):
     """node_graph Vector property"""
 
     identifier: str = "node_graph.vector"
@@ -188,7 +188,7 @@ class PropertyBoolVector(PropertyVector):
 
 # =======================================
 # matrix
-class MatrixProperty(NodeProperty, SerializeJson):
+class MatrixProperty(TaskProperty, SerializeJson):
     """node_graph Matrix property"""
 
     identifier: str = "node_graph.matrix"
@@ -262,7 +262,7 @@ def validate_base_type(value):
             )
 
 
-class PropertyBaseDict(NodeProperty, SerializeJson):
+class PropertyBaseDict(TaskProperty, SerializeJson):
     """node_graph BaseDict property.
     All the elements should be a base type (int, float, string, bool).
     """
@@ -284,7 +284,7 @@ class PropertyBaseDict(NodeProperty, SerializeJson):
             raise Exception("{} is not a dict.".format(value))
 
 
-class PropertyBaseList(NodeProperty, SerializeJson):
+class PropertyBaseList(TaskProperty, SerializeJson):
     """node_graph BaseList property.
     All the elements should be a base type (int, float, string, bool).
     """

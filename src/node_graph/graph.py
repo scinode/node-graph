@@ -1,16 +1,16 @@
 from __future__ import annotations
 from node_graph.registry import RegistryHub, registry_hub
-from node_graph.collection import NodeCollection, LinkCollection
+from node_graph.collection import TaskCollection, LinkCollection
 from uuid import uuid1
-from node_graph.node_spec import NodeSpec
+from node_graph.task_spec import TaskSpec
 from node_graph.socket_spec import SocketSpec, SocketSpecAPI
 from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
-from node_graph.node import Node
-from node_graph.socket import NodeSocket
-from node_graph.link import NodeLink
+from node_graph.task import Task
+from node_graph.socket import TaskSocket
+from node_graph.link import TaskLink
 from node_graph.utils import yaml_to_dict
-from .config import BuiltinPolicy, BUILTIN_NODES, MAX_LINK_LIMIT
+from .config import BuiltinPolicy, BUILTIN_TASKS, MAX_LINK_LIMIT
 from .mixins import IOOwnerMixin, WidgetRenderableMixin
 from node_graph.semantics import serialize_semantics_buffer
 from dataclasses import dataclass
@@ -19,7 +19,7 @@ from dataclasses import replace
 
 @dataclass(frozen=True)
 class GraphSpec:
-    """Specification for a NodeGraph's inputs and outputs."""
+    """Specification for a Graph's inputs and outputs."""
 
     schema_source: str = "EMBEDDED"
     inputs: Optional[SocketSpec] = None
@@ -56,25 +56,25 @@ class GraphSpec:
         )
 
 
-class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
-    """A collection of nodes and links.
+class Graph(IOOwnerMixin, WidgetRenderableMixin):
+    """A collection of tasks and links.
 
     Attributes:
-        name (str): The name of the node graph.
-        uuid (str): The UUID of this node graph.
-        graph_type (str): The type of the node graph.
-        state (str): The state of this node graph.
-        action (str): The action of this node graph.
-        platform (str): The platform used to create this node graph.
-        description (str): A description of the node graph.
+        name (str): The name of the task graph.
+        uuid (str): The UUID of this task graph.
+        graph_type (str): The type of the task graph.
+        state (str): The state of this task graph.
+        action (str): The action of this task graph.
+        platform (str): The platform used to create this task graph.
+        description (str): A description of the task graph.
 
     Examples:
-        >>> from node_graph import NodeGraph
-        >>> ng = NodeGraph(name="my_first_nodegraph")
+        >>> from node_graph import Graph
+        >>> ng = Graph(name="my_first_taskgraph")
 
-        Add nodes:
-        >>> float1 = ng.add_node("node_graph.test_float", name="float1")
-        >>> add1 = ng.add_node("node_graph.test_add", name="add1")
+        Add tasks:
+        >>> float1 = ng.add_task("node_graph.test_float", name="float1")
+        >>> add1 = ng.add_task("node_graph.test_add", name="add1")
 
         Add links:
         >>> ng.add_link(float1.outputs[0], add1.inputs[0])
@@ -91,23 +91,23 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
 
     def __init__(
         self,
-        name: str = "NodeGraph",
+        name: str = "Graph",
         inputs: Optional[SocketSpec | List[str]] = None,
         outputs: Optional[SocketSpec | List[str]] = None,
         ctx: Optional[SocketSpec | List[str]] = None,
         uuid: Optional[str] = None,
         graph_type: str = "NORMAL",
-        graph: Optional[NodeGraph] = None,
-        parent: Optional[Node] = None,
+        graph: Optional[Graph] = None,
+        parent: Optional[Task] = None,
         interactive_widget: bool = False,
-        init_graph_level_nodes: bool = True,
+        init_graph_level_tasks: bool = True,
     ) -> None:
-        """Initializes a new instance of the NodeGraph class.
+        """Initializes a new instance of the Graph class.
 
         Args:
-            name (str, optional): The name of the node graph. Defaults to "NodeGraph".
-            uuid (str, optional): The UUID of the node graph. Defaults to None.
-            graph_type (str, optional): The type of the node graph. Defaults to "NORMAL".
+            name (str, optional): The name of the task graph. Defaults to "Graph".
+            uuid (str, optional): The UUID of the task graph. Defaults to None.
+            graph_type (str, optional): The type of the task graph. Defaults to "NORMAL".
         """
 
         self.name = name
@@ -117,14 +117,14 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         self.parent = parent
         self.type_mapping = dict(self._REGISTRY.type_mapping)
         self.type_promotions = set(self._REGISTRY.type_promotion)
-        self.nodes = NodeCollection(graph=self, pool=self._REGISTRY.node_pool)
+        self.tasks = TaskCollection(graph=self, pool=self._REGISTRY.task_pool)
         self.links = LinkCollection(self)
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
         self._init_graph_spec(inputs, outputs, ctx)
-        if init_graph_level_nodes:
-            self._init_graph_level_nodes()
+        if init_graph_level_tasks:
+            self._init_graph_level_tasks()
         self.semantics_buffer = {"relations": [], "payloads": []}
 
         self.state = "CREATED"
@@ -151,78 +151,78 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         ctx = self._SOCKET_SPEC_API.dynamic() if ctx is None else ctx
         self.spec = GraphSpec(inputs=inputs, outputs=outputs, ctx=ctx)
 
-    def _init_graph_level_nodes(self):
-        base_class = self._REGISTRY.node_pool["graph_level"].load()
-        self.graph_inputs_spec = NodeSpec(
+    def _init_graph_level_tasks(self):
+        base_class = self._REGISTRY.task_pool["graph_level"].load()
+        self.graph_inputs_spec = TaskSpec(
             identifier="graph_inputs",
             inputs=self.spec.inputs,
             base_class=base_class,
         )
-        self.nodes._new(self.graph_inputs_spec, name="graph_inputs")
+        self.tasks._new(self.graph_inputs_spec, name="graph_inputs")
 
-        self.graph_outputs_spec = NodeSpec(
+        self.graph_outputs_spec = TaskSpec(
             identifier="graph_outputs",
             inputs=self.spec.outputs,
             base_class=base_class,
         )
-        graph_outputs = self.nodes._new(self.graph_outputs_spec, name="graph_outputs")
+        graph_outputs = self.tasks._new(self.graph_outputs_spec, name="graph_outputs")
         graph_outputs.inputs._name = "outputs"
         # graph context
         ctx = self.spec.ctx or self._SOCKET_SPEC_API.dynamic(Any)
         meta = replace(ctx.meta, child_default_link_limit=1000000)
         ctx = replace(ctx, meta=meta)
         self.spec = replace(self.spec, ctx=ctx)
-        self.graph_ctx_spec = NodeSpec(
+        self.graph_ctx_spec = TaskSpec(
             identifier="graph_ctx",
             inputs=ctx,
             base_class=base_class,
         )
-        graph_ctx = self.nodes._new(self.graph_ctx_spec, name="graph_ctx")
+        graph_ctx = self.tasks._new(self.graph_ctx_spec, name="graph_ctx")
         graph_ctx.inputs._name = "ctx"
 
     @property
-    def graph_inputs(self) -> Node:
-        """Group inputs node."""
-        return self.nodes["graph_inputs"]
+    def graph_inputs(self) -> Task:
+        """Group inputs task."""
+        return self.tasks["graph_inputs"]
 
     @property
-    def graph_outputs(self) -> Node:
-        """Group outputs node."""
-        return self.nodes["graph_outputs"]
+    def graph_outputs(self) -> Task:
+        """Group outputs task."""
+        return self.tasks["graph_outputs"]
 
     @property
-    def graph_ctx(self) -> Node:
-        """Context variable node."""
-        return self.nodes["graph_ctx"]
+    def graph_ctx(self) -> Task:
+        """Context variable task."""
+        return self.tasks["graph_ctx"]
 
     @property
-    def inputs(self) -> Node:
-        """Group inputs node."""
+    def inputs(self) -> Task:
+        """Group inputs task."""
         return self.graph_inputs.inputs
 
     @inputs.setter
     def inputs(self, value: Dict[str, Any]) -> None:
-        """Set group inputs node."""
+        """Set group inputs task."""
         self.graph_inputs.inputs._set_socket_value(value)
 
     @property
-    def outputs(self) -> Node:
-        """Group outputs node."""
+    def outputs(self) -> Task:
+        """Group outputs task."""
         return self.graph_outputs.inputs
 
     @outputs.setter
     def outputs(self, value: Dict[str, Any]) -> None:
-        """Set group outputs node."""
+        """Set group outputs task."""
         self.graph_outputs.inputs._set_socket_value(value)
 
     @property
-    def ctx(self) -> Node:
-        """Context node."""
+    def ctx(self) -> Task:
+        """Context task."""
         return self.graph_ctx.inputs
 
     @ctx.setter
     def ctx(self, value: Dict[str, Any]) -> None:
-        """Set context node."""
+        """Set context task."""
         self.graph_ctx.inputs._clear()
         self.graph_ctx.inputs._set_socket_value(value)
 
@@ -230,64 +230,64 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         self.ctx._set_socket_value(value)
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
-        """Generate group inputs from nodes."""
+        """Generate group inputs from tasks."""
         from node_graph.socket_spec import remove_spec_field
 
-        all_names = set(self.nodes._get_keys())
+        all_names = set(self.tasks._get_keys())
         names = set(names or all_names)
         missing = names - all_names
         if missing:
-            raise ValueError(f"The following named nodes do not exist: {missing}")
-        for name in names - set(BUILTIN_NODES):
-            node = self.nodes[name]
+            raise ValueError(f"The following tasks do not exist: {missing}")
+        for name in names - set(BUILTIN_TASKS):
+            task = self.tasks[name]
             # update the _inputs spec
-            if node.spec.inputs is not None:
+            if task.spec.inputs is not None:
                 # skip linked sockets
                 names = [
                     link.to_socket._scoped_name
                     for link in self.links
-                    if link.to_node == node
+                    if link.to_task == task
                 ]
-                spec = remove_spec_field(node.spec.inputs, names=names)
-                socket = self.add_input_spec(spec, name=node.name)
-                keys = node.inputs._get_all_keys()
+                spec = remove_spec_field(task.spec.inputs, names=names)
+                socket = self.add_input_spec(spec, name=task.name)
+                keys = task.inputs._get_all_keys()
                 exist_keys = socket._get_all_keys()
                 for key in keys:
-                    new_key = f"{node.name}.{key}"
+                    new_key = f"{task.name}.{key}"
                     if new_key not in exist_keys:
                         continue
-                    # add link from group inputs to node inputs
-                    self.add_link(self.inputs[new_key], node.inputs[key])
+                    # add link from group inputs to task inputs
+                    self.add_link(self.inputs[new_key], task.inputs[key])
 
     def expose_outputs(self, names: Optional[List[str]] = None) -> None:
-        """Generate group outputs from nodes."""
-        all_names = set(self.nodes._get_keys())
+        """Generate group outputs from tasks."""
+        all_names = set(self.tasks._get_keys())
         names = set(names or all_names)
         missing = names - all_names
         if missing:
-            raise ValueError(f"The following named nodes do not exist: {missing}")
-        for name in names - set(BUILTIN_NODES):
-            node = self.nodes[name]
-            if node.spec.outputs is not None:
-                socket = self.add_output_spec(node.spec.outputs, name=node.name)
-                keys = node.outputs._get_all_keys()
+            raise ValueError(f"The following tasks do not exist: {missing}")
+        for name in names - set(BUILTIN_TASKS):
+            task = self.tasks[name]
+            if task.spec.outputs is not None:
+                socket = self.add_output_spec(task.spec.outputs, name=task.name)
+                keys = task.outputs._get_all_keys()
                 exist_keys = socket._get_all_keys()
                 for key in keys:
-                    new_key = f"{node.name}.{key}"
+                    new_key = f"{task.name}.{key}"
                     if new_key not in exist_keys:
                         continue
-                    # add link from node outputs to group outputs
-                    self.add_link(node.outputs[key], self.outputs[new_key])
+                    # add link from task outputs to group outputs
+                    self.add_link(task.outputs[key], self.outputs[new_key])
 
     def set_inputs(self, inputs: Dict[str, Any]):
         for name, input in inputs.items():
-            if "graph_inputs" in self.nodes and name in self.inputs:
+            if "graph_inputs" in self.tasks and name in self.inputs:
                 setattr(self.inputs, name, input)
-            elif name in self.nodes:
-                self.nodes[name].set_inputs(input)
+            elif name in self.tasks:
+                self.tasks[name].set_inputs(input)
             else:
                 raise KeyError(
-                    f"{name} does not exist. Accepted keys are: {list(self.get_node_names()) + ['graph_inputs']}."
+                    f"{name} does not exist. Accepted keys are: {list(self.get_task_names()) + ['graph_inputs']}."
                 )
 
     @property
@@ -301,40 +301,40 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         except importlib.metadata.PackageNotFoundError:
             return "unknown"
 
-    def add_node(
+    def add_task(
         self,
         identifier: Union[str, Callable],
         name: str = None,
         include_builtins: bool = False,
         **kwargs,
-    ) -> Node:
-        """Adds a node to the node graph."""
+    ) -> Task:
+        """Adds a task to the task graph."""
 
-        from node_graph.decorator import build_node_from_callable
-        from node_graph.node_spec import NodeHandle
-        from node_graph.nodes.subgraph_node import _build_subgraph_task_nodespec
+        from node_graph.decorator import build_task_from_callable
+        from node_graph.task_spec import TaskHandle
+        from node_graph.tasks.subgraph_task import _build_subgraph_task_taskspec
 
-        if name in BUILTIN_NODES and not include_builtins:
+        if name in BUILTIN_TASKS and not include_builtins:
             raise ValueError(f"Name {name} can not be used, it is reserved.")
 
-        if isinstance(identifier, NodeGraph):
-            identifier = _build_subgraph_task_nodespec(graph=identifier, name=name)
+        if isinstance(identifier, Graph):
+            identifier = _build_subgraph_task_taskspec(graph=identifier, name=name)
         # build the task on the fly if the identifier is a callable
         elif callable(identifier) and not isinstance(
-            identifier, (NodeSpec, NodeHandle)
+            identifier, (TaskSpec, TaskHandle)
         ):
-            identifier = build_node_from_callable(identifier)
-        node = self.nodes._new(identifier, name, **kwargs)
+            identifier = build_task_from_callable(identifier)
+        task = self.tasks._new(identifier, name, **kwargs)
         self._version += 1
-        return node
+        return task
 
-    def add_link(self, source: NodeSocket | Node, target: NodeSocket) -> NodeLink:
-        """Add a link between two nodes."""
-        from node_graph.socket import NodeSocketNamespace
+    def add_link(self, source: TaskSocket | Task, target: TaskSocket) -> TaskLink:
+        """Add a link between two tasks."""
+        from node_graph.socket import TaskSocketNamespace
 
-        if isinstance(source, Node):
+        if isinstance(source, Task):
             source = source.outputs["graph_outputs"]
-        elif source._parent is None and isinstance(source, NodeSocketNamespace):
+        elif source._parent is None and isinstance(source, TaskSocketNamespace):
             # if the source is the top-level outputs,
             # we use the built-in "_outputs" socket to represent it
             if "_outputs" in source:
@@ -344,27 +344,27 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
                     f"You try to link a top-level output socket {source._name} without a parent."
                 )
         #
-        key = f"{source._node.name}.{source._scoped_name} -> {target._node.name}.{target._scoped_name}"
+        key = f"{source._task.name}.{source._scoped_name} -> {target._task.name}.{target._scoped_name}"
         if key in self.links:
             return self.links[key]
         link = self.links._new(source, target)
         self._version += 1
         return link
 
-    def append_node(self, node: Node) -> None:
-        """Appends a node to the node graph."""
-        self.nodes._append(node)
+    def append_task(self, task: Task) -> None:
+        """Appends a task to the task graph."""
+        self.tasks._append(task)
 
-    def get_node_names(self) -> List[str]:
-        """Returns the names of the nodes in the node graph."""
-        return self.nodes._get_keys()
+    def get_task_names(self) -> List[str]:
+        """Returns the names of the tasks in the task graph."""
+        return self.tasks._get_keys()
 
     def launch(self) -> None:
-        """Launches the node graph."""
+        """Launches the task graph."""
         raise NotImplementedError("The 'launch' method is not implemented.")
 
     def wait(self) -> None:
-        """Waits for the node graph to finish.
+        """Waits for the task graph to finish.
 
         Args:
             timeout (int, optional): The maximum time to wait in seconds. Defaults to 50.
@@ -372,19 +372,19 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         return NotImplementedError("The 'wait' method is not implemented.")
 
     def save(self) -> None:
-        """Saves the node graph to the database."""
+        """Saves the task graph to the database."""
         raise NotImplementedError("The 'save' method is not implemented.")
 
     def to_dict(
         self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
-        """Converts the node graph to a dictionary.
+        """Converts the task graph to a dictionary.
 
         Args:
-            short (bool, optional): Indicates whether to include short node representations. Defaults to False.
+            short (bool, optional): Indicates whether to include short task representations. Defaults to False.
 
         Returns:
-            Dict[str, Any]: The node graph data.
+            Dict[str, Any]: The task graph data.
         """
         # Capture the current ctx namespace shape into the graph spec before exporting.
         if hasattr(self.graph_ctx, "inputs"):
@@ -392,7 +392,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             self.spec = replace(self.spec, ctx=ctx_snapshot)
 
         metadata = self.get_metadata()
-        nodes = self.export_nodes_to_dict(
+        tasks = self.export_tasks_to_dict(
             include_sockets=include_sockets, should_serialize=should_serialize
         )
 
@@ -406,7 +406,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             "error": "",
             "metadata": metadata,
             "spec": self.spec.to_dict(),
-            "nodes": nodes,
+            "tasks": tasks,
             "links": links,
             "description": self.description,
         }
@@ -425,24 +425,24 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         }
         return meta
 
-    def export_nodes_to_dict(
+    def export_tasks_to_dict(
         self, include_sockets: bool = False, should_serialize: bool = False
     ) -> Dict[str, Any]:
-        """Converts the nodes to a dictionary.
+        """Converts the tasks to a dictionary.
 
         Args:
-            short (bool, optional): Indicates whether to include short node representations. Defaults to False.
+            short (bool, optional): Indicates whether to include short task representations. Defaults to False.
 
         Returns:
-            Dict[str, Any]: The nodes data.
+            Dict[str, Any]: The tasks data.
         """
-        # generate spec for graph-level nodes
-        nodes = {}
-        for node in self.nodes:
-            nodes[node.name] = node.to_dict(
+        # generate spec for graph-level tasks
+        tasks = {}
+        for task in self.tasks:
+            tasks[task.name] = task.to_dict(
                 include_sockets=include_sockets, should_serialize=should_serialize
             )
-        return nodes
+        return tasks
 
     def links_to_dict(self) -> List[Dict[str, Any]]:
         """Converts the links to a list of dictionaries.
@@ -456,46 +456,46 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         return links
 
     def to_yaml(self) -> str:
-        """Exports the node graph to a YAML format data.
+        """Exports the task graph to a YAML format data.
 
-        Results of the nodes are not exported.
+        Results of the tasks are not exported.
 
         Returns:
-            str: The YAML string representation of the node graph.
+            str: The YAML string representation of the task graph.
         """
         data: Dict[str, Any] = self.to_dict()
-        for node in data["nodes"].values():
-            node.pop("results", None)
+        for task in data["tasks"].values():
+            task.pop("results", None)
         return yaml.dump(data, sort_keys=False)
 
     def update(self) -> None:
-        """Updates the node graph from the database."""
+        """Updates the task graph from the database."""
         raise NotImplementedError("The 'update' method is not implemented.")
 
     def links_from_dict(self, links: list) -> None:
-        """Adds links to the node graph from a dictionary.
+        """Adds links to the task graph from a dictionary.
 
         Args:
             links (List[Dict[str, Any]]): The links data.
         """
         for link in links:
-            self.nodes[link["to_node"]].set_inputs(
+            self.tasks[link["to_task"]].set_inputs(
                 {
-                    link["to_socket"]: self.nodes[link["from_node"]].outputs[
+                    link["to_socket"]: self.tasks[link["from_task"]].outputs[
                         link["from_socket"]
                     ]
                 }
             )
 
     @classmethod
-    def from_dict(cls, ngdata: Dict[str, Any]) -> NodeGraph:
-        """Rebuilds a node graph from a dictionary.
+    def from_dict(cls, ngdata: Dict[str, Any]) -> Graph:
+        """Rebuilds a task graph from a dictionary.
 
         Args:
-            ngdata (Dict[str, Any]): The data of the node graph.
+            ngdata (Dict[str, Any]): The data of the task graph.
 
         Returns:
-            NodeGraph: The rebuilt node graph.
+            Graph: The rebuilt task graph.
         """
         spec = GraphSpec.from_dict(ngdata.get("spec", {}))
         ng = cls(
@@ -510,8 +510,8 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         ng.action = ngdata.get("action", "NONE")
         ng.description = ngdata.get("description", "")
 
-        for ndata in ngdata["nodes"].values():
-            ng.add_node_from_dict(ndata)
+        for ndata in ngdata["tasks"].values():
+            ng.add_task_from_dict(ndata)
 
         ng.links_from_dict(ngdata.get("links", []))
         semantics_buffer = ngdata.get("semantics_buffer")
@@ -519,28 +519,28 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             ng.semantics_buffer = semantics_buffer
         return ng
 
-    def add_node_from_dict(self, ndata: Dict[str, Any]) -> Node:
-        """Adds a node to the node graph from a dictionary.
+    def add_task_from_dict(self, ndata: Dict[str, Any]) -> Task:
+        """Adds a task to the task graph from a dictionary.
 
         Args:
-            ndata (Dict[str, Any]): The data of the node.
+            ndata (Dict[str, Any]): The data of the task.
 
         Returns:
-            Node: The added node.
+            Task: The added task.
         """
 
         name = ndata["name"]
-        if name in BUILTIN_NODES:
-            self.nodes[name].update_from_dict(ndata)
-            return self.nodes[name]
+        if name in BUILTIN_TASKS:
+            self.tasks[name].update_from_dict(ndata)
+            return self.tasks[name]
         else:
-            return Node.from_dict(ndata, graph=self)
+            return Task.from_dict(ndata, graph=self)
 
     @classmethod
     def from_yaml(
         cls, filename: Optional[str] = None, string: Optional[str] = None
-    ) -> "NodeGraph":
-        """Builds a node graph from a YAML file or string.
+    ) -> "Graph":
+        """Builds a task graph from a YAML file or string.
 
         Args:
             filename (str, optional): The filename of the YAML file. Defaults to None.
@@ -550,7 +550,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
             ValueError: If neither filename nor string is provided.
 
         Returns:
-            NodeGraph: The built node graph.
+            Graph: The built task graph.
         """
         if filename:
             with open(filename, "r") as f:
@@ -563,24 +563,24 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         ng = cls.from_dict(ngdata)
         return ng
 
-    def copy(self, name: Optional[str] = None) -> "NodeGraph":
-        """Copies the node graph.
+    def copy(self, name: Optional[str] = None) -> "Graph":
+        """Copies the task graph.
 
-        The nodes and links are copied.
+        The tasks and links are copied.
 
         Args:
-            name (str, optional): The name of the new node graph. Defaults to None.
+            name (str, optional): The name of the new task graph. Defaults to None.
 
         Returns:
-            NodeGraph: The copied node graph.
+            Graph: The copied task graph.
         """
         name = f"{self.name}_copy" if name is None else name
         ng = self.__class__(name=name, uuid=None)
-        ng.nodes = self.nodes._copy(graph=ng)
+        ng.tasks = self.tasks._copy(graph=ng)
         for link in self.links:
             ng.add_link(
-                ng.nodes[link.from_node.name].outputs[link.from_socket._scoped_name],
-                ng.nodes[link.to_node.name].inputs[link.to_socket._scoped_name],
+                ng.tasks[link.from_task.name].outputs[link.from_socket._scoped_name],
+                ng.tasks[link.to_task.name].inputs[link.to_socket._scoped_name],
             )
         return ng
 
@@ -590,46 +590,46 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         raise NotImplementedError("The 'load' method is not implemented.")
 
     def copy_subset(
-        self, node_list: List[str], name: Optional[str] = None, add_ref: bool = True
-    ) -> "NodeGraph":
-        """Copies a subset of the node graph.
+        self, task_list: List[str], name: Optional[str] = None, add_ref: bool = True
+    ) -> "Graph":
+        """Copies a subset of the task graph.
 
         Args:
-            node_list (List[str]): The names of the nodes to be copied.
-            name (str, optional): The name of the new node graph. Defaults to None.
-            add_ref (bool, optional): Indicates whether to add reference nodes. Defaults to True.
+            task_list (List[str]): The names of the tasks to be copied.
+            name (str, optional): The name of the new task graph. Defaults to None.
+            add_ref (bool, optional): Indicates whether to add reference tasks. Defaults to True.
 
         Returns:
-            NodeGraph: The new node graph.
+            Graph: The new task graph.
         """
-        ng: "NodeGraph" = self.__class__(name=name, uuid=None)
-        for node_name in node_list:
-            ng.append_node(self.nodes[node_name].copy(graph=ng))
+        ng: "Graph" = self.__class__(name=name, uuid=None)
+        for task_name in task_list:
+            ng.append_task(self.tasks[task_name].copy(graph=ng))
         for link in self.links:
             if (
                 add_ref
-                and link.from_node.name not in ng.get_node_names()
-                and link.to_node.name in ng.get_node_names()
+                and link.from_task.name not in ng.get_task_names()
+                and link.to_task.name in ng.get_task_names()
             ):
-                ng.append_node(self.nodes[link.from_node.name].copy(graph=ng))
+                ng.append_task(self.tasks[link.from_task.name].copy(graph=ng))
             if (
-                link.from_node.name in ng.get_node_names()
-                and link.to_node.name in ng.get_node_names()
+                link.from_task.name in ng.get_task_names()
+                and link.to_task.name in ng.get_task_names()
             ):
                 ng.add_link(
-                    ng.nodes[link.from_node.name].outputs[link.from_socket._name],
-                    ng.nodes[link.to_node.name].inputs[link.to_socket._name],
+                    ng.tasks[link.from_task.name].outputs[link.from_socket._name],
+                    ng.tasks[link.to_task.name].inputs[link.to_socket._name],
                 )
         return ng
 
-    def __getitem__(self, key: Union[str, List[str]]) -> "NodeGraph":
-        """Gets a sub-nodegraph by the name(s) of nodes.
+    def __getitem__(self, key: Union[str, List[str]]) -> "Graph":
+        """Gets a sub-graph by the name(s) of tasks.
 
         Args:
-            key (Union[str, List[str]]): The name(s) of the node(s).
+            key (Union[str, List[str]]): The name(s) of the task(s).
 
         Returns:
-            NodeGraph: The sub-nodegraph.
+            Graph: The sub-graph.
         """
         if isinstance(key, str):
             keys = [key]
@@ -640,68 +640,74 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         ng = self.copy_subset(keys)
         return ng
 
-    def __iadd__(self, other: "NodeGraph") -> "NodeGraph":
-        """Adds another node graph to this node graph.
+    def __iadd__(self, other: "Graph") -> "Graph":
+        """Adds another task graph to this task graph.
 
         Args:
-            other (NodeGraph): The other node graph to add.
+            other (Graph): The other task graph to add.
 
         Returns:
-            NodeGraph: The combined node graph.
+            Graph: The combined task graph.
         """
-        nodes = other.nodes._copy(graph=self)
-        for node in nodes:
-            # skip built-in nodes
-            if node.name not in BUILTIN_NODES:
-                self.nodes._append(node)
+        tasks = other.tasks._copy(graph=self)
+        for task in tasks:
+            # skip built-in tasks
+            if task.name not in BUILTIN_TASKS:
+                self.tasks._append(task)
         for link in other.links:
             self.add_link(
-                self.nodes[link.from_node.name].outputs[link.from_socket._name],
-                self.nodes[link.to_node.name].inputs[link.to_socket._name],
+                self.tasks[link.from_task.name].outputs[link.from_socket._name],
+                self.tasks[link.to_task.name].inputs[link.to_socket._name],
             )
         return self
 
-    def __add__(self, other: "NodeGraph") -> "NodeGraph":
-        """Returns a new node graph that is the combination of this and another.
+    def __add__(self, other: "Graph") -> "Graph":
+        """Returns a new task graph that is the combination of this and another.
 
         Args:
-            other (NodeGraph): The other node graph to add.
+            other (Graph): The other task graph to add.
 
         Returns:
-            NodeGraph: The combined node graph.
+            Graph: The combined task graph.
         """
         new_graph = self.copy()
         new_graph += other
         return new_graph
 
-    def delete_nodes(self, node_list: str | List[str]) -> None:
-        """Deletes nodes from the node graph.
+    def delete_tasks(self, task_list: str | List[str]) -> None:
+        """Deletes tasks from the task graph.
 
         Args:
-            node_list (List[str]): The names of the nodes to delete.
+            task_list (List[str]): The names of the tasks to delete.
         """
-        if isinstance(node_list, str):
-            node_list = [node_list]
-        for name in node_list:
-            if name not in self.get_node_names():
-                raise ValueError(f"Node '{name}' not found in the node graph.")
+        if isinstance(task_list, str):
+            task_list = [task_list]
+        for name in task_list:
+            if name not in self.get_task_names():
+                raise ValueError(f"Task '{name}' not found in the task graph.")
             link_indices: List[int] = []
             for index, link in enumerate(self.links):
-                if link.from_node.name == name or link.to_node.name == name:
+                if link.from_task.name == name or link.to_task.name == name:
                     link_indices.append(index)
             # Delete links in reverse order to avoid index shift
             for index in sorted(link_indices, reverse=True):
                 del self.links[index]
-            del self.nodes[name]
+            del self.tasks[name]
 
     def to_widget_value(self) -> dict:
-        from node_graph.utils import nodegaph_to_short_json
+        from node_graph.utils import gaph_to_short_json
 
-        ngdata = nodegaph_to_short_json(self.to_dict(include_sockets=True))
+        ngdata = gaph_to_short_json(self.to_dict(include_sockets=True))
+        ngdata["nodes"] = ngdata.pop("tasks")
+        for link in ngdata["links"]:
+            link["from_node"] = link.pop("from_task")
+            link["to_node"] = link.pop("to_task")
+            link["from_socket"] = link.pop("from_socket")
+            link["to_socket"] = link.pop("to_socket")
         return ngdata
 
     def __repr__(self) -> str:
-        return f'NodeGraph(name="{self.name}", uuid="{self.uuid}")'
+        return f'Graph(name="{self.name}", uuid="{self.uuid}")'
 
     def __enter__(self):
         from node_graph.manager import active_graph as _active_graph
@@ -714,7 +720,7 @@ class NodeGraph(IOOwnerMixin, WidgetRenderableMixin):
         return self.___ctx.__exit__(exc_type, exc, tb)
 
     def run(self) -> None:
-        """Runs the node graph."""
+        """Runs the task graph."""
         from node_graph.engine.local import LocalEngine
 
         self.engine = LocalEngine()

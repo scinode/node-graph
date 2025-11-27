@@ -1,10 +1,10 @@
 from __future__ import annotations
-from node_graph.node import Node
-from node_graph.node_spec import NodeSpec
+from node_graph.task import Task
+from node_graph.task_spec import TaskSpec
 
 
-class SubGraphNode(Node):
-    """Wrap a NodeGraph instance so it can be used as a Node in a parent graph.
+class SubGraphTask(Task):
+    """Wrap a Graph instance so it can be used as a Task in a parent graph.
 
     - Inputs mirror the child graph's *graph_inputs* namespace
     - Outputs mirror the child graph's *graph_outputs* namespace
@@ -12,8 +12,8 @@ class SubGraphNode(Node):
     """
 
     identifier = "node_graph.subgraph"
-    name = "SubGraphNode"
-    node_type = "Normal"
+    name = "SubGraphTask"
+    task_type = "Normal"
     catalog = "Builtins"
 
     def __init__(self, *args, **kwargs):
@@ -22,38 +22,38 @@ class SubGraphNode(Node):
 
     @property
     def subgraph(self):
-        from node_graph import NodeGraph
+        from node_graph import Graph
         from copy import deepcopy
 
         if not self._subgraph:
             graph_data = deepcopy(self.get_executor().graph_data)
-            self._subgraph = NodeGraph.from_dict(graph_data)
+            self._subgraph = Graph.from_dict(graph_data)
         return self._subgraph
 
     @property
-    def nodes(self):
-        return self.subgraph.nodes
+    def tasks(self):
+        return self.subgraph.tasks
 
     @property
     def links(self):
         return self.subgraph.links
 
 
-def _build_subgraph_task_nodespec(
-    graph: "NodeGraph",
+def _build_subgraph_task_taskspec(
+    graph: "Graph",
     name: str | None = None,
-) -> NodeSpec:
+) -> TaskSpec:
     from node_graph.executor import RuntimeExecutor
 
     meta = {
-        "node_type": "WorkGraph",
+        "task_type": "WorkGraph",
     }
 
-    return NodeSpec(
+    return TaskSpec(
         identifier=graph.name,
         inputs=graph.spec.inputs,
         outputs=graph.spec.outputs,
         executor=RuntimeExecutor.from_graph(graph),
-        base_class=SubGraphNode,
+        base_class=SubGraphTask,
         metadata=meta,
     )

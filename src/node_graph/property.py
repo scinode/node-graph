@@ -1,14 +1,14 @@
 from typing import Optional, Callable, Dict, Any, Union
 
 
-class NodeProperty:
-    """Base class for Node properties.
+class TaskProperty:
+    """Base class for Task properties.
 
     A property holds data that can be displayed or modified in a GUI, with an optional update callback.
     """
 
     property_entry: str = "node_graph.property"
-    identifier: str = "NodeProperty"
+    identifier: str = "TaskProperty"
     allowed_types = (object,)  # Allow any type
 
     def __init__(
@@ -22,7 +22,7 @@ class NodeProperty:
         **kwargs,
     ) -> None:
         """
-        Initialize a NodeProperty.
+        Initialize a TaskProperty.
 
         Args:
             name (str): The name of the property.
@@ -67,8 +67,8 @@ class NodeProperty:
         return {}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "NodeProperty":
-        """Create a NodeProperty from a serialized dictionary."""
+    def from_dict(cls, data: Dict[str, Any]) -> "TaskProperty":
+        """Create a TaskProperty from a serialized dictionary."""
         prop = cls(
             name=data["name"],
             description=data.get("description", ""),
@@ -106,7 +106,7 @@ class NodeProperty:
                 f"(value={value!r})."
             )
 
-    def copy(self) -> "NodeProperty":
+    def copy(self) -> "TaskProperty":
         """Create a shallow copy of the property."""
         return self.__class__(
             name=self.name,
@@ -120,9 +120,9 @@ class NodeProperty:
         cls,
         identifier: Union[str, type],
         name: str = None,
-        PropertyPool: Dict[str, "NodeProperty"] = None,
+        PropertyPool: Dict[str, "TaskProperty"] = None,
         **kwargs,
-    ) -> "NodeProperty":
+    ) -> "TaskProperty":
         """Create a new property from an identifier."""
         from node_graph.collection import get_item_class
 

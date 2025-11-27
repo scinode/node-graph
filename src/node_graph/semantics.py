@@ -334,27 +334,27 @@ class SemanticsTree:
             return self.annotation
         normalized = path.replace(".", "__")
         segments = [segment for segment in normalized.split("__") if segment]
-        node: Optional[SemanticsTree] = self
+        task: Optional[SemanticsTree] = self
         annotations: List[SemanticsAnnotation] = []
         for segment in segments:
-            if node is None:
+            if task is None:
                 return None
-            if node.annotation is not None:
-                annotations.append(node.annotation)
-            next_node = node.children.get(segment)
-            if next_node is None and node.dynamic is not None:
-                next_node = node.dynamic
-            if next_node is None:
+            if task.annotation is not None:
+                annotations.append(task.annotation)
+            next_task = task.children.get(segment)
+            if next_task is None and task.dynamic is not None:
+                next_task = task.dynamic
+            if next_task is None:
                 return None
-            node = next_node
-        if node is not None and node.annotation is not None:
-            annotations.append(node.annotation)
+            task = next_task
+        if task is not None and task.annotation is not None:
+            annotations.append(task.annotation)
         return SemanticsAnnotation.combine(annotations)
 
 
 @dataclass(frozen=True)
-class NodeSemantics:
-    """Aggregated semantics for a node's inputs and outputs."""
+class TaskSemantics:
+    """Aggregated semantics for a task's inputs and outputs."""
 
     inputs: Optional[SemanticsTree] = None
     outputs: Optional[SemanticsTree] = None
@@ -364,7 +364,7 @@ class NodeSemantics:
         cls,
         inputs_spec: Optional[SocketSpec],
         outputs_spec: Optional[SocketSpec],
-    ) -> Optional["NodeSemantics"]:
+    ) -> Optional["TaskSemantics"]:
         inputs_tree = SemanticsTree.from_spec(inputs_spec)
         outputs_tree = SemanticsTree.from_spec(outputs_spec)
         if inputs_tree is None and outputs_tree is None:
@@ -372,7 +372,7 @@ class NodeSemantics:
         return cls(inputs=inputs_tree, outputs=outputs_tree)
 
     @classmethod
-    def from_dict(cls, raw: Optional[Mapping[str, Any]]) -> Optional["NodeSemantics"]:
+    def from_dict(cls, raw: Optional[Mapping[str, Any]]) -> Optional["TaskSemantics"]:
         if not raw:
             return None
         inputs_tree = SemanticsTree.from_dict(raw.get("inputs"))
@@ -405,7 +405,7 @@ class _SocketRef:
     """Lightweight pointer to a graph socket for deferred semantics resolution."""
 
     graph_uuid: str
-    node_name: str
+    task_name: str
     socket_path: str
     kind: str  # "input" or "output"
 
@@ -442,9 +442,9 @@ def _socket_ref_from_value(value: Any) -> Optional[_SocketRef]:
     socket = _socket_from_value(value)
     if socket is None:
         return None
-    node = getattr(socket, "_node", None)
-    graph = getattr(socket, "_graph", None) or getattr(node, "graph", None)
-    if node is None or graph is None:
+    task = getattr(socket, "_task", None)
+    graph = getattr(socket, "_graph", None) or getattr(task, "graph", None)
+    if task is None or graph is None:
         return None
     kind = getattr(getattr(socket, "_metadata", None), "socket_type", None)
     kind_normalized = str(kind).lower() if kind else "output"
@@ -456,7 +456,7 @@ def _socket_ref_from_value(value: Any) -> Optional[_SocketRef]:
         return None
     return _SocketRef(
         graph_uuid=getattr(graph, "uuid", "<graph>"),
-        node_name=getattr(node, "name", ""),
+        task_name=getattr(task, "name", ""),
         socket_path=str(socket_path),
         kind=kind_normalized,
     )
@@ -469,7 +469,7 @@ def _graph_from_socket_value(value: Any) -> Any:
     if socket_obj is None:
         return None
     return getattr(socket_obj, "_graph", None) or getattr(
-        getattr(socket_obj, "_node", None), "graph", None
+        getattr(socket_obj, "_task", None), "graph", None
     )
 
 
@@ -480,12 +480,12 @@ def _rehydrate_attachment_value(value: Any) -> Any:
         return value
     if isinstance(value, dict) and {
         "graph_uuid",
-        "node_name",
+        "task_name",
         "socket_path",
     }.issubset(value.keys()):
         return _SocketRef(
             graph_uuid=str(value.get("graph_uuid") or "<graph>"),
-            node_name=str(value.get("node_name") or ""),
+            task_name=str(value.get("task_name") or ""),
             socket_path=str(value.get("socket_path") or ""),
             kind=str(value.get("kind") or "output"),
         )
@@ -658,7 +658,7 @@ __all__ = [
     "namespace_registry",
     "SemanticsAnnotation",
     "SemanticsTree",
-    "NodeSemantics",
+    "TaskSemantics",
     "SemanticsPayload",
     "SemanticsRelation",
     "serialize_semantics_buffer",

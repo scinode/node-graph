@@ -1,20 +1,20 @@
 import pytest
 import numpy as np
-from node_graph import NodeGraph
+from node_graph import Graph
 from node_graph.collection import group
-from node_graph.node import Node
-from node_graph.socket import BaseSocket, NodeSocket, NodeSocketNamespace, TaggedValue
-from node_graph.nodes.tests import test_add
+from node_graph.task import Task
+from node_graph.socket import BaseSocket, TaskSocket, TaskSocketNamespace, TaggedValue
+from node_graph.tasks.tests import test_add
 import operator as op
 from node_graph.errors import GraphDeferredIllegalOperationError
-from node_graph.nodes.tests import test_string
+from node_graph.tasks.tests import test_string
 
 
 @pytest.fixture
 def future_socket():
-    """A future (result) socket from a node; value only known at runtime."""
-    ng = NodeGraph(name="illegal_ops")
-    add = ng.add_node(test_add, "add")
+    """A future (result) socket from a task; value only known at runtime."""
+    ng = Graph(name="illegal_ops")
+    add = ng.add_task(test_add, "add")
     # We only need the future socket object; no need to set inputs
     return add.outputs.result
 
@@ -38,8 +38,8 @@ def test_predicate_socket_creation_and_bool_forbidden(future_socket):
 
     msg = str(e.value)
     assert "Illegal operation on a future value (Socket)" in msg
-    # Guidance order: @node.graph first, then If/While zones
-    assert "• Wrap logic in a nested @node.graph." in msg
+    # Guidance order: @task.graph first, then If/While zones
+    assert "• Wrap logic in a nested @task.graph." in msg
 
 
 @pytest.mark.parametrize(
@@ -124,7 +124,7 @@ def test_numpy_interop_forbidden(future_socket):
 
 
 def test_check_identifier():
-    n = Node()
+    n = Task()
     identifier = "node_graph.inta"
     with pytest.raises(
         ValueError,
@@ -134,8 +134,8 @@ def test_check_identifier():
 
 
 def test_metadata():
-    ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(Node, "test")
+    ng = Graph(name="test_base_socket_type")
+    n = ng.add_task(Task, "test")
     socket = n.add_input(
         "node_graph.any",
         "test",
@@ -174,8 +174,8 @@ def test_base_socket_type(id, data):
     """Test base type socket.
     Should be able to set the correct value to socket's property."""
 
-    ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(test_add, "test")
+    ng = Graph(name="test_base_socket_type")
+    n = ng.add_task(test_add, "test")
     socket = n.add_input(id, "test")
     socket.property.value = data
     assert socket.property.value == data
@@ -202,8 +202,8 @@ def test_base_socket_type_validation(id, data):
     Should raise a error when the input data is not
     the same type as the socket."""
 
-    ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(test_add, "test")
+    ng = Graph(name="test_base_socket_type")
+    n = ng.add_task(test_add, "test")
     socket = n.add_input(id, "test")
     try:
         socket.property.value = data
@@ -214,8 +214,8 @@ def test_base_socket_type_validation(id, data):
 
 
 def test_general_property():
-    ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(Node, "test")
+    ng = Graph(name="test_base_socket_type")
+    n = ng.add_task(Task, "test")
     socket = n.add_input("node_graph.any", "test")
     socket.property.value = np.ones((3, 3))
     assert np.isclose(socket.property.value, np.ones((3, 3))).all()
@@ -227,59 +227,59 @@ def test_general_property():
 def test_socket_match(ng):
     """Test simple math."""
 
-    ng = NodeGraph(name="test_socket_match")
-    str1 = ng.add_node(test_string, "str1", value="abc")
-    math1 = ng.add_node(test_add, "math")
+    ng = Graph(name="test_socket_match")
+    str1 = ng.add_task(test_string, "str1", value="abc")
+    math1 = ng.add_task(test_add, "math")
     with pytest.raises(TypeError, match="Socket type mismatch"):
         ng.add_link(str1.outputs[0], math1.inputs[1])
     assert len(ng.links) == 0
 
 
 def test_links(ng):
-    assert len(ng.nodes.add1.inputs._all_links) == 1
+    assert len(ng.tasks.add1.inputs._all_links) == 1
 
 
 def test_repr():
     """Test __repr__ method."""
-    node = Node()
-    node.add_input("node_graph.int", "x")
+    task = Task()
+    task.add_input("node_graph.int", "x")
     assert (
-        repr(node.inputs)
-        == "NodeSocketNamespace(name='inputs', sockets=['_wait', 'x'])"
+        repr(task.inputs)
+        == "TaskSocketNamespace(name='inputs', sockets=['_wait', 'x'])"
     )
     assert (
-        repr(node.outputs)
-        == "NodeSocketNamespace(name='outputs', sockets=['_outputs', '_wait'])"
+        repr(task.outputs)
+        == "TaskSocketNamespace(name='outputs', sockets=['_outputs', '_wait'])"
     )
 
 
 def test_check_name():
     """Test namespace socket."""
-    node = Node()
-    node.add_input("node_graph.int", "x")
+    task = Task()
+    task.add_input("node_graph.int", "x")
     key = "x"
     with pytest.raises(
         ValueError,
         match=f"Name '{key}' already exists in the namespace.",
     ):
-        node.add_input("node_graph.int", key)
+        task.add_input("node_graph.int", key)
     key = "_value"
     with pytest.raises(
         ValueError,
         match=f"Name '{key}' is reserved by the namespace.",
     ):
-        node.add_input("node_graph.int", key)
+        task.add_input("node_graph.int", key)
     key = "x 1"
     with pytest.raises(
         ValueError,
         match="spaces are not allowed",
     ):
-        node.add_input("node_graph.int", key)
+        task.add_input("node_graph.int", key)
 
 
-def test_namespace(node_with_namespace_socket):
+def test_namespace(task_with_namespace_socket):
     """Test namespace socket."""
-    n = node_with_namespace_socket
+    n = task_with_namespace_socket
 
     with pytest.raises(
         ValueError,
@@ -315,7 +315,7 @@ def test_namespace(node_with_namespace_socket):
 
 def test_add_namespace_with_socket():
     """Test namespace socket."""
-    n = Node()
+    n = Task()
     sockets = {
         "x": {"identifier": "node_graph.int"},
         "y": {"identifier": "node_graph.namespace"},
@@ -325,9 +325,9 @@ def test_add_namespace_with_socket():
     n.inputs.abc.y._identifier = "node_graph.namespace"
 
 
-def test_dynamic_namespace(node_with_namespace_socket):
+def test_dynamic_namespace(task_with_namespace_socket):
     """Test dynamic namespace socket."""
-    n = node_with_namespace_socket
+    n = task_with_namespace_socket
     with pytest.raises(
         ValueError,
         match="Namespace not_exit does not exist in the socket collection.",
@@ -339,8 +339,8 @@ def test_dynamic_namespace(node_with_namespace_socket):
     assert "sub" in n.inputs.dynamic.not_exit
 
 
-def test_dynamic_namespace_set_value(node_with_namespace_socket):
-    n = node_with_namespace_socket
+def test_dynamic_namespace_set_value(task_with_namespace_socket):
+    n = task_with_namespace_socket
     # dynamic outputs
     n.outputs._set_socket_value(
         {
@@ -367,15 +367,15 @@ def test_dynamic_namespace_without_explicit_item_creates_nested():
             "item": None,
         },
     }
-    ns = NodeSocketNamespace("inputs", metadata=metadata)
+    ns = TaskSocketNamespace("inputs", metadata=metadata)
     ns._set_socket_value({"payload": {"inner": 1}})
-    assert isinstance(ns.payload, NodeSocketNamespace)
+    assert isinstance(ns.payload, TaskSocketNamespace)
     assert ns.payload.inner.value == 1
 
 
-def test_set_namespace(node_with_namespace_socket):
+def test_set_namespace(task_with_namespace_socket):
     """Test set namespace."""
-    n = node_with_namespace_socket
+    n = task_with_namespace_socket
     data = {
         "x": 2.0,
         "non_dynamic": {"sub": {"y": 5.0, "z": 6.0}},
@@ -394,8 +394,8 @@ def test_set_namespace(node_with_namespace_socket):
     assert n.inputs._value == data
 
 
-def test_set_namespace_with_nested_key(node_with_namespace_socket):
-    n = node_with_namespace_socket
+def test_set_namespace_with_nested_key(task_with_namespace_socket):
+    n = task_with_namespace_socket
     # use nested key with "."
     data = {
         "x": 2.0,
@@ -409,7 +409,7 @@ def test_set_namespace_with_nested_key(node_with_namespace_socket):
     assert n.inputs.dynamic.sub.y.value == 5
     with pytest.raises(
         AttributeError,
-        match="NodeSocketNamespace: 'node_graph.node.inputs.non_dynamic.sub' "
+        match="TaskSocketNamespace: 'node_graph.task.inputs.non_dynamic.sub' "
         "has no sub-socket 'non_exist'.",
     ):
         # non_dynamic is not dynamic socket, so it will not create the sub socket
@@ -451,19 +451,19 @@ def test_operation(op, name, ref_result, decorated_myadd):
     print("socket2:", socket2)
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
-    assert name in result._node.name
-    result._node.set_inputs({"x": 4, "y": 2})
-    result = result._node.execute()
+    assert name in result._task.name
+    result._task.set_inputs({"x": 4, "y": 2})
+    result = result._task.execute()
     assert result == ref_result
     # test with non-socket value
     result = op(socket1, 2)
-    result._node.inputs.x.value = 4
-    result = result._node.execute()
+    result._task.inputs.x.value = 4
+    result = result._task.execute()
     assert result == ref_result
     # test reverse operation
     result = op(4, socket2)
-    result._node.inputs.y.value = 2
-    result = result._node.execute()
+    result._task.inputs.y.value = 2
+    result = result._task.execute()
     assert result == ref_result
 
 
@@ -484,26 +484,26 @@ def test_operation_comparision(op, name, ref_result, decorated_myadd):
     socket2 = decorated_myadd(1, 1)
     result = op(socket1, socket2)
     assert isinstance(result, BaseSocket)
-    assert name in result._node.name
-    result._node.set_inputs({"x": 4, "y": 2})
-    result = result._node.execute()
+    assert name in result._task.name
+    result._task.set_inputs({"x": 4, "y": 2})
+    result = result._task.execute()
     assert result == ref_result
     # test with non-socket value
     result = op(socket1, 2)
-    result._node.inputs.x.value = 4
-    result = result._node.execute()
+    result._task.inputs.x.value = 4
+    result = result._task.execute()
     assert result == ref_result
     # test reverse operation
     # note in the comparision operation, there is not reverse operation
     # so the inputs.x will be always the socket
     result = op(4, socket2)
-    result._node.inputs.x.value = 2
-    result = result._node.execute()
+    result._task.inputs.x.value = 2
+    result = result._task.execute()
     assert result == ref_result
 
 
 def test_unpacking():
-    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    s = TaskSocketNamespace("test", metadata={"dynamic": True})
     s._value = {"a": 1, "b": 2}
     a, b = s
     assert a.value == 1
@@ -511,20 +511,20 @@ def test_unpacking():
 
 
 def test_set_socket_value():
-    s = NodeSocketNamespace("test", metadata={"dynamic": True})
+    s = TaskSocketNamespace("test", metadata={"dynamic": True})
     value = {"a": 1, "b": 2}
     s._set_socket_value(value)
     assert s._value == value
 
 
 def test_set_namespace_attr():
-    ng = NodeGraph()
-    n = Node(graph=ng)
-    s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    ng = Graph()
+    n = Task(graph=ng)
+    s = TaskSocketNamespace("a", task=n, graph=ng, metadata={"dynamic": True})
     # auto create a sub-socket "x"
     s.x = 1
     assert s.x.value == 1
-    s1 = NodeSocket("b", node=n, graph=ng)
+    s1 = TaskSocket("b", task=n, graph=ng)
     s.x = s1
     assert len(s.x._links) == 1
     s.y = s1
@@ -533,16 +533,16 @@ def test_set_namespace_attr():
 
 
 def test_set_namespace_item():
-    ng = NodeGraph()
-    n = Node(graph=ng)
-    s = NodeSocketNamespace("a", node=n, graph=ng, metadata={"dynamic": True})
+    ng = Graph()
+    n = Task(graph=ng)
+    s = TaskSocketNamespace("a", task=n, graph=ng, metadata={"dynamic": True})
 
     # auto create a sub-socket "x"
     s["x"] = 1
     assert s.x.value == 1
     assert s["x"].value == 1
 
-    s1 = NodeSocket("b", node=n, graph=ng)
+    s1 = TaskSocket("b", task=n, graph=ng)
 
     s["x"] = s1
     assert len(s.x._links) == 1
@@ -557,17 +557,17 @@ def test_set_namespace_item():
 
 
 def test_add_input_spec_with_dotted_name_materializes_runtime_namespace():
-    node = Node()
-    node.add_input_spec("node_graph.namespace", "metrics")
-    node.add_input_spec("node_graph.int", "metrics.score")
+    task = Task()
+    task.add_input_spec("node_graph.namespace", "metrics")
+    task.add_input_spec("node_graph.int", "metrics.score")
 
-    assert "metrics" in node.inputs._sockets
-    metrics_ns = node.inputs.metrics
-    assert isinstance(metrics_ns, NodeSocketNamespace)
+    assert "metrics" in task.inputs._sockets
+    metrics_ns = task.inputs.metrics
+    assert isinstance(metrics_ns, TaskSocketNamespace)
     assert "score" in metrics_ns._sockets
     assert metrics_ns.score._identifier == "node_graph.int"
 
-    metrics_spec = node.spec.inputs.fields["metrics"]
+    metrics_spec = task.spec.inputs.fields["metrics"]
     assert "score" in metrics_spec.fields
     assert metrics_spec.fields["score"].identifier == "node_graph.int"
 
@@ -575,66 +575,66 @@ def test_add_input_spec_with_dotted_name_materializes_runtime_namespace():
 def test_socket_waiting_on():
     """Test socket waiting_on."""
 
-    ng = NodeGraph(name="test_socket_waiting_on")
-    n1 = ng.add_node(test_add)
-    n2 = ng.add_node(test_add)
-    n3 = ng.add_node(test_add)
-    n4 = ng.add_node(test_add)
-    n5 = ng.add_node(test_add)
+    ng = Graph(name="test_socket_waiting_on")
+    n1 = ng.add_task(test_add)
+    n2 = ng.add_task(test_add)
+    n3 = ng.add_task(test_add)
+    n4 = ng.add_task(test_add)
+    n5 = ng.add_task(test_add)
     # left shift
     # wait for socket
     n1.outputs.result >> n5.inputs.x
-    # wait for node
+    # wait for task
     n2.outputs.result >> n5
     # rshift
     n5 << n3.outputs.result
     n5 << n4
     assert len(n5.inputs._wait._links) == 4
     # chaining dependency
-    n6 = ng.add_node(test_add)
-    n7 = ng.add_node(test_add)
-    n8 = ng.add_node(test_add)
+    n6 = ng.add_task(test_add)
+    n7 = ng.add_task(test_add)
+    n8 = ng.add_task(test_add)
     n6 >> n7 >> n8
-    assert n8.inputs._wait._links[0].from_node.name == n7.name
-    assert n7.inputs._wait._links[0].from_node.name == n6.name
+    assert n8.inputs._wait._links[0].from_task.name == n7.name
+    assert n7.inputs._wait._links[0].from_task.name == n6.name
     # chaining dependency
-    n9 = ng.add_node(test_add)
-    n10 = ng.add_node(test_add)
-    n11 = ng.add_node(test_add)
+    n9 = ng.add_task(test_add)
+    n10 = ng.add_task(test_add)
+    n11 = ng.add_task(test_add)
     n11 << n10 << n9
-    assert n11.inputs._wait._links[0].from_node.name == n10.name
-    assert n10.inputs._wait._links[0].from_node.name == n9.name
+    assert n11.inputs._wait._links[0].from_task.name == n10.name
+    assert n10.inputs._wait._links[0].from_task.name == n9.name
 
 
 def test_socket_group_waiting_on():
     """Test socket group waiting_on."""
 
-    ng = NodeGraph(name="test_socket_group_waiting_on")
-    n1 = ng.add_node(test_add)
-    n2 = ng.add_node(test_add)
-    n3 = ng.add_node(test_add)
+    ng = Graph(name="test_socket_group_waiting_on")
+    n1 = ng.add_task(test_add)
+    n2 = ng.add_task(test_add)
+    n3 = ng.add_task(test_add)
 
     # Test sockets 2 and 3 wait on socket 1
     n1.outputs.result >> group(n2.outputs.result, n3.outputs.result)
     assert len(n2.inputs._wait._links) == 1
-    assert n2.inputs._wait._links[0].from_node.name == n1.name
+    assert n2.inputs._wait._links[0].from_task.name == n1.name
     assert len(n3.inputs._wait._links) == 1
-    assert n3.inputs._wait._links[0].from_node.name == n1.name
+    assert n3.inputs._wait._links[0].from_task.name == n1.name
 
     # Test socket 3 waits on sockets 1 and 2
     n3.outputs.result << group(n1.inputs._wait, n2.inputs._wait)
     assert len(n3.inputs._wait._links) == 2
-    assert n3.inputs._wait._links[0].from_node.name == n1.name
-    assert n3.inputs._wait._links[1].from_node.name == n2.name
+    assert n3.inputs._wait._links[0].from_task.name == n1.name
+    assert n3.inputs._wait._links[1].from_task.name == n2.name
 
 
 def test_tagged_value():
     """Test tagged value in socket."""
     from node_graph.utils import tag_socket_value
 
-    ng = NodeGraph(name="test_base_socket_type")
-    n = ng.add_node(Node, "test")
-    s = NodeSocketNamespace("inputs", node=n, graph=ng, metadata={"dynamic": True})
+    ng = Graph(name="test_base_socket_type")
+    n = ng.add_task(Task, "test")
+    s = TaskSocketNamespace("inputs", task=n, graph=ng, metadata={"dynamic": True})
     # single value
     a = 1
     # nested socket
@@ -653,8 +653,8 @@ def test_tagged_value():
     for link in ng.links:
         print(link.name)
     # assign the value to another socket
-    n1 = ng.add_node(Node, "test1")
-    s1 = NodeSocketNamespace("inputs", node=n1, graph=ng, metadata={"dynamic": True})
+    n1 = ng.add_task(Task, "test1")
+    s1 = TaskSocketNamespace("inputs", task=n1, graph=ng, metadata={"dynamic": True})
     s1._set_socket_value(s._collect_values(raw=False))
     # this will add link between the two sockets, instead of copying the value
     assert len(ng.links) == 4

@@ -1,36 +1,36 @@
 import pytest
-from node_graph.collection import NodeCollection, Collection
-from node_graph.node import Node
-from node_graph import NodeGraph
+from node_graph.collection import TaskCollection, Collection
+from node_graph.task import Task
+from node_graph import Graph
 
 
 def test_base_collection():
     """Test base collection."""
-    ng = NodeGraph(name="test_base_collection")
-    coll = NodeCollection(graph=ng)
+    ng = Graph(name="test_base_collection")
+    coll = TaskCollection(graph=ng)
     coll.path = "builtins"
-    node1 = Node(name="node1")
-    node2 = Node(name="node2")
+    task1 = Task(name="task1")
+    task2 = Task(name="task2")
     # apend
-    coll._append(node1)
-    coll._append(node2)
+    coll._append(task1)
+    coll._append(task2)
     assert len(coll) == 2
-    assert node1.graph == ng
+    assert task1.graph == ng
     # copy
-    ng1 = NodeGraph(name="test_base_collection")
+    ng1 = Graph(name="test_base_collection")
     coll1 = coll._copy(graph=ng1)
     assert len(coll1) == 2
     # delete
-    coll._pop(node1.name)
+    coll._pop(task1.name)
     assert len(coll) == 1
     # get
-    assert coll["node2"] == node2
+    assert coll["task2"] == task2
     # get by uuid
-    assert coll._get_by_uuid(node2.uuid) == node2
+    assert coll._get_by_uuid(task2.uuid) == task2
     # __repr__
     assert (
         repr(coll)
-        == """NodeCollection(parent = "test_base_collection", nodes = ["node2"])"""
+        == """TaskCollection(parent = "test_base_collection", tasks = ["task2"])"""
     )
 
 

@@ -1,37 +1,37 @@
-from node_graph.node import Node
-from node_graph.node_spec import NodeSpec
+from node_graph.task import Task
+from node_graph.task_spec import TaskSpec
 from node_graph.socket_spec import namespace
 from node_graph.executor import RuntimeExecutor
 from node_graph.executors.tests import test_enum
-from node_graph import node
+from node_graph import task
 from math import pow
 
 
-@node()
+@task()
 def test_float(value: float, t=1) -> float:
     return float(value)
 
 
-@node()
+@task()
 def test_string(value: str, t=1) -> str:
     return str(value)
 
 
-@node()
+@task()
 def test_add(x: float, y: float, t=1) -> float:
     return x + y
 
 
-@node()
+@task()
 def test_sqrt(x: float, t=1) -> float:
     import math
 
     return math.sqrt(x)
 
 
-class TestEnum(Node):
+class TestEnum(Task):
 
-    _default_spec = NodeSpec(
+    _default_spec = TaskSpec(
         identifier="node_graph.test_enum",
         catalog="Test",
         inputs=namespace(),
@@ -39,7 +39,7 @@ class TestEnum(Node):
             result=object,
         ),
         executor=RuntimeExecutor.from_callable(test_enum),
-        base_class_path="node_graph.nodes.tests.TestEnum",
+        base_class_path="node_graph.tasks.tests.TestEnum",
     )
 
     def create_properties(self):
@@ -55,9 +55,9 @@ class TestEnum(Node):
         )
 
 
-class TestEnumUpdate(Node):
+class TestEnumUpdate(Task):
 
-    _default_spec = NodeSpec(
+    _default_spec = TaskSpec(
         identifier="node_graph.test_enum_update",
         catalog="Test",
         inputs=namespace(),
@@ -65,7 +65,7 @@ class TestEnumUpdate(Node):
             result=object,
         ),
         executor=RuntimeExecutor.from_callable(pow),
-        base_class_path="node_graph.nodes.tests.TestEnumUpdate",
+        base_class_path="node_graph.tasks.tests.TestEnumUpdate",
     )
 
     def create_properties(self):
