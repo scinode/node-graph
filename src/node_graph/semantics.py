@@ -2,13 +2,83 @@ from __future__ import annotations
 
 """Semantics helpers shared between graph authoring and engine execution."""
 
-from dataclasses import dataclass, field, asdict, is_dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+import re
+from dataclasses import asdict, dataclass, field, is_dataclass
+from enum import Enum
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Union
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from node_graph.socket import BaseSocket, TaggedValue
 from node_graph.socket_spec import SocketSpec
 
 SEMANTICS_BUFFER_ATTR = "semantics_buffer"
+DEFAULT_NAMESPACE_REGISTRY: Dict[str, str] = {
+    "qudt": "http://qudt.org/schema/qudt/",
+    "qudt-unit": "http://qudt.org/vocab/unit/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "schema": "https://schema.org/",
+}
+_NAMESPACE_REGISTRY: Dict[str, str] = dict(DEFAULT_NAMESPACE_REGISTRY)
+
+# Matches "prefix:something" while avoiding URL-like strings containing "://"
+_PREFIX_RE = re.compile(r"^(?P<prefix>[A-Za-z][\w\-]*):[^/]")
+
+
+def register_namespace(prefix: str, iri: str) -> None:
+    """
+    Register a namespace prefix globally for semantics parsing.
+
+    Any semantics payload that mentions ``<prefix>:...`` will have the
+    corresponding ``@context`` entry auto-added unless it is already set on
+    that annotation.
+    """
+
+    _NAMESPACE_REGISTRY[str(prefix)] = str(iri)
+
+
+def namespace_registry() -> Dict[str, str]:
+    """Return a copy of the global namespace registry."""
+
+    return dict(_NAMESPACE_REGISTRY)
+
+
+class OntologyEnum(str, Enum):
+    """String-valued enum that preserves the ontology CURIE."""
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.value
+
+
+def _stringify(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+class SemanticTag(BaseModel):
+    """
+    Typed semantics payload for authoring convenience.
+
+    This is a thin Pydantic wrapper over the SemanticsAnnotation fields; it
+    exists solely to offer IDE autocomplete/validation before the values are
+    normalised into a SemanticsAnnotation.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    label: Optional[str] = None
+    iri: Optional[Union[str, OntologyEnum]] = None
+    rdf_types: Tuple[Union[str, OntologyEnum], ...] = ()
+    context: Dict[str, str] = Field(default_factory=dict)
+    attributes: Dict[str, Any] = Field(default_factory=dict)
+    relations: Dict[str, Any] = Field(default_factory=dict)
+
+    def to_semantics_dict(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+    def to_annotation(self) -> "SemanticsAnnotation":
+        return SemanticsAnnotation.from_raw(self)
 
 
 def _json_ready(value: Any) -> Any:
@@ -16,6 +86,10 @@ def _json_ready(value: Any) -> Any:
 
     if is_dataclass(value):
         return _json_ready(asdict(value))
+    if isinstance(value, BaseModel):
+        return _json_ready(value.model_dump(exclude_none=True))
+    if isinstance(value, Enum):
+        return _json_ready(value.value)
     if isinstance(value, Mapping):
         return {k: _json_ready(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -33,6 +107,47 @@ def serialize_semantics_buffer(buffer: Any) -> Any:
     return _json_ready(buffer)
 
 
+def _detect_prefixes(value: Any) -> Set[str]:
+    """Return namespace prefixes found in strings within ``value``."""
+
+    prefixes: Set[str] = set()
+    if isinstance(value, BaseModel):
+        prefixes.update(_detect_prefixes(value.model_dump(exclude_none=True)))
+        return prefixes
+    if isinstance(value, Enum):
+        prefixes.update(_detect_prefixes(value.value))
+        return prefixes
+    if isinstance(value, str):
+        match = _PREFIX_RE.match(value)
+        if match and "://" not in value.split(":")[0]:
+            prefixes.add(match.group("prefix"))
+        return prefixes
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            prefixes.update(_detect_prefixes(key))
+            prefixes.update(_detect_prefixes(nested))
+        return prefixes
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            prefixes.update(_detect_prefixes(item))
+    return prefixes
+
+
+def _inject_namespaces(context: Mapping[str, str], *values: Any) -> Dict[str, str]:
+    """Merge default namespaces when values reference known prefixes."""
+
+    merged: Dict[str, str] = dict(context or {})
+    prefixes: Set[str] = set()
+    for value in values:
+        prefixes.update(_detect_prefixes(value))
+    for prefix in sorted(prefixes):
+        if prefix in merged:
+            continue
+        if prefix in _NAMESPACE_REGISTRY:
+            merged[prefix] = _NAMESPACE_REGISTRY[prefix]
+    return merged
+
+
 @dataclass(frozen=True)
 class SemanticsAnnotation:
     """Normalized ontology annotation extracted from socket metadata."""
@@ -44,19 +159,39 @@ class SemanticsAnnotation:
     attributes: Dict[str, Any] = field(default_factory=dict)
     relations: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        context = _inject_namespaces(
+            self.context, self.iri, self.rdf_types, self.attributes, self.relations
+        )
+        object.__setattr__(self, "context", context)
+
     @classmethod
     def from_raw(
         cls, raw: Optional[Mapping[str, Any]]
     ) -> Optional["SemanticsAnnotation"]:
         if not raw:
             return None
+        payload: Mapping[str, Any] = raw
+        if hasattr(raw, "to_semantics_dict"):
+            try:
+                payload = raw.to_semantics_dict()
+            except Exception:
+                payload = getattr(raw, "to_semantics_dict")()
+        elif isinstance(raw, BaseModel):
+            payload = raw.model_dump(exclude_none=True)
+        elif hasattr(raw, "to_semantics"):
+            payload = raw.to_semantics()
+        elif hasattr(raw, "dict") and not isinstance(raw, Mapping):
+            payload = raw.dict()  # type: ignore[assignment]
+        elif is_dataclass(raw):
+            payload = asdict(raw)  # type: ignore[assignment]
         return cls(
-            label=raw.get("label"),
-            iri=raw.get("iri"),
-            rdf_types=tuple(raw.get("rdf_types", []) or ()),
-            context=dict(raw.get("context", {}) or {}),
-            attributes=dict(raw.get("attributes", {}) or {}),
-            relations=dict(raw.get("relations", {}) or {}),
+            label=payload.get("label"),
+            iri=_stringify(payload.get("iri")),
+            rdf_types=tuple(_stringify(v) for v in payload.get("rdf_types", []) or ()),
+            context=dict(payload.get("context", {}) or {}),
+            attributes=dict(payload.get("attributes", {}) or {}),
+            relations=dict(payload.get("relations", {}) or {}),
         )
 
     @staticmethod
@@ -431,6 +566,10 @@ def _capture_semantics_value(value: Any) -> Any:
     ref = _socket_ref_from_value(value)
     if ref is not None:
         return ref
+    if isinstance(value, BaseModel):
+        return value.model_dump(exclude_none=True)
+    if isinstance(value, Enum):
+        return value.value
     if isinstance(value, dict):
         return {k: _capture_semantics_value(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -439,31 +578,42 @@ def _capture_semantics_value(value: Any) -> Any:
     return value
 
 
+def _iterify(value: Any) -> Tuple[Any, ...]:
+    """Coerce ``value`` into a tuple for relation objects."""
+
+    if value is None:
+        return ()
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    if isinstance(value, set):
+        return tuple(value)
+    return (value,)
+
+
 def attach_semantics(
-    subject_or_relation: Any,
-    *values: Any,
+    subject: Any,
+    objects: Any = None,
     semantics: Mapping[str, Any] | SemanticsAnnotation | None = None,
+    predicate: Optional[str] = None,
     socket_label: Optional[str] = None,
     label: Optional[str] = None,
     context: Optional[Mapping[str, Any]] = None,
 ) -> None:
-    """Record runtime semantics attachments or relations.
+    """
+    Record runtime semantics attachments or relations (subject-first API).
 
-    When sockets from a ``NodeGraph`` are supplied, pending semantics are
-    stored on the in-memory graph for later resolution by the engine.
+    - Relations: ``attach_semantics(subject, objects, predicate="emmo:hasProperty", ...)``
+    - Annotations: ``attach_semantics(subject, semantics={"label": ...}, socket_label=...)``
     """
 
-    if isinstance(subject_or_relation, str) and semantics is None:
-        relation = subject_or_relation
-        if not values:
-            return
-        subject = values[0]
+    if predicate is not None:
         if subject is None:
             return
-        relation_values: Tuple[Any, ...] = values[1:]
+        relation_values: Tuple[Any, ...] = _iterify(objects)
         if not relation_values:
             return
-
         socket_ref = _socket_ref_from_value(subject)
         if socket_ref is not None:
             graph = _graph_from_socket_value(subject)
@@ -471,7 +621,7 @@ def attach_semantics(
                 buffer = _ensure_semantics_buffer(graph)
                 buffer["relations"].append(
                     SemanticsRelation(
-                        predicate=relation,
+                        predicate=predicate,
                         subject=socket_ref,
                         values=tuple(
                             _capture_semantics_value(val) for val in relation_values
@@ -481,11 +631,8 @@ def attach_semantics(
                         socket_label=socket_label,
                     )
                 )
-                return
-
         return
 
-    subject = subject_or_relation
     if subject is None or semantics is None:
         return
 
@@ -502,3 +649,19 @@ def attach_semantics(
                 )
             )
             return
+
+
+__all__ = [
+    "SemanticTag",
+    "OntologyEnum",
+    "register_namespace",
+    "namespace_registry",
+    "SemanticsAnnotation",
+    "SemanticsTree",
+    "NodeSemantics",
+    "SemanticsPayload",
+    "SemanticsRelation",
+    "serialize_semantics_buffer",
+    "attach_semantics",
+    "SEMANTICS_BUFFER_ATTR",
+]

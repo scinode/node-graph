@@ -30,6 +30,22 @@ how NodeGraph stores semantics, and provides runnable examples.
 # - Traceability: annotations document how to interpret each socket.
 
 # %%
+# Context and namespaces
+# ----------------------
+# Semantics payloads carry an ``@context`` map so CURIE-style identifiers such
+# as ``qudt:Energy`` resolve to full IRIs. NodeGraph comes with a small default
+# registry (``qudt``, ``qudt-unit``, ``prov``, ``schema``). When it sees those
+# prefixes in ``iri`` / ``rdf_types`` / keys, it automatically injects their
+# URLs into ``@context`` unless you provided a value already.
+#
+# - To extend the registry globally, call ``register_namespace("mat",
+#   "https://example.org/mat#")`` once at import time.
+# - To add a custom prefix for a single annotation, include it directly in the
+#   ``context`` dictionary of ``SemanticTag`` or the raw semantics payload.
+# - Explicit values always win over the defaults, so you can override or
+#   refine the URL per annotation if needed.
+
+# %%
 # How NodeGraph stores semantics
 # ------------------------------
 # 1. **Authoring**: sockets declare ``meta(semantics={...})`` (label, iri,
@@ -76,6 +92,36 @@ def AnnotateSemantics(energy: float) -> Annotated[float, energy_semantics_meta]:
 
 
 # %%
+# Typed semantics with Pydantic
+# -----------------------------
+# To reduce stringly-typed mistakes, you can supply a ``SemanticTag`` (Pydantic
+# model) instead of a raw dictionary. Define your own enums to avoid typos;
+# missing namespace prefixes are auto-injected when they match the registry.
+
+from enum import Enum
+from node_graph.semantics import SemanticTag
+
+
+class EnergyTerms(str, Enum):
+    PotentialEnergy = "qudt:PotentialEnergy"
+    QuantityValue = "qudt:QuantityValue"
+    ElectronVolt = "qudt-unit:EV"
+
+
+EnergyEV = SemanticTag(
+    label="Cohesive energy",
+    iri=EnergyTerms.PotentialEnergy,
+    rdf_types=(EnergyTerms.QuantityValue,),
+    attributes={"qudt:unit": EnergyTerms.ElectronVolt},
+)
+
+
+@node()
+def TypedSemantics(energy: float) -> Annotated[float, meta(semantics=EnergyEV)]:
+    return energy
+
+
+# %%
 # Cross-socket relation example
 # -----------------------------
 # One can also declare relations between sockets using dotted paths to refer to sibling inputs/outputs.
@@ -114,7 +160,9 @@ def workflow(structure: Annotated[Any, structure_meta]):
 # %%
 # Attaching semantics at runtime
 # ------------------------------
-# For relations between sockets of different nodes, use ``attach_semantics``.
+# For relations between sockets of different nodes, use ``attach_semantics`` with
+# a predicate (subject-first). The same helper attaches label/iri/attributes
+# when you pass ``semantics=...``.
 
 from node_graph.semantics import attach_semantics
 
@@ -137,12 +185,12 @@ def workflow_with_runtime_semantics(
     bands = compute_band_structure(structure=mutated).result
     dos = compute_density_of_states(structure=mutated).result
     attach_semantics(
-        "mat:hasProperty",
         mutated,
-        bands,
-        dos,
+        objects=[bands, dos],
+        predicate="emmo:hasProperty",
+        semantics={"label": "Generated structure", "iri": "emmo:Material"},
         label="Generated structure",
-        context={"mat": "https://example.org/mat#"},
+        context={"emmo": "https://emmo.info/emmo#"},
         socket_label="result",
     )
     return {"output_structure": mutated, "bands": bands, "dos": dos}
@@ -157,3 +205,7 @@ def workflow_with_runtime_semantics(
 #   the engine resolves them to node references.
 # - ``attach_semantics`` appends relations during execution; it records intent on
 #   the graph and resolves once data nodes exist.
+# - Built-in namespace registry auto-fills ``@context`` when it sees known
+#   prefixes (e.g., ``qudt:``); extend it via ``register_namespace(prefix, iri)``.
+#   For example, ``register_namespace("mat", "https://example.org/mat#")`` lets
+#   you use ``mat:hasProperty`` without repeating the URL in every annotation.
