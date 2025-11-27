@@ -6,7 +6,7 @@ from .tasks import TaskPool
 from .collection import group
 from .socket_spec import namespace, dynamic
 
-__version__ = "0.4.5"
+__version__ = "0.5.0"
 
 
 __all__ = [
