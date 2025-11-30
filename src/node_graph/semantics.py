@@ -618,19 +618,57 @@ def attach_semantics(
         if socket_ref is not None:
             graph = _graph_from_socket_value(subject)
             if graph is not None:
-                buffer = _ensure_semantics_buffer(graph)
-                buffer["relations"].append(
-                    SemanticsRelation(
-                        predicate=predicate,
-                        subject=socket_ref,
-                        values=tuple(
-                            _capture_semantics_value(val) for val in relation_values
-                        ),
-                        label=label,
-                        context=context,
-                        socket_label=socket_label,
-                    )
+                captured_values = tuple(
+                    _capture_semantics_value(val) for val in relation_values
                 )
+                # If semantics are provided, record a payload with relations + annotation;
+                # otherwise fall back to the legacy relations buffer.
+                if semantics is not None:
+                    if isinstance(semantics, SemanticsAnnotation):
+                        sem_payload: Dict[str, Any] = semantics.to_payload()
+                    elif hasattr(semantics, "to_semantics_dict"):
+                        try:
+                            sem_payload = semantics.to_semantics_dict()
+                        except Exception:
+                            sem_payload = getattr(semantics, "to_semantics_dict")()
+                    elif hasattr(semantics, "model_dump"):
+                        sem_payload = semantics.model_dump(exclude_none=True)
+                    else:
+                        sem_payload = dict(semantics)
+                    relations = dict(sem_payload.get("relations") or {})
+                    relations.setdefault(
+                        predicate,
+                        captured_values
+                        if len(captured_values) > 1
+                        else captured_values[0],
+                    )
+                    sem_payload["relations"] = relations
+                    if label and "label" not in sem_payload:
+                        sem_payload["label"] = label
+                    if context:
+                        merged_ctx = dict(sem_payload.get("context") or {})
+                        merged_ctx.update(context)
+                        sem_payload["context"] = merged_ctx
+                    buffer = _ensure_semantics_buffer(graph)
+                    buffer["payloads"].append(
+                        SemanticsPayload(
+                            subject=socket_ref,
+                            semantics=_capture_semantics_value(sem_payload),
+                            socket_label=socket_label,
+                        )
+                    )
+                else:
+                    buffer = _ensure_semantics_buffer(graph)
+                    buffer["relations"].append(
+                        SemanticsRelation(
+                            predicate=predicate,
+                            subject=socket_ref,
+                            values=captured_values,
+                            label=label,
+                            context=context,
+                            socket_label=socket_label,
+                        )
+                    )
         return
 
     if subject is None or semantics is None:
