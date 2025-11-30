@@ -132,6 +132,36 @@ def test_attach_semantics_records_payloads():
     assert payload.subject.graph_uuid == graph.uuid
 
 
+def test_attach_semantics_with_predicate_and_annotation_payload():
+    graph = simple_graph.build()
+    target = graph.tasks["emit"].outputs.result
+    source = graph.tasks["emit1"].outputs.result
+
+    attach_semantics(
+        target,
+        objects=source,
+        predicate="emmo:hasProperty",
+        semantics={"iri": "emmo:Material"},
+        label="Material annotation",
+        context={"emmo": "https://emmo.info/emmo#"},
+        socket_label="result",
+    )
+
+    buffer = graph.semantics_buffer
+    assert buffer["relations"] == []
+    assert len(buffer["payloads"]) == 1
+    payload = buffer["payloads"][0]
+    assert isinstance(payload, SemanticsPayload)
+    assert payload.socket_label == "result"
+    assert payload.subject == _socket_ref_from_value(target)
+    semantics = payload.semantics
+    assert isinstance(semantics, dict)
+    assert semantics["iri"] == "emmo:Material"
+    assert semantics["label"] == "Material annotation"
+    assert semantics["context"]["emmo"] == "https://emmo.info/emmo#"
+    assert semantics["relations"]["emmo:hasProperty"] == _socket_ref_from_value(source)
+
+
 def test_serialization_roundtrip_preserves_semantics_buffer():
     graph = simple_graph.build()
     subject = graph.tasks["emit"].outputs.result
