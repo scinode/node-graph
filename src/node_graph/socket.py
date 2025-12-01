@@ -671,6 +671,21 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
         elif isinstance(value, TaggedValue) and value._socket is not None:
             self._task.graph.add_link(value._socket, self)
         elif self.property:
+
+            if (
+                self._parent._name == "inputs"
+                and self._links
+                and f"{self._task.name}.{self._name}"
+                not in [
+                    f"{link.from_task.name}.{link.from_socket._scoped_name}"
+                    for link in self._links
+                ]
+            ):
+                raise ValueError(
+                    f"Input {self._task.name}.{self._name} has already been set via a "
+                    f"link. Please update the linked value in {self._links}"
+                )
+
             self.property.value = value
         else:
             raise AttributeError(
