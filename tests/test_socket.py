@@ -512,6 +512,56 @@ def test_operation_comparison(op, name, ref_result, decorated_myadd):
     assert result["result_3"] == ref_result
 
 
+def test_invalid_input(decorated_myadd):
+    """Test socket operation."""
+    from typing import Any, Annotated
+
+    from node_graph import task, namespace
+    from node_graph.engine.local import LocalEngine
+
+    @task.graph()
+    def test_op() -> Annotated[
+        dict, namespace(result_1=Any, result_2=Any, result_3=Any)
+    ]:
+        socket_1 = decorated_myadd(2, 2).result
+        socket_2 = decorated_myadd(1, 1).result
+        result_1 = op.add(socket_1, socket_2)
+        assert isinstance(result_1, BaseSocket)
+        assert "op_add" in result_1._task.name
+
+        # Check neither value can be set directly
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_1._task.set_inputs({"x": 10, "y": 12})
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_1._task.inputs["x"] = 10
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_1._task.inputs["y"] = 10
+
+        # test with non-socket value
+        result_2 = op.add(socket_1, 2)
+
+        # Only y value can be updated
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_2._task.inputs["x"] = 6
+        result_2._task.inputs["y"] = 6
+
+        # test reverse operation
+        # Only x value can be updated
+        result_3 = op.add(4, socket_2)
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_3._task.inputs["y"] = 10
+        result_3._task.inputs["x"] = 10
+
+        return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
+
+    print("decorated_myadd: ", decorated_myadd)
+    engine = LocalEngine()
+    result = engine.run(ng=test_op.build())
+    assert result["result_1"] == 6
+    assert result["result_2"] == 10
+    assert result["result_3"] == 12
+
+
 def test_unpacking():
     s = TaskSocketNamespace("test", metadata={"dynamic": True})
     s._value = {"a": 1, "b": 2}
