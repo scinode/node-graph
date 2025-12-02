@@ -90,7 +90,6 @@ def test_bitwise_and_matmul_forbidden(future_socket, op):
 
 
 def test_function_like_ctxmgr_async_forbidden(future_socket):
-
     # context manager
     with pytest.raises(GraphDeferredIllegalOperationError):
         with future_socket:
@@ -444,27 +443,32 @@ def test_set_namespace_with_nested_key(task_with_namespace_socket):
 )
 def test_operation(op, name, ref_result, decorated_myadd):
     """Test socket operation."""
+    from typing import Any, Annotated
+
+    from node_graph import task, namespace
+    from node_graph.engine.local import LocalEngine
+
+    @task.graph()
+    def test_op() -> Annotated[
+        dict, namespace(result_1=Any, result_2=Any, result_3=Any)
+    ]:
+        socket_1 = decorated_myadd(2, 2).result
+        socket_2 = decorated_myadd(1, 1).result
+        result_1 = op(socket_1, socket_2)
+        assert isinstance(result_1, BaseSocket)
+        assert name in result_1._task.name
+        # test with non-socket value
+        result_2 = op(socket_1, 2)
+        # test reverse operation
+        result_3 = op(4, socket_2)
+        return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
+
     print("decorated_myadd: ", decorated_myadd)
-    socket1 = decorated_myadd(2, 2)
-    socket2 = decorated_myadd(1, 1)
-    print("socket1:", socket1)
-    print("socket2:", socket2)
-    result = op(socket1, socket2)
-    assert isinstance(result, BaseSocket)
-    assert name in result._task.name
-    result._task.set_inputs({"x": 4, "y": 2})
-    result = result._task.execute()
-    assert result == ref_result
-    # test with non-socket value
-    result = op(socket1, 2)
-    result._task.inputs.x.value = 4
-    result = result._task.execute()
-    assert result == ref_result
-    # test reverse operation
-    result = op(4, socket2)
-    result._task.inputs.y.value = 2
-    result = result._task.execute()
-    assert result == ref_result
+    engine = LocalEngine()
+    result = engine.run(ng=test_op.build())
+    assert result["result_1"] == ref_result
+    assert result["result_2"] == ref_result
+    assert result["result_3"] == ref_result
 
 
 @pytest.mark.parametrize(
@@ -478,28 +482,84 @@ def test_operation(op, name, ref_result, decorated_myadd):
         (op.ne, "op_ne", True),
     ),
 )
-def test_operation_comparision(op, name, ref_result, decorated_myadd):
-    """Test socket comparision operation."""
-    socket1 = decorated_myadd(2, 2)
-    socket2 = decorated_myadd(1, 1)
-    result = op(socket1, socket2)
-    assert isinstance(result, BaseSocket)
-    assert name in result._task.name
-    result._task.set_inputs({"x": 4, "y": 2})
-    result = result._task.execute()
-    assert result == ref_result
-    # test with non-socket value
-    result = op(socket1, 2)
-    result._task.inputs.x.value = 4
-    result = result._task.execute()
-    assert result == ref_result
-    # test reverse operation
-    # note in the comparision operation, there is not reverse operation
-    # so the inputs.x will be always the socket
-    result = op(4, socket2)
-    result._task.inputs.x.value = 2
-    result = result._task.execute()
-    assert result == ref_result
+def test_operation_comparison(op, name, ref_result, decorated_myadd):
+    """Test socket comparison operation."""
+    from typing import Any, Annotated
+
+    from node_graph import task, namespace
+    from node_graph.engine.local import LocalEngine
+
+    @task.graph()
+    def test_op() -> Annotated[
+        dict, namespace(result_1=Any, result_2=Any, result_3=Any)
+    ]:
+        socket_1 = decorated_myadd(2, 2).result
+        socket_2 = decorated_myadd(1, 1).result
+        result_1 = op(socket_1, socket_2)
+        assert isinstance(result_1, BaseSocket)
+        assert name in result_1._task.name
+        # test with non-socket value
+        result_2 = op(socket_1, 2)
+        # test reverse operation
+        result_3 = op(4, socket_2)
+        return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
+
+    print("decorated_myadd: ", decorated_myadd)
+    engine = LocalEngine()
+    result = engine.run(ng=test_op.build())
+    assert result["result_1"] == ref_result
+    assert result["result_2"] == ref_result
+    assert result["result_3"] == ref_result
+
+
+def test_invalid_input(decorated_myadd):
+    """Test socket operation."""
+    from typing import Any, Annotated
+
+    from node_graph import task, namespace
+    from node_graph.engine.local import LocalEngine
+
+    @task.graph()
+    def test_op() -> Annotated[
+        dict, namespace(result_1=Any, result_2=Any, result_3=Any)
+    ]:
+        socket_1 = decorated_myadd(2, 2).result
+        socket_2 = decorated_myadd(1, 1).result
+        result_1 = op.add(socket_1, socket_2)
+        assert isinstance(result_1, BaseSocket)
+        assert "op_add" in result_1._task.name
+
+        # Check neither value can be set directly
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_1._task.set_inputs({"x": 10, "y": 12})
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_1._task.inputs["x"] = 10
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_1._task.inputs["y"] = 10
+
+        # test with non-socket value
+        result_2 = op.add(socket_1, 2)
+
+        # Only y value can be updated
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_2._task.inputs["x"] = 6
+        result_2._task.inputs["y"] = 6
+
+        # test reverse operation
+        # Only x value can be updated
+        result_3 = op.add(4, socket_2)
+        with pytest.raises(ValueError, match="Please update the linked value"):
+            result_3._task.inputs["y"] = 10
+        result_3._task.inputs["x"] = 10
+
+        return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
+
+    print("decorated_myadd: ", decorated_myadd)
+    engine = LocalEngine()
+    result = engine.run(ng=test_op.build())
+    assert result["result_1"] == 6
+    assert result["result_2"] == 10
+    assert result["result_3"] == 12
 
 
 def test_unpacking():
