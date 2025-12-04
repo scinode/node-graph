@@ -30,6 +30,7 @@ class FunctionTask(Task):
         output_spec: Optional[SocketSpec | List[str]] = None,
         error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
         metadata: Optional[dict] = None,
+        version: Optional[str] = None,
     ) -> TaskSpec:
         """
         - infers function I/O
@@ -43,7 +44,7 @@ class FunctionTask(Task):
         output_spec = validate_socket_data(output_spec)
         func_in, func_out = infer_specs_from_callable(obj, input_spec, output_spec)
         error_handlers = normalize_error_handlers(error_handlers)
-        metadata = metadata or {}
+        metadata = dict(metadata or {})
         executor = RuntimeExecutor.from_callable(obj)
         # We always use the EMBEDDED schema for the function task, but when storing the spec in the DB,
         # we will check if the callable is a BaseHandler, and switch the schema_source to HANDLER accordingly.
@@ -60,6 +61,7 @@ class FunctionTask(Task):
             error_handlers=error_handlers,
             base_class=cls,
             metadata=metadata,
+            version=version,
         )
         handle = TaskHandle(spec)
         handle._callable = obj

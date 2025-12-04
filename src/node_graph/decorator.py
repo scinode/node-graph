@@ -5,6 +5,7 @@ from .error_handler import ErrorHandlerSpec
 from .task import Task
 from .task_spec import TaskHandle, BaseHandle
 from .socket_spec import SocketSpec
+from .utils.function import inspect_callable_metadata
 
 
 def build_task_from_callable(
@@ -53,6 +54,9 @@ def decorator_task(
     def wrap(func) -> TaskHandle:
         from node_graph.tasks.function_task import FunctionTask
 
+        callable_meta = inspect_callable_metadata(func)
+        metadata = {"callable": callable_meta}
+        version = callable_meta.get("package_version")
         return FunctionTask.build(
             obj=func,
             identifier=identifier or func.__name__,
@@ -60,6 +64,8 @@ def decorator_task(
             input_spec=inputs,
             output_spec=outputs,
             error_handlers=error_handlers,
+            metadata=metadata,
+            version=version,
         )
 
     return wrap
@@ -83,6 +89,9 @@ def decorator_graph(
     def wrap(func) -> TaskHandle:
         from node_graph.tasks.function_task import FunctionTask
 
+        callable_meta = inspect_callable_metadata(func)
+        metadata = {"callable": callable_meta}
+        version = callable_meta.get("package_version")
         return FunctionTask.build(
             obj=func,
             identifier=identifier or func.__name__,
@@ -90,6 +99,8 @@ def decorator_graph(
             catalog=catalog,
             input_spec=inputs,
             output_spec=outputs,
+            metadata=metadata,
+            version=version,
         )
 
     return wrap
