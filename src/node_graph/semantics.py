@@ -560,6 +560,26 @@ def _ensure_semantics_buffer(graph: Any) -> Dict[str, List[Any]]:
     return getattr(graph, SEMANTICS_BUFFER_ATTR)
 
 
+ATTR_REF_KEY = "__ng_attr_ref__"
+
+
+def attribute_ref(
+    socket: Any, key: str, *, source: str = "attributes"
+) -> Dict[str, Any]:
+    """
+    Declare that an attribute should be pulled from a concrete node later.
+
+    ``socket`` can be any socket/TaggedValue pointing at a task output; the
+    engine resolves it to the persisted ``orm.Data`` node and fetches ``key``
+    from either ``node.base.attributes`` (default) or ``node.base.extras``.
+
+    This keeps graph authoring declarative without forcing access to future
+    values during build-time.
+    """
+
+    return {ATTR_REF_KEY: {"socket": socket, "key": key, "source": source}}
+
+
 def _capture_semantics_value(value: Any) -> Any:
     """Replace sockets/TaggedValues with ``_SocketRef`` markers for later resolution."""
 
@@ -612,8 +632,6 @@ def attach_semantics(
         if subject is None:
             return
         relation_values: Tuple[Any, ...] = _iterify(objects)
-        if not relation_values:
-            return
         socket_ref = _socket_ref_from_value(subject)
         if socket_ref is not None:
             graph = _graph_from_socket_value(subject)
@@ -621,6 +639,7 @@ def attach_semantics(
                 captured_values = tuple(
                     _capture_semantics_value(val) for val in relation_values
                 )
+                has_relations = len(captured_values) > 0
                 # If semantics are provided, record a payload with relations + annotation;
                 # otherwise fall back to the legacy relations buffer.
                 if semantics is not None:
@@ -636,12 +655,13 @@ def attach_semantics(
                     else:
                         sem_payload = dict(semantics)
                     relations = dict(sem_payload.get("relations") or {})
-                    relations.setdefault(
-                        predicate,
-                        captured_values
-                        if len(captured_values) > 1
-                        else captured_values[0],
-                    )
+                    if has_relations:
+                        relations.setdefault(
+                            predicate,
+                            captured_values
+                            if len(captured_values) > 1
+                            else captured_values[0],
+                        )
                     sem_payload["relations"] = relations
                     if label and "label" not in sem_payload:
                         sem_payload["label"] = label
@@ -657,7 +677,7 @@ def attach_semantics(
                             socket_label=socket_label,
                         )
                     )
-                else:
+                elif has_relations:
                     buffer = _ensure_semantics_buffer(graph)
                     buffer["relations"].append(
                         SemanticsRelation(
@@ -702,4 +722,6 @@ __all__ = [
     "serialize_semantics_buffer",
     "attach_semantics",
     "SEMANTICS_BUFFER_ATTR",
+    "ATTR_REF_KEY",
+    "attribute_ref",
 ]
