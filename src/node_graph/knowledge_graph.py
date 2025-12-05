@@ -223,30 +223,39 @@ class KnowledgeGraph:
         except RuntimeError:
             return None
 
-    def _repr_html_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
-        svg = self._repr_svg_()
-        if svg is None:
-            return None
-        container_id = f"kg-{self.graph_uuid or uuid4()}"
-        inner_id = f"{container_id}-inner"
-        zoom_in_id = f"{container_id}-zin"
-        zoom_out_id = f"{container_id}-zout"
-        reset_id = f"{container_id}-reset"
-        fullscreen_id = f"{container_id}-fs"
+    def _zoomable_html_fragment(
+        self,
+        *,
+        container_id: str,
+        inner_id: str,
+        svg: str,
+        zoom_in_id: str,
+        zoom_out_id: str,
+        reset_id: str,
+        fullscreen_id: str,
+        container_class: str = "",
+        container_style: str = "",
+        viewport_class: str = "",
+        viewport_style: str = "",
+        controls_class: str = "",
+    ) -> str:
+        """Reusable HTML/JS snippet that wires zoom/fullscreen controls to a graph SVG."""
+        container_class_attr = f' class="{container_class}"' if container_class else ""
+        container_style_attr = f' style="{container_style}"' if container_style else ""
+        viewport_class_attr = f' class="{viewport_class}"' if viewport_class else ""
+        viewport_style_attr = f' style="{viewport_style}"' if viewport_style else ""
+        controls_class_attr = f' class="{controls_class}"' if controls_class else ""
+
         return "\n".join(
             [
-                "<style>",
-                f"  #{container_id}, #{container_id} svg {{ background: #ffffff; }}",
-                f"  #{container_id}:fullscreen {{ background: #ffffff; }}",
-                "</style>",
-                f'<div id="{container_id}" class="node-graph-knowledge-graph" style="overflow:auto; position:relative;">',
-                '  <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;">',
+                f'<div id="{container_id}"{container_class_attr}{container_style_attr}>',
+                f"  <div{controls_class_attr}>",
                 f'    <button id="{zoom_in_id}" title="Zoom in">+</button>',
                 f'    <button id="{zoom_out_id}" title="Zoom out">-</button>',
                 f'    <button id="{reset_id}" title="Reset zoom">reset</button>',
                 f'    <button id="{fullscreen_id}" title="Fullscreen">fullscreen</button>',
                 "  </div>",
-                f'  <div id="{inner_id}" style="transform-origin: top left; display:inline-block;">{svg}</div>',
+                f'  <div id="{inner_id}"{viewport_class_attr}{viewport_style_attr}>{svg}</div>',
                 "</div>",
                 "<script>",
                 "  (function() {",
@@ -287,12 +296,62 @@ class KnowledgeGraph:
             ]
         )
 
+    def _repr_html_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
+        svg = self._repr_svg_()
+        if svg is None:
+            return None
+        container_id = f"kg-{self.graph_uuid or uuid4()}"
+        inner_id = f"{container_id}-inner"
+        zoom_in_id = f"{container_id}-zin"
+        zoom_out_id = f"{container_id}-zout"
+        reset_id = f"{container_id}-reset"
+        fullscreen_id = f"{container_id}-fs"
+        fragment = self._zoomable_html_fragment(
+            container_id=container_id,
+            inner_id=inner_id,
+            svg=svg,
+            zoom_in_id=zoom_in_id,
+            zoom_out_id=zoom_out_id,
+            reset_id=reset_id,
+            fullscreen_id=fullscreen_id,
+            container_class="node-graph-knowledge-graph",
+            container_style="overflow:auto; position:relative;",
+            viewport_style="transform-origin: top left; display:inline-block;",
+            controls_class="node-graph-kg-controls",
+        )
+        return "\n".join(
+            [
+                "<style>",
+                f"  #{container_id}, #{container_id} svg {{ background: #ffffff; }}",
+                f"  #{container_id}:fullscreen {{ background: #ffffff; }}",
+                "</style>",
+                fragment,
+            ]
+        )
+
     def to_html(self, title: Optional[str] = None) -> str:
         """Return an HTML document embedding the rendered knowledge graph with basic zoom/fullscreen controls."""
         svg = self.to_graphviz_svg()
         page_title = title or f"{self.graph_uuid or 'Graph'} knowledge graph"
         container_id = f"kg-{self.graph_uuid or uuid4()}"
         inner_id = f"{container_id}-inner"
+        zoom_in_id = f"{container_id}-zin"
+        zoom_out_id = f"{container_id}-zout"
+        reset_id = f"{container_id}-reset"
+        fullscreen_id = f"{container_id}-fs"
+        fragment = self._zoomable_html_fragment(
+            container_id=container_id,
+            inner_id=inner_id,
+            svg=svg,
+            zoom_in_id=zoom_in_id,
+            zoom_out_id=zoom_out_id,
+            reset_id=reset_id,
+            fullscreen_id=fullscreen_id,
+            container_class="kg-container",
+            container_style="overflow:auto;",
+            viewport_class="kg-viewport",
+            controls_class="kg-controls",
+        )
         return """<!DOCTYPE html>\n""" + "\n".join(
             [
                 '<html lang="en">',
@@ -352,49 +411,7 @@ class KnowledgeGraph:
                 "  <body>",
                 '    <div class="container">',
                 f"      <h1>{page_title}</h1>",
-                '      <div class="kg-controls">',
-                '        <button type="button" onclick="kgZoomIn()">Zoom in</button>',
-                '        <button type="button" onclick="kgZoomOut()">Zoom out</button>',
-                '        <button type="button" onclick="kgReset()">Reset</button>',
-                '        <button type="button" onclick="kgFullscreen()">Fullscreen</button>',
-                "      </div>",
-                f'      <div id="{container_id}" class="kg-container" style="overflow:auto;">',
-                f'        <div id="{inner_id}" class="kg-viewport">{svg}</div>',
-                "      </div>",
-                "      <script>",
-                f"        const container = document.getElementById('{container_id}');",
-                f"        const viewport = document.getElementById('{inner_id}');",
-                "        let kgScale = 1;",
-                "        function setKgScale(value) {",
-                "          kgScale = Math.min(4, Math.max(0.25, value));",
-                "          viewport.style.transform = `scale(${kgScale})`;",
-                "        }",
-                "        function onWheel(ev) {",
-                "          if (!ev.ctrlKey) return;",
-                "          ev.preventDefault();",
-                "          const factor = ev.deltaY < 0 ? 1.1 : 1/1.1;",
-                "          const prev = kgScale;",
-                "          setKgScale(kgScale * factor);",
-                "          const rect = viewport.getBoundingClientRect();",
-                "          const offsetX = ev.clientX - rect.left;",
-                "          const offsetY = ev.clientY - rect.top;",
-                "          const ratio = kgScale / prev;",
-                "          container.scrollLeft = offsetX * (ratio - 1) + container.scrollLeft;",
-                "          container.scrollTop = offsetY * (ratio - 1) + container.scrollTop;",
-                "        }",
-                "        function kgZoomIn(){ setKgScale(kgScale * 1.2); }",
-                "        function kgZoomOut(){ setKgScale(kgScale / 1.2); }",
-                "        function kgReset(){ setKgScale(1); }",
-                "        function kgFullscreen(){",
-                "          if (!document.fullscreenElement) {",
-                "            container.requestFullscreen?.();",
-                "          } else {",
-                "            document.exitFullscreen?.();",
-                "          }",
-                "        }",
-                "        container.addEventListener('wheel', onWheel, { passive: false });",
-                "        setKgScale(1);",
-                "      </script>",
+                f"      {fragment}",
                 "    </div>",
                 "  </body>",
                 "</html>",
