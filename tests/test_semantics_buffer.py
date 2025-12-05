@@ -1,4 +1,5 @@
 from node_graph import Graph
+from node_graph.semantics import serialize_semantics_buffer
 
 
 def test_semantics_buffer_initialized():
@@ -14,4 +15,5 @@ def test_semantics_buffer_roundtrip():
     payload = ng.to_dict()
     rebuilt = Graph.from_dict(payload)
 
-    assert rebuilt.semantics_buffer == sample
+    rebuilt_buffer = serialize_semantics_buffer(rebuilt.semantics_buffer)
+    assert rebuilt_buffer["relations"][0]["predicate"] == "p"

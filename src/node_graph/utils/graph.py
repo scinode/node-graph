@@ -174,4 +174,5 @@ def materialize_graph(
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)
+        graph.knowledge_graph.build_from_graph(graph)
         return graph

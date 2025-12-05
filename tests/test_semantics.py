@@ -11,6 +11,7 @@ from node_graph.semantics import (
     SemanticsTree,
     SemanticTag,
     namespace_registry,
+    serialize_semantics_buffer,
     _capture_semantics_value,
     _normalize_semantics_buffer,
     _socket_ref_from_value,
@@ -170,7 +171,10 @@ def test_serialization_roundtrip_preserves_semantics_buffer():
     serialized = graph.to_dict()
     rebuilt = type(graph).from_dict(serialized)
 
-    assert rebuilt.semantics_buffer == serialized["semantics_buffer"]
+    assert (
+        serialize_semantics_buffer(rebuilt.semantics_buffer)
+        == serialized["semantics_buffer"]
+    )
 
 
 def test_semantics_annotation_merge_and_combine():

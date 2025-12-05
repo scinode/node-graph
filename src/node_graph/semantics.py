@@ -557,7 +557,7 @@ def _ensure_semantics_buffer(graph: Any) -> Dict[str, List[Any]]:
     else:
         normalized = _normalize_semantics_buffer(buffer)
     setattr(graph, SEMANTICS_BUFFER_ATTR, normalized)
-    return normalized
+    return getattr(graph, SEMANTICS_BUFFER_ATTR)
 
 
 def _capture_semantics_value(value: Any) -> Any:
