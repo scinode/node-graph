@@ -1,6 +1,7 @@
 from .graph import Graph
 from .task import Task
 from .decorator import task
+from .knowledge_graph import KnowledgeGraph
 from .executor import SafeExecutor, RuntimeExecutor
 from .tasks import TaskPool
 from .collection import group
@@ -19,4 +20,5 @@ __all__ = [
     "group",
     "namespace",
     "dynamic",
+    "KnowledgeGraph",
 ]

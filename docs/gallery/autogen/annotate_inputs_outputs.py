@@ -117,7 +117,6 @@ wg.run()
 
 wg.engine.recorder
 
-
 # %%
 # We can see that even though we passed the inputs as a single dictionary,
 # they were serialized as two separate ``Int`` nodes, ``x`` and ``y``, before being passed to the task.

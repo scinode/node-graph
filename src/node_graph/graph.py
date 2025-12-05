@@ -12,7 +12,7 @@ from node_graph.link import TaskLink
 from node_graph.utils import yaml_to_dict
 from .config import BuiltinPolicy, BUILTIN_TASKS, MAX_LINK_LIMIT
 from .mixins import IOOwnerMixin, WidgetRenderableMixin
-from node_graph.semantics import serialize_semantics_buffer
+from node_graph.knowledge_graph import KnowledgeGraph
 from dataclasses import dataclass
 from dataclasses import replace
 
@@ -101,6 +101,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         parent: Optional[Task] = None,
         interactive_widget: bool = False,
         init_graph_level_tasks: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initializes a new instance of the Graph class.
 
@@ -125,7 +126,8 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self._init_graph_spec(inputs, outputs, ctx)
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
-        self.semantics_buffer = {"relations": [], "payloads": []}
+        self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid)
+        self._metadata: Dict[str, Any] = dict(metadata or {})
 
         self.state = "CREATED"
         self.action = "NONE"
@@ -228,6 +230,14 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     def update_ctx(self, value: Dict[str, Any]) -> None:
         self.ctx._set_socket_value(value)
+
+    @property
+    def semantics_buffer(self) -> Dict[str, Any]:
+        return self.knowledge_graph.semantics_buffer
+
+    @semantics_buffer.setter
+    def semantics_buffer(self, value: Dict[str, Any]) -> None:
+        self.knowledge_graph.semantics_buffer = value
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from tasks."""
@@ -397,6 +407,8 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         )
 
         links = self.links_to_dict()
+        kg_payload = self.knowledge_graph.to_dict()
+
         data = {
             "platform_version": f"{self.platform}@{self.platform_version}",
             "uuid": self.uuid,
@@ -409,8 +421,9 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             "tasks": tasks,
             "links": links,
             "description": self.description,
+            "knowledge_graph": kg_payload,
         }
-        data["semantics_buffer"] = serialize_semantics_buffer(self.semantics_buffer)
+        data["semantics_buffer"] = kg_payload["semantics_buffer"]
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -423,6 +436,10 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             "callable_name": self.__class__.__name__,
             "module_path": self.__class__.__module__,
         }
+        for key, value in (self._metadata or {}).items():
+            if key in {"graph_type", "graph_class"}:
+                continue
+            meta[key] = value
         return meta
 
     def export_tasks_to_dict(
@@ -498,13 +515,17 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             Graph: The rebuilt task graph.
         """
         spec = GraphSpec.from_dict(ngdata.get("spec", {}))
+        raw_meta = ngdata.get("metadata", {}) or {}
+        base_meta = {k: raw_meta[k] for k in ("graph_type",) if k in raw_meta}
+        extra_meta = {k: v for k, v in raw_meta.items() if k not in {"graph_type"}}
         ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
             inputs=spec.inputs,
             outputs=spec.outputs,
             ctx=spec.ctx,
-            graph_type=ngdata["metadata"].get("graph_type", "NORMAL"),
+            graph_type=base_meta.get("graph_type", "NORMAL"),
+            metadata=extra_meta,
         )
         ng.state = ngdata.get("state", "CREATED")
         ng.action = ngdata.get("action", "NONE")
@@ -514,6 +535,11 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             ng.add_task_from_dict(ndata)
 
         ng.links_from_dict(ngdata.get("links", []))
+        kg_payload = ngdata.get("knowledge_graph")
+        if kg_payload is not None:
+            ng.knowledge_graph = KnowledgeGraph.from_dict(
+                kg_payload, graph_uuid=ng.uuid
+            )
         semantics_buffer = ngdata.get("semantics_buffer")
         if semantics_buffer is not None:
             ng.semantics_buffer = semantics_buffer
@@ -582,6 +608,8 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                 ng.tasks[link.from_task.name].outputs[link.from_socket._scoped_name],
                 ng.tasks[link.to_task.name].inputs[link.to_socket._scoped_name],
             )
+        ng.knowledge_graph = self.knowledge_graph.copy(graph_uuid=ng.uuid)
+        ng.semantics_buffer = ng.knowledge_graph.semantics_buffer
         return ng
 
     @classmethod

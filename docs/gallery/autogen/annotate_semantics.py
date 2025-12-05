@@ -49,15 +49,18 @@ how node-graph stores semantics, and provides runnable examples.
 # How node-graph stores semantics
 # ------------------------------
 # 1. **Authoring**: sockets declare ``meta(semantics={...})`` (label, iri,
-#    rdf_types, context, attributes, relations). The graph keeps these in
-#    ``Graph.semantics_buffer`` so they survive serialization.
+#    rdf_types, context, attributes, relations). The graph keeps these in a
+#    dedicated ``Graph.knowledge_graph`` (its ``semantics_buffer`` survives
+#    serialization).
 # 2. **Execution**: engines match sockets to produced/consumed ``Data`` nodes,
 #    build JSON-LD snippets, and store them under ``node.base.extras['semantics']``.
 # 3. **Cross-socket references**: values inside ``relations`` or ``attributes``
 #    may refer to sockets (``"outputs.result"``).
 # 4. **Runtime attachments**: ``node_graph.semantics.attach_semantics`` lets you
-#    declare relations inside workflow code; the graph buffer remembers them
-#    until execution completes.
+#    declare relations inside workflow code; the knowledge-graph buffer remembers
+#    them until execution completes.
+# 5. **RDF + visualisation**: the same ``KnowledgeGraph`` can be exported to rdflib
+#    or rendered with graphviz for quick inspection.
 
 # %%
 # Declaring socket semantics
@@ -194,6 +197,24 @@ def workflow_with_runtime_semantics(
         socket_label="result",
     )
     return {"output_structure": mutated, "bands": bands, "dos": dos}
+
+
+# %%
+# Exporting or visualising the knowledge graph
+# --------------------------------------------
+# Every materialised graph carries a ``knowledge_graph`` attribute that owns the
+# semantics buffer and can emit an rdflib graph or a Graphviz Digraph.
+
+from node_graph.knowledge_graph import KnowledgeGraph
+
+kg_instance: KnowledgeGraph = workflow_with_runtime_semantics.build(
+    structure="test"
+).knowledge_graph
+rdf_graph = kg_instance.as_rdflib()
+kg_instance
+
+# ``rdf_graph`` can be serialized (e.g., ``rdf_graph.serialize(format=\"turtle\")``),
+# while ``viz`` renders/exports to DOT/SVG/PDF for documentation.
 
 
 # %%

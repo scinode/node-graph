@@ -3,6 +3,7 @@ from typing import Any, Annotated
 from node_graph import task, namespace
 from node_graph import dynamic
 from node_graph.semantics import (
+    ATTR_REF_KEY,
     TaskSemantics,
     OntologyEnum,
     SemanticsAnnotation,
@@ -10,7 +11,9 @@ from node_graph.semantics import (
     SemanticsRelation,
     SemanticsTree,
     SemanticTag,
+    attribute_ref,
     namespace_registry,
+    serialize_semantics_buffer,
     _capture_semantics_value,
     _normalize_semantics_buffer,
     _socket_ref_from_value,
@@ -162,6 +165,26 @@ def test_attach_semantics_with_predicate_and_annotation_payload():
     assert semantics["relations"]["emmo:hasProperty"] == _socket_ref_from_value(source)
 
 
+def test_attach_semantics_with_predicate_and_no_objects_keeps_annotation():
+    graph = simple_graph.build()
+    target = graph.tasks["emit"].outputs.result
+
+    attach_semantics(
+        target,
+        objects=None,
+        predicate="emmo:hasProperty",
+        semantics={"label": "Material"},
+    )
+
+    buffer = graph.semantics_buffer
+    assert buffer["relations"] == []
+    assert len(buffer["payloads"]) == 1
+    payload = buffer["payloads"][0]
+    assert isinstance(payload, SemanticsPayload)
+    assert payload.semantics["label"] == "Material"
+    assert payload.semantics.get("relations") == {}
+
+
 def test_serialization_roundtrip_preserves_semantics_buffer():
     graph = simple_graph.build()
     subject = graph.tasks["emit"].outputs.result
@@ -170,7 +193,10 @@ def test_serialization_roundtrip_preserves_semantics_buffer():
     serialized = graph.to_dict()
     rebuilt = type(graph).from_dict(serialized)
 
-    assert rebuilt.semantics_buffer == serialized["semantics_buffer"]
+    assert (
+        serialize_semantics_buffer(rebuilt.semantics_buffer)
+        == serialized["semantics_buffer"]
+    )
 
 
 def test_semantics_annotation_merge_and_combine():
@@ -278,3 +304,29 @@ def test_default_namespace_registry_injects_missing_context():
     registry = namespace_registry()
     assert all(prefix in registry for prefix in ("prov", "schema", "qudt"))
     assert ann.context["prov"] == registry["prov"]
+
+
+def test_attribute_ref_allows_self_reference():
+    marker = attribute_ref("value")
+    payload = marker[ATTR_REF_KEY]
+    assert payload["socket"] is None
+    assert payload["key"] == "value"
+
+
+def test_attribute_ref_marks_socket_for_late_resolution():
+    graph = simple_graph.build()
+    subject = graph.tasks["emit"].outputs.result
+    marker = attribute_ref("formula", subject)
+
+    attach_semantics(
+        subject,
+        semantics={"attributes": {"schema:identifier": marker}},
+    )
+
+    payload = graph.semantics_buffer["payloads"][0]
+    semantics = payload.semantics
+    attr_marker = semantics["attributes"]["schema:identifier"]
+    assert ATTR_REF_KEY in attr_marker
+    ref = attr_marker[ATTR_REF_KEY]["socket"]
+    assert ref.task_name == "emit"
+    assert ref.graph_uuid == graph.uuid
