@@ -117,12 +117,6 @@ wg.run()
 
 wg.engine.recorder
 
-# And, if the workflow recorded semantics, the knowledge graph can be visualized too:
-
-wg.knowledge_graph.build_from_graph(wg)
-wg.knowledge_graph.to_html(title="AddMultiply knowledge graph")
-
-
 # %%
 # We can see that even though we passed the inputs as a single dictionary,
 # they were serialized as two separate ``Int`` nodes, ``x`` and ``y``, before being passed to the task.

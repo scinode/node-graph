@@ -564,14 +564,18 @@ ATTR_REF_KEY = "__ng_attr_ref__"
 
 
 def attribute_ref(
-    socket: Any, key: str, *, source: str = "attributes"
+    key: str,
+    socket: Any = None,
+    *,
+    source: str = "attributes",
 ) -> Dict[str, Any]:
     """
     Declare that an attribute should be pulled from a concrete node later.
 
-    ``socket`` can be any socket/TaggedValue pointing at a task output; the
-    engine resolves it to the persisted ``orm.Data`` node and fetches ``key``
-    from either ``node.base.attributes`` (default) or ``node.base.extras``.
+    Provide ``key`` and an optional ``socket`` to resolve against another
+    socket's node; omit ``socket`` to reference the subject node being
+    annotated. ``source`` selects ``node.base.attributes`` (default) or
+    ``node.base.extras``.
 
     This keeps graph authoring declarative without forcing access to future
     values during build-time.

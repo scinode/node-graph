@@ -306,10 +306,17 @@ def test_default_namespace_registry_injects_missing_context():
     assert ann.context["prov"] == registry["prov"]
 
 
+def test_attribute_ref_allows_self_reference():
+    marker = attribute_ref("value")
+    payload = marker[ATTR_REF_KEY]
+    assert payload["socket"] is None
+    assert payload["key"] == "value"
+
+
 def test_attribute_ref_marks_socket_for_late_resolution():
     graph = simple_graph.build()
     subject = graph.tasks["emit"].outputs.result
-    marker = attribute_ref(subject, "formula")
+    marker = attribute_ref("formula", subject)
 
     attach_semantics(
         subject,
