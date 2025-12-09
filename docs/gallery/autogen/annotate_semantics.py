@@ -50,15 +50,14 @@ how node-graph stores semantics, and provides runnable examples.
 # ------------------------------
 # 1. **Authoring**: sockets declare ``meta(semantics={...})`` (label, iri,
 #    rdf_types, context, attributes, relations). The graph keeps these in a
-#    dedicated ``Graph.knowledge_graph`` (its ``semantics_buffer`` survives
-#    serialization).
+#    dedicated ``Graph.knowledge_graph`` (runtime semantics survive serialization).
 # 2. **Execution**: engines match sockets to produced/consumed ``Data`` nodes,
 #    build JSON-LD snippets, and store them under ``node.base.extras['semantics']``.
 # 3. **Cross-socket references**: values inside ``relations`` or ``attributes``
 #    may refer to sockets (``"outputs.result"``).
-# 4. **Runtime attachments**: ``node_graph.semantics.attach_semantics`` lets you
-#    declare relations inside workflow code; the knowledge-graph buffer remembers
-#    them until execution completes.
+# 4. **Runtime semantics**: ``node_graph.semantics.attach_semantics`` lets you
+#    declare relations inside workflow code; the knowledge-graph keeps them until
+#    execution completes.
 # 5. **RDF + visualisation**: the same ``KnowledgeGraph`` can be exported to rdflib
 #    or rendered with graphviz for quick inspection.
 
@@ -72,10 +71,10 @@ how node-graph stores semantics, and provides runnable examples.
 from typing import Annotated, Any
 from node_graph import task
 from node_graph.socket_spec import meta, namespace
+from ase import Atoms
 
 energy_semantics_meta = meta(
     semantics={
-        "label": "Potential energy",
         "iri": "qudt:PotentialEnergy",
         "rdf_types": ["qudt:QuantityValue"],
         "context": {
@@ -90,7 +89,10 @@ energy_semantics_meta = meta(
 
 
 @task()
-def AnnotateSemantics(energy: float) -> Annotated[float, energy_semantics_meta]:
+def calc_energy(atoms: Atoms) -> Annotated[float, energy_semantics_meta]:
+    from ase.calculators.emt import EMT
+
+    energy = atoms.get_potential_energy(calculator=EMT())
     return energy
 
 

@@ -126,7 +126,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self._init_graph_spec(inputs, outputs, ctx)
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
-        self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid)
+        self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid, graph=self)
         self._metadata: Dict[str, Any] = dict(metadata or {})
 
         self.state = "CREATED"
@@ -230,14 +230,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     def update_ctx(self, value: Dict[str, Any]) -> None:
         self.ctx._set_socket_value(value)
-
-    @property
-    def semantics_buffer(self) -> Dict[str, Any]:
-        return self.knowledge_graph.semantics_buffer
-
-    @semantics_buffer.setter
-    def semantics_buffer(self, value: Dict[str, Any]) -> None:
-        self.knowledge_graph.semantics_buffer = value
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from tasks."""
@@ -423,7 +415,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             "description": self.description,
             "knowledge_graph": kg_payload,
         }
-        data["semantics_buffer"] = kg_payload["semantics_buffer"]
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -540,9 +531,9 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             ng.knowledge_graph = KnowledgeGraph.from_dict(
                 kg_payload, graph_uuid=ng.uuid
             )
-        semantics_buffer = ngdata.get("semantics_buffer")
-        if semantics_buffer is not None:
-            ng.semantics_buffer = semantics_buffer
+            ng.knowledge_graph._graph = ng
+            ng.knowledge_graph.graph_uuid = ng.uuid
+            ng.knowledge_graph._dirty = True
         return ng
 
     def add_task_from_dict(self, ndata: Dict[str, Any]) -> Task:
@@ -609,7 +600,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                 ng.tasks[link.to_task.name].inputs[link.to_socket._scoped_name],
             )
         ng.knowledge_graph = self.knowledge_graph.copy(graph_uuid=ng.uuid)
-        ng.semantics_buffer = ng.knowledge_graph.semantics_buffer
+        ng.knowledge_graph._graph = ng
         return ng
 
     @classmethod

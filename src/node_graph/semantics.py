@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from node_graph.socket import BaseSocket, TaggedValue
 from node_graph.socket_spec import SocketSpec
 
-SEMANTICS_BUFFER_ATTR = "semantics_buffer"
 DEFAULT_NAMESPACE_REGISTRY: Dict[str, str] = {
     "qudt": "http://qudt.org/schema/qudt/",
     "qudt-unit": "http://qudt.org/vocab/unit/",
@@ -99,12 +98,6 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return repr(value)
-
-
-def serialize_semantics_buffer(buffer: Any) -> Any:
-    """Return a JSON-friendly representation of semantics buffer payloads."""
-
-    return _json_ready(buffer)
 
 
 def _detect_prefixes(value: Any) -> Set[str]:
@@ -499,7 +492,7 @@ def _rehydrate_attachment_value(value: Any) -> Any:
 
 
 def _normalize_semantics_buffer(raw: Any) -> Dict[str, List[Any]]:
-    """Coerce persisted semantics buffer into runtime dataclasses."""
+    """Coerce persisted semantics attachments into runtime dataclasses."""
 
     if not isinstance(raw, dict):
         return {"relations": [], "payloads": []}
@@ -546,18 +539,6 @@ def _normalize_semantics_buffer(raw: Any) -> Dict[str, List[Any]]:
         )
 
     return normalized
-
-
-def _ensure_semantics_buffer(graph: Any) -> Dict[str, List[Any]]:
-    """Ensure a graph carries a semantics buffer."""
-
-    buffer: Optional[Dict[str, List[Any]]] = getattr(graph, SEMANTICS_BUFFER_ATTR, None)
-    if buffer is None:
-        normalized = {"relations": [], "payloads": []}
-    else:
-        normalized = _normalize_semantics_buffer(buffer)
-    setattr(graph, SEMANTICS_BUFFER_ATTR, normalized)
-    return getattr(graph, SEMANTICS_BUFFER_ATTR)
 
 
 ATTR_REF_KEY = "__ng_attr_ref__"
@@ -639,60 +620,60 @@ def attach_semantics(
         socket_ref = _socket_ref_from_value(subject)
         if socket_ref is not None:
             graph = _graph_from_socket_value(subject)
-            if graph is not None:
-                captured_values = tuple(
-                    _capture_semantics_value(val) for val in relation_values
+            knowledge_graph = getattr(graph, "knowledge_graph", None)
+            if knowledge_graph is None:
+                return
+            captured_values = tuple(
+                _capture_semantics_value(val) for val in relation_values
+            )
+            has_relations = len(captured_values) > 0
+            # If semantics are provided, record a payload with relations + annotation;
+            # otherwise store a direct relation attachment.
+            if semantics is not None:
+                if isinstance(semantics, SemanticsAnnotation):
+                    sem_payload: Dict[str, Any] = semantics.to_payload()
+                elif hasattr(semantics, "to_semantics_dict"):
+                    try:
+                        sem_payload = semantics.to_semantics_dict()
+                    except Exception:
+                        sem_payload = getattr(semantics, "to_semantics_dict")()
+                elif hasattr(semantics, "model_dump"):
+                    sem_payload = semantics.model_dump(exclude_none=True)
+                else:
+                    sem_payload = dict(semantics)
+                relations = dict(sem_payload.get("relations") or {})
+                if has_relations:
+                    relations.setdefault(
+                        predicate,
+                        captured_values
+                        if len(captured_values) > 1
+                        else captured_values[0],
+                    )
+                sem_payload["relations"] = relations
+                if label and "label" not in sem_payload:
+                    sem_payload["label"] = label
+                if context:
+                    merged_ctx = dict(sem_payload.get("context") or {})
+                    merged_ctx.update(context)
+                    sem_payload["context"] = merged_ctx
+                knowledge_graph.add_payload(
+                    SemanticsPayload(
+                        subject=socket_ref,
+                        semantics=_capture_semantics_value(sem_payload),
+                        socket_label=socket_label,
+                    )
                 )
-                has_relations = len(captured_values) > 0
-                # If semantics are provided, record a payload with relations + annotation;
-                # otherwise fall back to the legacy relations buffer.
-                if semantics is not None:
-                    if isinstance(semantics, SemanticsAnnotation):
-                        sem_payload: Dict[str, Any] = semantics.to_payload()
-                    elif hasattr(semantics, "to_semantics_dict"):
-                        try:
-                            sem_payload = semantics.to_semantics_dict()
-                        except Exception:
-                            sem_payload = getattr(semantics, "to_semantics_dict")()
-                    elif hasattr(semantics, "model_dump"):
-                        sem_payload = semantics.model_dump(exclude_none=True)
-                    else:
-                        sem_payload = dict(semantics)
-                    relations = dict(sem_payload.get("relations") or {})
-                    if has_relations:
-                        relations.setdefault(
-                            predicate,
-                            captured_values
-                            if len(captured_values) > 1
-                            else captured_values[0],
-                        )
-                    sem_payload["relations"] = relations
-                    if label and "label" not in sem_payload:
-                        sem_payload["label"] = label
-                    if context:
-                        merged_ctx = dict(sem_payload.get("context") or {})
-                        merged_ctx.update(context)
-                        sem_payload["context"] = merged_ctx
-                    buffer = _ensure_semantics_buffer(graph)
-                    buffer["payloads"].append(
-                        SemanticsPayload(
-                            subject=socket_ref,
-                            semantics=_capture_semantics_value(sem_payload),
-                            socket_label=socket_label,
-                        )
+            elif has_relations:
+                knowledge_graph.add_relation(
+                    SemanticsRelation(
+                        predicate=predicate,
+                        subject=socket_ref,
+                        values=captured_values,
+                        label=label,
+                        context=context,
+                        socket_label=socket_label,
                     )
-                elif has_relations:
-                    buffer = _ensure_semantics_buffer(graph)
-                    buffer["relations"].append(
-                        SemanticsRelation(
-                            predicate=predicate,
-                            subject=socket_ref,
-                            values=captured_values,
-                            label=label,
-                            context=context,
-                            socket_label=socket_label,
-                        )
-                    )
+                )
         return
 
     if subject is None or semantics is None:
@@ -701,9 +682,11 @@ def attach_semantics(
     socket_ref = _socket_ref_from_value(subject)
     if socket_ref is not None:
         graph = _graph_from_socket_value(subject)
-        if graph is not None:
-            buffer = _ensure_semantics_buffer(graph)
-            buffer["payloads"].append(
+        knowledge_graph = (
+            getattr(graph, "knowledge_graph", None) if graph is not None else None
+        )
+        if knowledge_graph is not None:
+            knowledge_graph.add_payload(
                 SemanticsPayload(
                     subject=socket_ref,
                     semantics=_capture_semantics_value(semantics),
@@ -723,9 +706,7 @@ __all__ = [
     "TaskSemantics",
     "SemanticsPayload",
     "SemanticsRelation",
-    "serialize_semantics_buffer",
     "attach_semantics",
-    "SEMANTICS_BUFFER_ATTR",
     "ATTR_REF_KEY",
     "attribute_ref",
 ]

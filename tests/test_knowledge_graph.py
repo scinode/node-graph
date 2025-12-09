@@ -10,7 +10,6 @@ from node_graph.semantics import (
     SemanticsRelation,
     _SocketRef,
     attach_semantics,
-    serialize_semantics_buffer,
 )
 
 
@@ -38,14 +37,10 @@ def test_knowledge_graph_builds_rdflib():
 
 def test_knowledge_graph_serialization_roundtrip():
     graph = Graph(name="kg-roundtrip")
-    graph.knowledge_graph.semantics_buffer = {"relations": [], "payloads": []}
     payload = graph.knowledge_graph.to_dict()
 
     rebuilt = KnowledgeGraph.from_dict(payload, graph_uuid=graph.uuid)
-    assert (
-        serialize_semantics_buffer(rebuilt.semantics_buffer)
-        == payload["semantics_buffer"]
-    )
+    assert rebuilt.links == payload["triples"]
 
 
 def test_knowledge_graph_graphviz_available():
@@ -119,10 +114,12 @@ def test_knowledge_graph_copy_preserves_state():
 
     assert clone.graph_uuid == "clone-id"
     assert clone.namespaces["ex"] == "http://example.org/"
-    assert serialize_semantics_buffer(
-        clone.semantics_buffer
-    ) == serialize_semantics_buffer(graph.knowledge_graph.semantics_buffer)
-    assert clone.semantics_buffer is not graph.knowledge_graph.semantics_buffer
+    assert {"relations": clone.links, "payloads": clone.entities} == {
+        "relations": graph.knowledge_graph.links,
+        "payloads": graph.knowledge_graph.entities,
+    }
+    assert clone.entities is not graph.knowledge_graph.entities
+    assert clone.links is not graph.knowledge_graph.links
 
 
 def test_knowledge_graph_add_namespace_binds_cached_graph():
