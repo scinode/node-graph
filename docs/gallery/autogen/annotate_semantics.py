@@ -40,10 +40,10 @@ how node-graph stores semantics, and provides runnable examples.
 #
 # - To extend the registry globally, call ``register_namespace("mat",
 #   "https://example.org/mat#")`` once at import time.
-# - To add a custom prefix for a single annotation, include it directly in the
-#   ``context`` dictionary of ``SemanticTag`` or the raw semantics payload.
-# - Explicit values always win over the defaults, so you can override or
-#   refine the URL per annotation if needed.
+# - To add a custom prefix, include it directly in the ``context`` dictionary of
+#   ``SemanticTag`` or the raw semantics payload.
+# - Explicit values always win over the defaults, so you can override or refine
+#   the URL per annotation if needed.
 
 # %%
 # How node-graph stores semantics
@@ -96,6 +96,11 @@ def calc_energy(atoms: Atoms) -> Annotated[float, energy_semantics_meta]:
     return energy
 
 
+# ``attributes`` is the right place for literal predicate/value pairs (units,
+# DOIs, numbers). Use ``relations`` when the value is a reference to another
+# resource or socket (e.g., CURIE/IRI pointing to a dataset or another port).
+
+
 # %%
 # Typed semantics with Pydantic
 # -----------------------------
@@ -134,9 +139,17 @@ def TypedSemantics(energy: float) -> Annotated[float, meta(semantics=EnergyEV)]:
 # ``structure`` has a relation ``mat:hasProperty`` pointing to the output of the
 # ``compute_band_structure`` task.
 
+BAND_META = meta(
+    semantics={
+        "label": "Band Structure",
+        "description": "The electronic band structure of a material.",
+        "iri": "emmo:BandStructure",
+    }
+)
+
 
 @task()
-def compute_band_structure(structure):
+def compute_band_structure(structure) -> Annotated[float, BAND_META]:
     return 1.0
 
 
@@ -172,13 +185,22 @@ def workflow(structure: Annotated[Any, structure_meta]):
 from node_graph.semantics import attach_semantics
 
 
+DENSITY_OF_STATES_META = meta(
+    semantics={
+        "label": "Density of States",
+        "description": "The electronic density of states of a material.",
+        "iri": "emmo:DensityOfStates",
+    }
+)
+
+
 @task()
 def generate(structure):
     return structure
 
 
 @task()
-def compute_density_of_states(structure):
+def compute_density_of_states(structure) -> Annotated[float, DENSITY_OF_STATES_META]:
     return 1.0
 
 
@@ -207,13 +229,9 @@ def workflow_with_runtime_semantics(
 # Every materialised graph carries a ``knowledge_graph`` attribute that owns the
 # semantics buffer and can emit an rdflib graph or a Graphviz Digraph.
 
-from node_graph.knowledge_graph import KnowledgeGraph
 
-kg_instance: KnowledgeGraph = workflow_with_runtime_semantics.build(
-    structure="test"
-).knowledge_graph
-rdf_graph = kg_instance.as_rdflib()
-kg_instance
+ng = workflow_with_runtime_semantics.build(structure="test")
+ng.knowledge_graph
 
 # ``rdf_graph`` can be serialized (e.g., ``rdf_graph.serialize(format=\"turtle\")``),
 # while ``viz`` renders/exports to DOT/SVG/PDF for documentation.

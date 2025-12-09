@@ -5,3 +5,4 @@ furo
 sphinx_gallery
 matplotlib
 graphviz>=0.20
+ase

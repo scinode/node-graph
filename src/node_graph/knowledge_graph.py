@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from uuid import uuid4
-from typing import Any, Dict, Mapping, Optional, Union, Tuple, Iterable, List
+from typing import Any, Dict, Mapping, Optional, Union, Tuple, List
 
 from rdflib import Graph as RDFGraph
 from rdflib import Literal, Namespace, URIRef
-from rdflib.namespace import RDF, RDFS
+from rdflib.namespace import RDFS
 
 from node_graph.semantics import (
     SemanticsAnnotation,
@@ -24,11 +24,6 @@ except Exception:
     Digraph = None
 
 
-def _canonical_socket_id(task_name: str, direction: str, socket_path: str) -> str:
-    socket_part = socket_path or "socket"
-    return f"ng://{task_name}/{direction}/{socket_part}"
-
-
 class KnowledgeGraph:
     """Light-weight container for semantics-backed knowledge graphs."""
 
@@ -39,15 +34,13 @@ class KnowledgeGraph:
         namespaces: Optional[Mapping[str, str]] = None,
         graph: Any = None,
     ) -> None:
+        """Initialize a KnowledgeGraph with optional identifiers and namespace bindings."""
         self.graph_uuid = graph_uuid
         self.namespaces: Dict[str, str] = dict(namespaces or namespace_registry())
         self._rdflib_graph: Optional[RDFGraph] = None
         self._payload: Dict[str, Any] = {}
         self._dirty: bool = True
         self._graph: Any = graph
-        self._graph_version: Optional[int] = (
-            getattr(graph, "_version", None) if graph else None
-        )
         self.entities: Dict[str, Dict[str, Any]] = {}
         self.links: List[List[Any]] = []
 
@@ -64,15 +57,13 @@ class KnowledgeGraph:
             annotation.relations.values()
         ):
             self._ensure_sockets_in_value(value)
-        socket_index = self._socket_index()
         for prefix, iri in annotation.context.items():
             if prefix not in self.namespaces:
                 self.add_namespace(prefix, iri)
         self._emit_label(sid, payload.subject, annotation.label, payload.socket_label)
-        self._emit_annotation_triples(sid, annotation, socket_index)
+        self._emit_annotation_triples(sid, annotation)
         self._dirty = False
         self._rdflib_graph = None
-        self._rebuild_payload_from_entities()
 
     def add_relation(self, relation: SemanticsRelation) -> None:
         """Record a semantics relation directly into entities/links."""
@@ -90,86 +81,70 @@ class KnowledgeGraph:
             self._emit_label(
                 sid, relation.subject, relation.label, relation.socket_label
             )
-        socket_index = self._socket_index()
         for value in relation.values:
-            obj = self._object_value(value, socket_index)
+            obj = self._object_value(value)
             self._add_link(sid, relation.predicate, obj)
         self._dirty = False
         self._rdflib_graph = None
-        self._rebuild_payload_from_entities()
 
     def add_namespace(self, prefix: str, iri: str) -> None:
+        """Register a namespace prefix/IRI pair on the knowledge graph instance."""
         self.namespaces[str(prefix)] = str(iri)
         if self._rdflib_graph is not None:
             self._rdflib_graph.bind(prefix, Namespace(iri))
 
     def _socket_uri(self, ref: _SocketRef) -> URIRef:
+        """Return a deterministic URI for a socket reference."""
         base = f"urn:node-graph:{self.graph_uuid or 'graph'}:"
         suffix = f"{ref.task_name}:{ref.kind}:{ref.socket_path}"
         return URIRef(base + suffix.replace(" ", "_"))
 
     def _bind_namespaces(self, graph: RDFGraph) -> None:
+        """Bind all known namespaces to the given rdflib graph."""
         for prefix, iri in self.namespaces.items():
             try:
                 graph.bind(prefix, Namespace(iri))
             except Exception:
                 continue
 
-    def _ensure_current(self) -> Dict[str, Any]:
-        """
-        Ensure entities/links are up to date with the backing graph.
-
-        Rebuilds whenever marked dirty or when the DAG structure hash changes.
-        """
-
-        current_version = getattr(self._graph, "_version", None)
-        if self._dirty or (
-            current_version is not None and current_version != self._graph_version
-        ):
-            self.update(self._graph)
-        return self._payload
-
-    def _materialize(self) -> Dict[str, Any]:
-        return self._ensure_current()
-
-    def _socket_index(self) -> Dict[str, str]:
-        index: Dict[str, str] = {}
-        for sid, meta in self.entities.items():
-            canonical = meta.get("canonical")
-            if canonical:
-                index[str(canonical)] = sid
-        return index
+    def _socket_name(self, task_name: str, direction: str, socket_path: str) -> str:
+        """Compose a stable socket identifier."""
+        socket_part = socket_path or "socket"
+        return f"{task_name}.{direction}.{socket_part}"
 
     def _ensure_socket(
         self, ref: _SocketRef, socket_label: Optional[str] = None
     ) -> str:
-        """Return a compact socket id for ``ref``, creating an entity if missing."""
+        """Return a socket id for ``ref``, creating an entity if missing."""
 
-        canonical = _canonical_socket_id(ref.task_name, ref.kind, ref.socket_path)
-        socket_id = self._socket_index().get(canonical)
-        if socket_id is None:
-            socket_id = f"s{len(self.entities) + 1}"
-            meta: Dict[str, Any] = {
+        socket_id = getattr(
+            ref,
+            "_full_name_with_task",
+            self._socket_name(ref.task_name, ref.kind, ref.socket_path),
+        )
+        meta = self.entities.get(socket_id)
+        if meta is None:
+            meta = {
                 "task": ref.task_name,
                 "direction": ref.kind,
                 "port": ref.socket_path,
-                "canonical": canonical,
+                "canonical": socket_id,
             }
             if socket_label:
                 meta["label"] = socket_label
             self.entities[socket_id] = meta
-        else:
-            meta = self.entities[socket_id]
-            if socket_label and not meta.get("label"):
-                meta["label"] = socket_label
+        elif socket_label and not meta.get("label"):
+            meta["label"] = socket_label
         return socket_id
 
     def _add_link(self, subject: str, predicate: str, obj: Any) -> None:
+        """Append a triple-like link if it has not been recorded yet."""
         triple = [subject, predicate, obj]
         if triple not in self.links:
             self.links.append(triple)
 
     def _ensure_sockets_in_value(self, value: Any) -> None:
+        """Ensure nested socket references are materialized in ``entities``."""
         if isinstance(value, _SocketRef):
             self._ensure_socket(value)
             return
@@ -184,6 +159,7 @@ class KnowledgeGraph:
         annotation_label: Optional[str],
         socket_label: Optional[str],
     ) -> None:
+        """Add rdfs:label triples for a socket with sensible defaults."""
         default_label = f"{ref.task_name}.{ref.socket_path or 'socket'}"
         label_value = socket_label or annotation_label or default_label
         self._add_link(socket_id, "rdfs:label", label_value)
@@ -194,23 +170,27 @@ class KnowledgeGraph:
         self,
         socket_id: str,
         annotation: SemanticsAnnotation,
-        socket_index: Dict[str, str],
     ) -> None:
+        """Emit triples for a semantics annotation onto the internal link list."""
         for rdf_type in annotation.rdf_types:
             self._add_link(socket_id, "rdf:type", rdf_type)
         if annotation.iri:
             self._add_link(socket_id, "rdf:type", annotation.iri)
         for predicate, value in annotation.attributes.items():
-            self._add_link(
-                socket_id, str(predicate), self._object_value(value, socket_index)
-            )
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    self._add_link(socket_id, str(predicate), self._object_value(item))
+                continue
+            self._add_link(socket_id, str(predicate), self._object_value(value))
         for predicate, value in annotation.relations.items():
-            self._add_link(
-                socket_id, str(predicate), self._object_value(value, socket_index)
-            )
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    self._add_link(socket_id, str(predicate), self._object_value(item))
+                continue
+            self._add_link(socket_id, str(predicate), self._object_value(value))
 
     def _rebuild_payload_from_entities(self) -> Dict[str, Any]:
-        socket_index: Dict[str, str] = self._socket_index()
+        """Reconstruct a payload dictionary from the current entities/links."""
         sockets: Dict[str, Dict[str, Any]] = {}
         for sid, meta in self.entities.items():
             meta_copy = dict(meta)
@@ -219,58 +199,16 @@ class KnowledgeGraph:
         context = dict(self.namespaces)
         context.setdefault("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
         context.setdefault("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
-        self._graph_version = getattr(self._graph, "_version", None)
         payload = {
             "context": context,
-            "socket_index": socket_index,
             "sockets": sockets,
             "triples": list(self.links),
         }
         self._payload = payload
         return payload
 
-    def _refresh_from_graph(self, graph: Optional[Any] = None) -> None:
-        """Populate entities/links from the backing task graph if empty."""
-
-        graph = graph or self._graph
-        current_version = (
-            getattr(graph, "_version", None) if graph is not None else None
-        )
-        if (
-            self.entities
-            and self.links
-            and (self._graph_version is None or self._graph_version == current_version)
-        ):
-            self._dirty = False
-            return
-        if graph is None:
-            self.entities = {}
-            self.links = []
-            self._payload = {}
-            self._dirty = False
-            return
-        entries = self._collect_socket_semantics(graph)
-        if not entries:
-            self.entities = {}
-            self.links = []
-            self._payload = {}
-            self._dirty = False
-            return
-        context = self._merge_context(entries)
-        socket_index, sockets = self._build_socket_index(entries)
-        triples = self._triples_from_entries(entries, socket_index)
-        self.entities = dict(sockets)
-        self.links = list(triples)
-        self._graph_version = current_version
-        self._payload = {
-            "context": context,
-            "socket_index": socket_index,
-            "sockets": sockets,
-            "triples": triples,
-        }
-        self._dirty = False
-
     def _to_uri(self, term: str) -> URIRef:
+        """Coerce a CURIE or absolute string into an rdflib URIRef."""
         if "://" in term:
             return URIRef(term)
         if ":" in term:
@@ -280,6 +218,7 @@ class KnowledgeGraph:
         return URIRef(term)
 
     def _literal_or_ref(self, value: Any) -> Union[URIRef, Literal]:
+        """Convert a Python value into an rdflib Literal or URIRef."""
         if isinstance(value, _SocketRef):
             return self._socket_uri(value)
         if isinstance(value, str):
@@ -297,65 +236,17 @@ class KnowledgeGraph:
         return Literal(value)
 
     def _annotation_from(self, semantics: Any) -> Optional[SemanticsAnnotation]:
+        """Normalize raw semantics payloads into SemanticsAnnotation."""
         if semantics is None:
             return None
         if isinstance(semantics, SemanticsAnnotation):
             return semantics
         return SemanticsAnnotation.from_raw(semantics)
 
-    def _add_payload(self, graph: RDFGraph, payload: SemanticsPayload) -> None:
-        if payload.subject is None:
-            return
-        subject = self._socket_uri(payload.subject)
-        base_label = (
-            payload.socket_label
-            or f"{payload.subject.task_name}.{payload.subject.socket_path}"
-        )
-        graph.add((subject, RDFS.label, Literal(base_label)))
-
-        annotation = self._annotation_from(payload.semantics)
-        if annotation is None:
-            return
-
-        # Merge namespaces discovered in the annotation back into the graph bindings
-        for prefix, iri in annotation.context.items():
-            if prefix not in self.namespaces:
-                self.add_namespace(prefix, iri)
-        self._bind_namespaces(graph)
-
-        if annotation.label:
-            graph.add((subject, RDFS.label, Literal(annotation.label)))
-        if annotation.iri:
-            graph.add((subject, RDF.type, self._to_uri(annotation.iri)))
-        for rdf_type in annotation.rdf_types:
-            graph.add((subject, RDF.type, self._to_uri(rdf_type)))
-        for predicate, value in annotation.attributes.items():
-            graph.add(
-                (subject, self._to_uri(str(predicate)), self._literal_or_ref(value))
-            )
-        for predicate, value in annotation.relations.items():
-            node = self._literal_or_ref(value)
-            graph.add((subject, self._to_uri(str(predicate)), node))
-
-    def _add_relation(self, graph: RDFGraph, relation: SemanticsRelation) -> None:
-        if relation.subject is None or not relation.predicate:
-            return
-        subject = self._socket_uri(relation.subject)
-        predicate = self._to_uri(relation.predicate)
-        for value in relation.values:
-            graph.add((subject, predicate, self._literal_or_ref(value)))
-        if relation.label:
-            graph.add((subject, RDFS.label, Literal(relation.label)))
-        if relation.context:
-            for prefix, iri in relation.context.items():
-                if prefix not in self.namespaces:
-                    self.add_namespace(prefix, iri)
-
     def as_rdflib(self) -> RDFGraph:
-        if self._rdflib_graph is not None:
-            return self._rdflib_graph
-
-        payload = self._materialize()
+        """Return the knowledge graph as an rdflib Graph, rebuilding caches as needed."""
+        self.update()
+        payload = self._rebuild_payload_from_entities()
         graph = RDFGraph()
         context = payload.get("context") or {}
         for prefix, iri in context.items():
@@ -364,14 +255,11 @@ class KnowledgeGraph:
 
         sockets = payload.get("sockets") or {}
         triples = payload.get("triples") or []
-        socket_index = payload.get("socket_index") or {}
-        inverse_index = {v: k for k, v in socket_index.items()}
 
         def _socket_uri_by_id(sid: str) -> URIRef:
-            canonical = inverse_index.get(sid, sid)
-            if isinstance(canonical, str) and canonical.startswith("ng://"):
-                return URIRef(canonical)
-            return self._to_uri(str(canonical))
+            if isinstance(sid, str) and sid.startswith("ng://"):
+                return URIRef(sid)
+            return self._to_uri(str(sid))
 
         for sid, meta in sockets.items():
             uri = _socket_uri_by_id(sid)
@@ -382,7 +270,7 @@ class KnowledgeGraph:
         for subj, pred, obj in triples:
             subj_uri = _socket_uri_by_id(str(subj))
             pred_uri = self._to_uri(str(pred))
-            if isinstance(obj, str) and (obj in sockets or obj in inverse_index):
+            if isinstance(obj, str) and obj in sockets:
                 obj_val: Union[URIRef, Literal] = _socket_uri_by_id(obj)
             else:
                 obj_val = self._literal_or_ref(obj)
@@ -391,16 +279,8 @@ class KnowledgeGraph:
         self._rdflib_graph = graph
         return self._rdflib_graph
 
-    def build_from_graph(self, graph: Any) -> RDFGraph:
-        self.graph_uuid = getattr(graph, "uuid", self.graph_uuid)
-        self._graph = graph
-        self._dirty = True
-        self._rdflib_graph = None
-        self._materialize()
-        return self.as_rdflib()
-
     def to_graphviz(self) -> "Digraph":
-        self._ensure_current()
+        """Render the knowledge graph into a Graphviz Digraph."""
         if Digraph is None:  # pragma: no cover - import guarded
             raise RuntimeError(
                 "graphviz is not installed; please `pip install graphviz`."
@@ -430,10 +310,12 @@ class KnowledgeGraph:
         return dot
 
     def to_graphviz_svg(self) -> str:
+        """Return an SVG serialization of the knowledge graph via graphviz."""
         graph = self.to_graphviz()
         return graph.pipe(format="svg").decode("utf-8")
 
-    def _repr_svg_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
+    def _repr_svg_(self) -> Optional[str]:
+        """IPython/Jupyter SVG repr hook."""
         try:
             return self.to_graphviz_svg()
         except RuntimeError:
@@ -513,6 +395,7 @@ class KnowledgeGraph:
         )
 
     def _repr_html_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
+        """HTML repr hook that reuses the graphviz SVG with controls."""
         svg = self._repr_svg_()
         if svg is None:
             return None
@@ -635,6 +518,7 @@ class KnowledgeGraph:
         )
 
     def save_html(self, path: str, title: Optional[str] = None) -> str:
+        """Serialize the HTML view to ``path`` and return the resolved path."""
         html = self.to_html(title=title)
         path_obj = Path(path)
         path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -642,11 +526,10 @@ class KnowledgeGraph:
         return str(path_obj)
 
     def to_dict(self) -> Dict[str, Any]:
-        self.update(self._graph)
+        """Return a JSON-friendly snapshot of namespaces, sockets, and triples."""
+        self.update()
         return {
-            "graph_uuid": self.graph_uuid,
             "namespaces": dict(self.namespaces),
-            "socket_index": self._payload.get("socket_index"),
             "sockets": {sid: dict(meta) for sid, meta in self.entities.items()},
             "triples": list(self.links),
         }
@@ -658,6 +541,7 @@ class KnowledgeGraph:
         *,
         graph_uuid: Optional[str] = None,
     ) -> "KnowledgeGraph":
+        """Construct a KnowledgeGraph from a serialized payload."""
         if payload is None:
             return cls(graph_uuid=graph_uuid)
         namespaces = payload.get("namespaces") or namespace_registry()
@@ -671,7 +555,6 @@ class KnowledgeGraph:
             kg._payload = {
                 "dag_id": payload.get("dag_id") or "",
                 "context": dict(namespaces),
-                "socket_index": payload.get("socket_index") or kg._socket_index(),
                 "sockets": {
                     sid: {k: v for k, v in meta.items() if k != "canonical"}
                     for sid, meta in kg.entities.items()
@@ -685,10 +568,11 @@ class KnowledgeGraph:
                 kg._payload = semantics  # type: ignore[attr-defined]
                 kg.entities = dict(semantics.get("sockets", {}))
                 kg.links = list(semantics.get("triples", []))
-                kg._dirty = False
+            kg._dirty = False
         return kg
 
     def copy(self, *, graph_uuid: Optional[str] = None) -> "KnowledgeGraph":
+        """Return a shallow copy that preserves current state and identifiers."""
         kg = KnowledgeGraph(
             graph_uuid=graph_uuid or self.graph_uuid,
             namespaces=dict(self.namespaces),
@@ -696,7 +580,6 @@ class KnowledgeGraph:
         )
         kg._payload = dict(self._payload) if isinstance(self._payload, dict) else {}
         kg._dirty = self._dirty
-        kg._graph_version = self._graph_version
         kg.entities = {sid: dict(meta) for sid, meta in self.entities.items()}
         kg.links = [list(triple) for triple in self.links]
         return kg
@@ -706,67 +589,17 @@ class KnowledgeGraph:
         base: Optional[SemanticsAnnotation],
         extra: Optional[SemanticsAnnotation],
     ) -> Optional[SemanticsAnnotation]:
+        """Merge two annotations, preferring non-empty fields from ``extra``."""
         if base is None:
             return extra
         if extra is None:
             return base
         return base.merge(extra)
 
-    def _merge_payload_annotations(
-        self,
-        target: Dict[Tuple[str, str, str], Dict[str, Any]],
-        payloads: Iterable[SemanticsPayload],
-    ) -> None:
-        def _sanitize_semantics(raw: Any) -> Any:
-            return raw
-
-        for pending in payloads:
-            if not isinstance(pending, SemanticsPayload):
-                continue
-            subject = pending.subject
-            if not isinstance(subject, _SocketRef):
-                continue
-            key = (subject.task_name, subject.kind, subject.socket_path)
-            entry = target.setdefault(key, {"annotation": None, "socket_label": None})
-            extra = SemanticsAnnotation.from_raw(_sanitize_semantics(pending.semantics))
-            if extra is None or extra.is_empty:
-                continue
-            entry["annotation"] = self._merge_annotation(entry.get("annotation"), extra)
-            if pending.socket_label and not entry.get("socket_label"):
-                entry["socket_label"] = pending.socket_label
-
-    def _merge_relation_annotations(
-        self,
-        target: Dict[Tuple[str, str, str], Dict[str, Any]],
-        relations: Iterable[SemanticsRelation],
-    ) -> None:
-        for relation in relations:
-            if not isinstance(relation, SemanticsRelation):
-                continue
-            subject = relation.subject
-            if not isinstance(subject, _SocketRef):
-                continue
-            key = (subject.task_name, subject.kind, subject.socket_path)
-            entry = target.setdefault(key, {"annotation": None, "socket_label": None})
-            payload = {
-                "relations": {
-                    relation.predicate: relation.values
-                    if len(relation.values) > 1
-                    else relation.values[0]
-                }
-            }
-            if relation.label:
-                payload["label"] = relation.label
-            if relation.context:
-                payload["context"] = dict(relation.context)
-            extra = SemanticsAnnotation.from_raw(payload)
-            entry["annotation"] = self._merge_annotation(entry.get("annotation"), extra)
-            if relation.socket_label and not entry.get("socket_label"):
-                entry["socket_label"] = relation.socket_label
-
     def _flatten_semantics_tree(
         self, tree: Optional[Any], *, task_name: str, direction: str
     ) -> Dict[Tuple[str, str, str], SemanticsAnnotation]:
+        """Flatten nested semantics trees keyed by task/direction/socket path."""
         entries: Dict[Tuple[str, str, str], SemanticsAnnotation] = {}
 
         def _walk(node: Optional[Any], path: str) -> None:
@@ -790,10 +623,11 @@ class KnowledgeGraph:
     def _collect_socket_semantics(
         self, graph: Optional[Any] = None
     ) -> Dict[Tuple[str, str, str], Dict[str, Any]]:
+        """Collect semantics annotations from a graph's tasks into a mapping."""
         entries: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         graph = graph or self._graph
         if graph is not None:
-            for task in getattr(graph, "tasks", []) or []:
+            for task in graph.tasks:
                 spec = getattr(task, "spec", None)
                 if spec is None:
                     continue
@@ -828,6 +662,7 @@ class KnowledgeGraph:
     def _merge_context(
         self, entries: Dict[Tuple[str, str, str], Dict[str, Any]]
     ) -> Dict[str, str]:
+        """Build a merged namespace context from collected semantics."""
         context: Dict[str, str] = {
             "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
             "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
@@ -838,47 +673,15 @@ class KnowledgeGraph:
             context.update(annotation.context)
         return context
 
-    def _build_socket_index(
-        self, entries: Dict[Tuple[str, str, str], Dict[str, Any]]
-    ) -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
-        """
-        Return ``(socket_index, sockets)`` mapping canonical socket IDs to compact IDs.
-
-        Each socket gets a compact id ``s{n}`` and carries basic metadata so
-        triples can reference it consistently.
-        """
-        socket_index: Dict[str, str] = {}
-        sockets: Dict[str, Dict[str, Any]] = {}
-        for idx, (key, entry) in enumerate(
-            sorted(entries.items(), key=lambda item: item[0]), start=1
-        ):
-            task_name, direction, socket_path = key
-            compact = f"s{idx}"
-            socket_meta: Dict[str, Any] = {
-                "task": task_name,
-                "direction": direction,
-                "port": socket_path,
-            }
-            if entry.get("socket_label"):
-                socket_meta["label"] = entry["socket_label"]
-            annotation = entry.get("annotation")
-            if socket_meta.get("label") is None and isinstance(
-                annotation, SemanticsAnnotation
-            ):
-                if annotation.label:
-                    socket_meta["label"] = annotation.label
-            sockets[compact] = socket_meta
-            canonical = _canonical_socket_id(task_name, direction, socket_path)
-            socket_index[canonical] = compact
-            sockets[compact]["canonical"] = canonical
-        return socket_index, sockets
-
-    def _object_value(self, value: Any, socket_index: Dict[str, str]) -> Any:
+    def _object_value(self, value: Any) -> Any:
+        """Normalize attribute/relation payloads into serialisable objects."""
         if isinstance(value, _SocketRef):
-            canonical = _canonical_socket_id(
-                value.task_name, value.kind, value.socket_path
+            socket_id = getattr(
+                value,
+                "_full_name_with_task",
+                self._socket_name(value.task_name, value.kind, value.socket_path),
             )
-            return socket_index.get(canonical, canonical)
+            return socket_id
         if isinstance(value, (str, int, float, bool)):
             return value
         if isinstance(value, dict):
@@ -888,10 +691,9 @@ class KnowledgeGraph:
         return repr(value)
 
     def _triples_from_entries(
-        self,
-        entries: Dict[Tuple[str, str, str], Dict[str, Any]],
-        socket_index: Dict[str, str],
+        self, entries: Dict[Tuple[str, str, str], Dict[str, Any]]
     ) -> List[List[Any]]:
+        """Build triples from collected semantics entries, deduplicating repeats."""
         triples: List[List[Any]] = []
         seen: set[Tuple[Any, Any, Any]] = set()
 
@@ -900,7 +702,7 @@ class KnowledgeGraph:
                 for item in value:
                     _emit(subject, predicate, item)
                 return
-            sig = (subject, predicate, self._object_value(value, socket_index))
+            sig = (subject, predicate, self._object_value(value))
             if sig in seen:
                 return
             seen.add(sig)
@@ -912,11 +714,11 @@ class KnowledgeGraph:
             annotation: Optional[SemanticsAnnotation] = entry.get("annotation")
             if annotation is None or annotation.is_empty:
                 continue
-            canonical = _canonical_socket_id(task_name, direction, socket_path)
-            subject = socket_index.get(canonical)
+            subject_id = self._socket_name(task_name, direction, socket_path)
+            subject = subject_id
             if subject is None:
                 continue
-            default_label = f"{task_name}.{socket_path or 'socket'}"
+            default_label = f"{task_name}.{direction}.{socket_path or 'socket'}"
             socket_label = entry.get("socket_label")
             label_value = socket_label or annotation.label or default_label
             _emit(subject, "rdfs:label", label_value)
@@ -932,16 +734,57 @@ class KnowledgeGraph:
                 _emit(subject, str(predicate), value)
         return triples
 
-    def update(self, graph: Optional[Any] = None) -> Dict[str, Any]:
+    def update(self) -> Dict[str, Any]:
         """
         Refresh entities/links from the current graph structure.
         """
 
-        if graph is not None:
-            self._graph = graph
-        self._refresh_from_graph(self._graph)
-        self._rdflib_graph = None
-        return self._payload
+        graph = self._graph
+        entries = self._collect_socket_semantics(graph)
+        if not entries:
+            return
+        self.namespaces.update(self._merge_context(entries))
+        new_sockets: Dict[str, Dict[str, Any]] = {}
+        for key, entry in sorted(entries.items(), key=lambda item: item[0]):
+            task_name, direction, socket_path = key
+            socket_id = self._socket_name(task_name, direction, socket_path)
+            socket_meta: Dict[str, Any] = {
+                "task": task_name,
+                "direction": direction,
+                "port": socket_path,
+                "canonical": socket_id,
+            }
+            label = entry.get("socket_label")
+            annotation = entry.get("annotation")
+            if not label and isinstance(annotation, SemanticsAnnotation):
+                label = annotation.label
+            if label:
+                socket_meta["label"] = label
+            new_sockets[socket_id] = socket_meta
+
+        new_triples = self._triples_from_entries(entries)
+
+        entities: Dict[str, Dict[str, Any]] = dict(self.entities)
+        for sid, meta in new_sockets.items():
+            if sid not in entities:
+                entities[sid] = dict(meta)
+
+        links: List[List[Any]] = list(self.links)
+        seen = {tuple(link) for link in links}
+        for triple in new_triples:
+            sig = tuple(triple)
+            if sig in seen:
+                continue
+            seen.add(sig)
+            links.append(triple)
+
+        self.entities = entities
+        self.links = links
+        self._payload = {
+            "context": dict(self.namespaces),
+            "sockets": entities,
+            "triples": links,
+        }
 
 
 __all__ = ["KnowledgeGraph"]

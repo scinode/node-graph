@@ -61,7 +61,13 @@ class SemanticTag(BaseModel):
 
     This is a thin Pydantic wrapper over the SemanticsAnnotation fields; it
     exists solely to offer IDE autocomplete/validation before the values are
-    normalised into a SemanticsAnnotation.
+    normalised into a SemanticsAnnotation. Field meanings:
+      - ``iri`` / ``rdf_types`` describe the subject itself; ``rdf_types`` maps
+        to ``rdf:type`` triples, so keep it top-level (not under ``attributes``).
+      - ``attributes`` is for literal predicate/value pairs (units, numbers,
+        DOIs). Values may be scalars or iterables.
+      - ``relations`` is for references to other resources/sockets (values may
+        be CURIEs, IRIs, or socket refs).
     """
 
     model_config = ConfigDict(extra="allow")
