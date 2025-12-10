@@ -200,6 +200,26 @@ def test_expose_outputs(test_ng):
     assert ng.outputs.add2._value == ng.tasks["add2"].outputs._value
 
 
+def test_graph_metadata_roundtrip():
+    meta = {"foo": "bar", "definition": {"package_version": "1.2.3"}}
+    ng = Graph(name="meta_graph", metadata=meta)
+    payload = ng.to_dict()
+    restored = Graph.from_dict(payload)
+    assert restored._metadata["foo"] == "bar"
+    assert restored.get_metadata()["foo"] == "bar"
+    assert restored._metadata["definition"]["package_version"] == "1.2.3"
+
+
+def test_graph_definition_metadata_from_build():
+    @task.graph(outputs=namespace(result=Any))
+    def test_graph(x):
+        return {"result": x}
+
+    ng = test_graph.build(1)
+    assert "definition" in ng._metadata
+    assert ng._metadata["definition"].get("task_identifier") == "test_graph"
+
+
 def test_expose_outputs_names(test_ng):
     """Test generation of outputs from named tasks"""
     ng = test_ng

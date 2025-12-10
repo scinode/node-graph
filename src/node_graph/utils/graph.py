@@ -150,7 +150,10 @@ def materialize_graph(
     assign its outputs and return the Graph.
     """
     from node_graph.utils import tag_socket_value, clean_socket_reference
-    from node_graph.utils.function import prepare_function_inputs
+    from node_graph.utils.function import (
+        prepare_function_inputs,
+        inspect_callable_metadata,
+    )
 
     if graph_class is None:
         from node_graph import Graph
@@ -160,6 +163,9 @@ def materialize_graph(
     merged = {**kwargs, **(var_kwargs or {})}
     name = identifier or func.__name__
     with graph_class(name=name, inputs=in_spec, outputs=out_spec) as graph:
+        definition_meta = inspect_callable_metadata(func)
+        definition_meta["task_identifier"] = name
+        graph._metadata.setdefault("definition", definition_meta)
         inputs = prepare_function_inputs(func, *args, **merged)
         inputs = clean_socket_reference(inputs)
         graph.graph_inputs.set_inputs(inputs)

@@ -40,24 +40,26 @@ how node-graph stores semantics, and provides runnable examples.
 #
 # - To extend the registry globally, call ``register_namespace("mat",
 #   "https://example.org/mat#")`` once at import time.
-# - To add a custom prefix for a single annotation, include it directly in the
-#   ``context`` dictionary of ``SemanticTag`` or the raw semantics payload.
-# - Explicit values always win over the defaults, so you can override or
-#   refine the URL per annotation if needed.
+# - To add a custom prefix, include it directly in the ``context`` dictionary of
+#   ``SemanticTag`` or the raw semantics payload.
+# - Explicit values always win over the defaults, so you can override or refine
+#   the URL per annotation if needed.
 
 # %%
 # How node-graph stores semantics
 # ------------------------------
 # 1. **Authoring**: sockets declare ``meta(semantics={...})`` (label, iri,
-#    rdf_types, context, attributes, relations). The graph keeps these in
-#    ``Graph.semantics_buffer`` so they survive serialization.
+#    rdf_types, context, attributes, relations). The graph keeps these in a
+#    dedicated ``Graph.knowledge_graph`` (runtime semantics survive serialization).
 # 2. **Execution**: engines match sockets to produced/consumed ``Data`` nodes,
 #    build JSON-LD snippets, and store them under ``node.base.extras['semantics']``.
 # 3. **Cross-socket references**: values inside ``relations`` or ``attributes``
 #    may refer to sockets (``"outputs.result"``).
-# 4. **Runtime attachments**: ``node_graph.semantics.attach_semantics`` lets you
-#    declare relations inside workflow code; the graph buffer remembers them
-#    until execution completes.
+# 4. **Runtime semantics**: ``node_graph.semantics.attach_semantics`` lets you
+#    declare relations inside workflow code; the knowledge-graph keeps them until
+#    execution completes.
+# 5. **RDF + visualisation**: the same ``KnowledgeGraph`` can be exported to rdflib
+#    or rendered with graphviz for quick inspection.
 
 # %%
 # Declaring socket semantics
@@ -69,10 +71,10 @@ how node-graph stores semantics, and provides runnable examples.
 from typing import Annotated, Any
 from node_graph import task
 from node_graph.socket_spec import meta, namespace
+from ase import Atoms
 
 energy_semantics_meta = meta(
     semantics={
-        "label": "Potential energy",
         "iri": "qudt:PotentialEnergy",
         "rdf_types": ["qudt:QuantityValue"],
         "context": {
@@ -87,8 +89,16 @@ energy_semantics_meta = meta(
 
 
 @task()
-def AnnotateSemantics(energy: float) -> Annotated[float, energy_semantics_meta]:
+def calc_energy(atoms: Atoms) -> Annotated[float, energy_semantics_meta]:
+    from ase.calculators.emt import EMT
+
+    energy = atoms.get_potential_energy(calculator=EMT())
     return energy
+
+
+# ``attributes`` is the right place for literal predicate/value pairs (units,
+# DOIs, numbers). Use ``relations`` when the value is a reference to another
+# resource or socket (e.g., CURIE/IRI pointing to a dataset or another port).
 
 
 # %%
@@ -129,9 +139,17 @@ def TypedSemantics(energy: float) -> Annotated[float, meta(semantics=EnergyEV)]:
 # ``structure`` has a relation ``mat:hasProperty`` pointing to the output of the
 # ``compute_band_structure`` task.
 
+BAND_META = meta(
+    semantics={
+        "label": "Band Structure",
+        "description": "The electronic band structure of a material.",
+        "iri": "emmo:BandStructure",
+    }
+)
+
 
 @task()
-def compute_band_structure(structure):
+def compute_band_structure(structure) -> Annotated[float, BAND_META]:
     return 1.0
 
 
@@ -167,13 +185,22 @@ def workflow(structure: Annotated[Any, structure_meta]):
 from node_graph.semantics import attach_semantics
 
 
+DENSITY_OF_STATES_META = meta(
+    semantics={
+        "label": "Density of States",
+        "description": "The electronic density of states of a material.",
+        "iri": "emmo:DensityOfStates",
+    }
+)
+
+
 @task()
 def generate(structure):
     return structure
 
 
 @task()
-def compute_density_of_states(structure):
+def compute_density_of_states(structure) -> Annotated[float, DENSITY_OF_STATES_META]:
     return 1.0
 
 
@@ -194,6 +221,20 @@ def workflow_with_runtime_semantics(
         socket_label="result",
     )
     return {"output_structure": mutated, "bands": bands, "dos": dos}
+
+
+# %%
+# Exporting or visualising the knowledge graph
+# --------------------------------------------
+# Every materialised graph carries a ``knowledge_graph`` attribute that owns the
+# semantics buffer and can emit an rdflib graph or a Graphviz Digraph.
+
+
+ng = workflow_with_runtime_semantics.build(structure="test")
+ng.knowledge_graph
+
+# ``rdf_graph`` can be serialized (e.g., ``rdf_graph.serialize(format=\"turtle\")``),
+# while ``viz`` renders/exports to DOT/SVG/PDF for documentation.
 
 
 # %%

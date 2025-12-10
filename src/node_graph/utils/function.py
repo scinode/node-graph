@@ -1,13 +1,44 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, Optional
 import inspect
+import importlib.metadata
 
-__all__ = ["prepare_function_inputs", "is_function_like"]
+__all__ = ["prepare_function_inputs", "is_function_like", "inspect_callable_metadata"]
 
 
 def is_function_like(obj: Any) -> bool:
     return inspect.isfunction(obj) or inspect.ismethod(obj) or inspect.isbuiltin(obj)
+
+
+def inspect_callable_metadata(func: Any) -> Dict[str, Optional[str]]:
+    """Return a compact identity record for a Python callable."""
+
+    module = getattr(func, "__module__", None)
+    qualname = getattr(func, "__qualname__", None) or getattr(func, "__name__", None)
+    callable_path = f"{module}.{qualname}" if module and qualname else qualname
+    try:
+        filename = inspect.getsourcefile(func) or inspect.getfile(func)  # type: ignore[arg-type]
+    except Exception:
+        filename = None
+    package = module.split(".")[0] if module else None
+    package_version: Optional[str]
+    if package:
+        try:
+            package_version = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            package_version = None
+    else:
+        package_version = None
+
+    return {
+        "module": module,
+        "qualname": qualname,
+        "callable_path": callable_path,
+        "file_path": filename,
+        "package": package,
+        "package_version": package_version,
+    }
 
 
 def prepare_function_inputs(func, *call_args, **call_kwargs):

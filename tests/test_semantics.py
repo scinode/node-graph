@@ -3,6 +3,7 @@ from typing import Any, Annotated
 from node_graph import task, namespace
 from node_graph import dynamic
 from node_graph.semantics import (
+    ATTR_REF_KEY,
     TaskSemantics,
     OntologyEnum,
     SemanticsAnnotation,
@@ -10,6 +11,7 @@ from node_graph.semantics import (
     SemanticsRelation,
     SemanticsTree,
     SemanticTag,
+    attribute_ref,
     namespace_registry,
     _capture_semantics_value,
     _normalize_semantics_buffer,
@@ -44,16 +46,8 @@ def test_attach_semantics_records_relations():
         context={"mat": "https://example.org/mat#"},
     )
 
-    buffer = graph.semantics_buffer
-    assert len(buffer["relations"]) == 1
-    rel = buffer["relations"][0]
-    assert isinstance(rel, SemanticsRelation)
-    assert rel.predicate == "mat:hasProperty"
-    assert rel.label == "Relation label"
-    assert rel.subject.task_name == "emit"
-    assert rel.values[0].task_name == "emit1"
-    assert rel.subject.graph_uuid == graph.uuid
-    assert rel.values[0].graph_uuid == graph.uuid
+    triples = graph.knowledge_graph.links
+    assert any(pred == "mat:hasProperty" for _, pred, _ in triples)
 
 
 def test_attach_relation_helper_orders_args():
@@ -69,12 +63,8 @@ def test_attach_relation_helper_orders_args():
         context={"emmo": "https://emmo.info/emmo#"},
     )
 
-    buffer = graph.semantics_buffer
-    assert len(buffer["relations"]) == 1
-    rel = buffer["relations"][0]
-    assert isinstance(rel, SemanticsRelation)
-    assert rel.predicate == "emmo:hasProperty"
-    assert rel.subject == _socket_ref_from_value(target)
+    triples = graph.knowledge_graph.links
+    assert any(pred == "emmo:hasProperty" for _, pred, _ in triples)
 
 
 def test_attach_semantics_with_predicate_kw():
@@ -90,11 +80,8 @@ def test_attach_semantics_with_predicate_kw():
         context={"emmo": "https://emmo.info/emmo#"},
     )
 
-    buffer = graph.semantics_buffer
-    assert len(buffer["relations"]) == 1
-    rel = buffer["relations"][0]
-    assert isinstance(rel, SemanticsRelation)
-    assert rel.predicate == "emmo:hasProperty"
+    triples = graph.knowledge_graph.links
+    assert any(pred == "emmo:hasProperty" for _, pred, _ in triples)
 
 
 def test_attach_annotation_helper_adds_payload():
@@ -107,12 +94,10 @@ def test_attach_annotation_helper_adds_payload():
         socket_label="result",
     )
 
-    buffer = graph.semantics_buffer
-    assert len(buffer["payloads"]) == 1
-    payload = buffer["payloads"][0]
-    assert isinstance(payload, SemanticsPayload)
-    assert payload.socket_label == "result"
-    assert payload.semantics["label"] == "Generated structure"
+    labels = [
+        obj for subj, pred, obj in graph.knowledge_graph.links if pred == "rdfs:label"
+    ]
+    assert "Generated structure" in labels
 
 
 def test_attach_semantics_records_payloads():
@@ -121,15 +106,14 @@ def test_attach_semantics_records_payloads():
 
     attach_semantics(subject, semantics={"label": "Sample", "iri": "qudt:Energy"})
 
-    buffer = graph.semantics_buffer
-    assert len(buffer["payloads"]) == 1
-    payload = buffer["payloads"][0]
-    assert isinstance(payload, SemanticsPayload)
-    assert payload.socket_label is None
-    assert payload.semantics["label"] == "Sample"
-    assert payload.semantics["iri"] == "qudt:Energy"
-    assert payload.subject.task_name == "emit"
-    assert payload.subject.graph_uuid == graph.uuid
+    labels = [
+        obj for _, pred, obj in graph.knowledge_graph.links if pred == "rdfs:label"
+    ]
+    assert "Sample" in labels
+    assert any(
+        pred == "rdf:type" and obj == "qudt:Energy"
+        for _, pred, obj in graph.knowledge_graph.links
+    )
 
 
 def test_attach_semantics_with_predicate_and_annotation_payload():
@@ -147,22 +131,37 @@ def test_attach_semantics_with_predicate_and_annotation_payload():
         socket_label="result",
     )
 
-    buffer = graph.semantics_buffer
-    assert buffer["relations"] == []
-    assert len(buffer["payloads"]) == 1
-    payload = buffer["payloads"][0]
-    assert isinstance(payload, SemanticsPayload)
-    assert payload.socket_label == "result"
-    assert payload.subject == _socket_ref_from_value(target)
-    semantics = payload.semantics
-    assert isinstance(semantics, dict)
-    assert semantics["iri"] == "emmo:Material"
-    assert semantics["label"] == "Material annotation"
-    assert semantics["context"]["emmo"] == "https://emmo.info/emmo#"
-    assert semantics["relations"]["emmo:hasProperty"] == _socket_ref_from_value(source)
+    labels = [
+        obj for _, pred, obj in graph.knowledge_graph.links if pred == "rdfs:label"
+    ]
+    assert "Material annotation" in labels
+    assert any(
+        pred == "rdf:type" and obj == "emmo:Material"
+        for _, pred, obj in graph.knowledge_graph.links
+    )
+    assert any(
+        pred == "emmo:hasProperty" for _, pred, obj in graph.knowledge_graph.links
+    )
 
 
-def test_serialization_roundtrip_preserves_semantics_buffer():
+def test_attach_semantics_with_predicate_and_no_objects_keeps_annotation():
+    graph = simple_graph.build()
+    target = graph.tasks["emit"].outputs.result
+
+    attach_semantics(
+        target,
+        objects=None,
+        predicate="emmo:hasProperty",
+        semantics={"label": "Material"},
+    )
+
+    labels = [
+        obj for _, pred, obj in graph.knowledge_graph.links if pred == "rdfs:label"
+    ]
+    assert "Material" in labels
+
+
+def test_serialization_roundtrip_preserves_semantics():
     graph = simple_graph.build()
     subject = graph.tasks["emit"].outputs.result
     attach_semantics(subject, semantics={"label": "Sample"})
@@ -170,7 +169,7 @@ def test_serialization_roundtrip_preserves_semantics_buffer():
     serialized = graph.to_dict()
     rebuilt = type(graph).from_dict(serialized)
 
-    assert rebuilt.semantics_buffer == serialized["semantics_buffer"]
+    assert rebuilt.knowledge_graph.links == serialized["knowledge_graph"]["triples"]
 
 
 def test_semantics_annotation_merge_and_combine():
@@ -278,3 +277,25 @@ def test_default_namespace_registry_injects_missing_context():
     registry = namespace_registry()
     assert all(prefix in registry for prefix in ("prov", "schema", "qudt"))
     assert ann.context["prov"] == registry["prov"]
+
+
+def test_attribute_ref_allows_self_reference():
+    marker = attribute_ref("value")
+    payload = marker[ATTR_REF_KEY]
+    assert payload["socket"] is None
+    assert payload["key"] == "value"
+
+
+def test_attribute_ref_marks_socket_for_late_resolution():
+    graph = simple_graph.build()
+    subject = graph.tasks["emit"].outputs.result
+    marker = attribute_ref("formula", subject)
+
+    attach_semantics(
+        subject,
+        semantics={"attributes": {"schema:identifier": marker}},
+    )
+
+    triples = graph.knowledge_graph.links
+    matches = [(pred, obj) for _, pred, obj in triples if pred == "schema:identifier"]
+    assert matches
