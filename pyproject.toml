@@ -35,6 +35,7 @@ dependencies = [
     "pyyaml",
     "rdflib>=6.0",
     "graphviz>=0.20",
+    "click>=8.1",
 ]
 
 [project.urls]
@@ -100,3 +101,6 @@ tests = [
 
 [project.entry-points."node_graph.type_promotion"]
 "workgraph.builtins_mapping" = "node_graph.link:TYPE_PROMOTIONS"
+
+[project.scripts]
+node-graph = "node_graph.cli:cli"
