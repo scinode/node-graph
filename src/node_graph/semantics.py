@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from node_graph.socket import BaseSocket, TaggedValue
 from node_graph.socket_spec import SocketSpec
+from node_graph.utils.json_utils import json_ready
 
 DEFAULT_NAMESPACE_REGISTRY: Dict[str, str] = {
     "qudt": "http://qudt.org/schema/qudt/",
@@ -89,21 +90,7 @@ class SemanticTag(BaseModel):
 def _json_ready(value: Any) -> Any:
     """Convert semantics payloads into JSON-serialisable structures."""
 
-    if is_dataclass(value):
-        return _json_ready(asdict(value))
-    if isinstance(value, BaseModel):
-        return _json_ready(value.model_dump(exclude_none=True))
-    if isinstance(value, Enum):
-        return _json_ready(value.value)
-    if isinstance(value, Mapping):
-        return {k: _json_ready(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_ready(v) for v in value]
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return repr(value)
+    return json_ready(value)
 
 
 def _detect_prefixes(value: Any) -> Set[str]:

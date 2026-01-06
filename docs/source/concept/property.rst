@@ -15,14 +15,14 @@ Data type
 
 Property can have different data type:
 
-- :class:`~node_graph.property.FloatProperty`
-- :class:`~node_graph.property.IntProperty`
-- :class:`~node_graph.property.BoolProperty`
-- :class:`~node_graph.property.StringProperty`
-- :class:`~node_graph.property.EnumProperty`
-- :class:`~node_graph.property.FloatVectorProperty`
-- :class:`~node_graph.property.IntVectorProperty`
-- :class:`~node_graph.property.BoolVectorProperty`
+- :class:`~node_graph.properties.builtins.PropertyFloat`
+- :class:`~node_graph.properties.builtins.PropertyInt`
+- :class:`~node_graph.properties.builtins.PropertyBool`
+- :class:`~node_graph.properties.builtins.PropertyString`
+- :class:`~node_graph.properties.builtins.PropertyEnum`
+- :class:`~node_graph.properties.builtins.PropertyFloatVector`
+- :class:`~node_graph.properties.builtins.PropertyIntVector`
+- :class:`~node_graph.properties.builtins.PropertyBoolVector`
 
 One can extend the property type by designing a custom property. Please read :ref:`custom_property` page for how to create a custom property type.
 
@@ -40,6 +40,32 @@ One can set the value of a property by:
    # or by
    float1.set_inputs({"Float": 2.0})
 
+Validation and wrapped values
+--------------------------------
+
+Each property type declares ``allowed_types`` and values are validated when assigned.
+
+In some runtimes, you may store values using wrapper objects (for example an ORM data node that exposes a Python value via ``.value``).
+To support this without hardcoding third-party dependencies, ``TaskProperty.validate`` accepts a value if any of these match ``allowed_types``:
+
+- the value itself
+- ``value.__wrapped__`` (if present)
+- ``value.value`` (if present)
+- values returned by any registered validation adapters
+
+External packages (e.g. an engine) can register adapters globally:
+
+.. code:: Python
+
+   from node_graph.property import TaskProperty
+
+   def unwrap_custom(value):
+       if hasattr(value, "get_list") and callable(value.get_list):
+           return value.get_list()
+       return TaskProperty.NOT_ADAPTED
+
+   TaskProperty.register_validation_adapter(unwrap_custom)
+
 
 Create properties for a new Task
 ----------------------------------------
@@ -47,7 +73,7 @@ Create properties for a new Task
 .. code:: Python
 
       def create_properties(self):
-         self.add_property("FloatVector", "x", size=3, default=[0, 0, 0])
+         self.add_property("node_graph.float_vector", "x", size=3, default=[0, 0, 0])
 
 Add properties to a input socket
 ----------------------------------------
@@ -56,7 +82,7 @@ Add properties to a input socket
 
       def update_spec(self):
          inp = self.add_input("node_graph.any", "x")
-         inp.add_property("FloatVector", size=3, default=[0, 0, 0])
+         inp.add_property("node_graph.float_vector", size=3, default=[0, 0, 0])
 
 Assigning to Existing Task
 --------------------------------
@@ -92,5 +118,5 @@ List of all Methods
 .. automodule:: node_graph.property
    :members:
 
-.. automodule:: node_graph.properties.built_in
+.. automodule:: node_graph.properties.builtins
    :members:

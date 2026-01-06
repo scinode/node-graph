@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from uuid import uuid4
-from typing import Any, Dict, Mapping, Optional, Union, Tuple, List
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 from rdflib import Graph as RDFGraph
 from rdflib import Literal, Namespace, URIRef
@@ -17,15 +15,20 @@ from node_graph.semantics import (
     namespace_registry,
     TaskSemantics,
 )
-
-try:
-    from graphviz import Digraph
-except Exception:
-    Digraph = None
+from node_graph.utils.json_utils import hashable_signature, json_ready, triple_signature
 
 
 class KnowledgeGraph:
-    """Light-weight container for semantics-backed knowledge graphs."""
+    """Light-weight container for semantics-backed knowledge graphs.
+
+    The instance maintains a minimal, JSON-friendly representation:
+
+    - ``entities``: socket metadata keyed by a stable socket id
+    - ``links``: triple-like records ``[subject, predicate, object]``
+
+    The graph can be populated either incrementally (``add_payload`` / ``add_relation``)
+    or by collecting semantics annotations from an attached node-graph ``Graph`` (``update``).
+    """
 
     def __init__(
         self,
@@ -37,12 +40,24 @@ class KnowledgeGraph:
         """Initialize a KnowledgeGraph with optional identifiers and namespace bindings."""
         self.graph_uuid = graph_uuid
         self.namespaces: Dict[str, str] = dict(namespaces or namespace_registry())
+        self.metadata: Dict[str, Any] = {}
         self._rdflib_graph: Optional[RDFGraph] = None
         self._payload: Dict[str, Any] = {}
         self._dirty: bool = True
         self._graph: Any = graph
         self.entities: Dict[str, Dict[str, Any]] = {}
         self.links: List[List[Any]] = []
+
+    def __repr__(self) -> str:  # pragma: no cover - formatting helper
+        uuid = self.graph_uuid or "<unknown>"
+        return (
+            f"KnowledgeGraph(graph_uuid={uuid!s}, "
+            f"sockets={len(self.entities)}, triples={len(self.links)}, "
+            f"namespaces={len(self.namespaces)})"
+        )
+
+    def __str__(self) -> str:
+        return self._repr()
 
     def add_payload(self, payload: SemanticsPayload) -> None:
         """Record a semantics payload directly into entities/links."""
@@ -279,40 +294,19 @@ class KnowledgeGraph:
         self._rdflib_graph = graph
         return self._rdflib_graph
 
-    def to_graphviz(self) -> "Digraph":
+    def to_graphviz(self):
         """Render the knowledge graph into a Graphviz Digraph."""
-        if Digraph is None:  # pragma: no cover - import guarded
-            raise RuntimeError(
-                "graphviz is not installed; please `pip install graphviz`."
-            )
+        from node_graph.knowledge.visualization import to_graphviz as _to_graphviz
 
-        rdf = self.as_rdflib()
-        dot = Digraph(name="KnowledgeGraph")
-        node_ids: Dict[Any, str] = {}
-
-        def _label(term: Any) -> str:
-            try:
-                return rdf.namespace_manager.normalizeUri(term)
-            except Exception:
-                return str(term)
-
-        def _node_id(term: Any) -> str:
-            if term not in node_ids:
-                node_ids[term] = f"n{len(node_ids)}"
-            return node_ids[term]
-
-        for subj, pred, obj in rdf:
-            s_id = _node_id(subj)
-            o_id = _node_id(obj)
-            dot.node(s_id, _label(subj))
-            dot.node(o_id, _label(obj))
-            dot.edge(s_id, o_id, label=_label(pred))
-        return dot
+        return _to_graphviz(self)
 
     def to_graphviz_svg(self) -> str:
         """Return an SVG serialization of the knowledge graph via graphviz."""
-        graph = self.to_graphviz()
-        return graph.pipe(format="svg").decode("utf-8")
+        from node_graph.knowledge.visualization import (
+            to_graphviz_svg as _to_graphviz_svg,
+        )
+
+        return _to_graphviz_svg(self)
 
     def _repr_svg_(self) -> Optional[str]:
         """IPython/Jupyter SVG repr hook."""
@@ -321,209 +315,23 @@ class KnowledgeGraph:
         except RuntimeError:
             return None
 
-    def _zoomable_html_fragment(
-        self,
-        *,
-        container_id: str,
-        inner_id: str,
-        svg: str,
-        zoom_in_id: str,
-        zoom_out_id: str,
-        reset_id: str,
-        fullscreen_id: str,
-        container_class: str = "",
-        container_style: str = "",
-        viewport_class: str = "",
-        viewport_style: str = "",
-        controls_class: str = "",
-    ) -> str:
-        """Reusable HTML/JS snippet that wires zoom/fullscreen controls to a graph SVG."""
-        container_class_attr = f' class="{container_class}"' if container_class else ""
-        container_style_attr = f' style="{container_style}"' if container_style else ""
-        viewport_class_attr = f' class="{viewport_class}"' if viewport_class else ""
-        viewport_style_attr = f' style="{viewport_style}"' if viewport_style else ""
-        controls_class_attr = f' class="{controls_class}"' if controls_class else ""
-
-        return "\n".join(
-            [
-                f'<div id="{container_id}"{container_class_attr}{container_style_attr}>',
-                f"  <div{controls_class_attr}>",
-                f'    <button id="{zoom_in_id}" title="Zoom in">+</button>',
-                f'    <button id="{zoom_out_id}" title="Zoom out">-</button>',
-                f'    <button id="{reset_id}" title="Reset zoom">reset</button>',
-                f'    <button id="{fullscreen_id}" title="Fullscreen">fullscreen</button>',
-                "  </div>",
-                f'  <div id="{inner_id}"{viewport_class_attr}{viewport_style_attr}>{svg}</div>',
-                "</div>",
-                "<script>",
-                "  (function() {",
-                f"    const container = document.getElementById('{container_id}');",
-                f"    const viewport = document.getElementById('{inner_id}');",
-                f"    const btnIn = document.getElementById('{zoom_in_id}');",
-                f"    const btnOut = document.getElementById('{zoom_out_id}');",
-                f"    const btnReset = document.getElementById('{reset_id}');",
-                f"    const btnFs = document.getElementById('{fullscreen_id}');",
-                "    let kgScale = 1;",
-                "    const clamp = (val) => Math.min(4, Math.max(0.25, val));",
-                "    const apply = () => { viewport.style.transform = `scale(${kgScale})`; };",
-                "    const setScale = (val) => { kgScale = clamp(val); apply(); };",
-                "    const onWheel = (ev) => {",
-                "      if (!ev.ctrlKey) return;",
-                "      ev.preventDefault();",
-                "      const factor = ev.deltaY < 0 ? 1.1 : 1/1.1;",
-                "      const prev = kgScale;",
-                "      setScale(kgScale * factor);",
-                "      const rect = viewport.getBoundingClientRect();",
-                "      const offsetX = ev.clientX - rect.left;",
-                "      const offsetY = ev.clientY - rect.top;",
-                "      const ratio = kgScale / prev;",
-                "      container.scrollLeft = offsetX * (ratio - 1) + container.scrollLeft;",
-                "      container.scrollTop = offsetY * (ratio - 1) + container.scrollTop;",
-                "    };",
-                "    container.addEventListener('wheel', onWheel, { passive: false });",
-                "    btnIn.onclick = () => setScale(kgScale * 1.2);",
-                "    btnOut.onclick = () => setScale(kgScale / 1.2);",
-                "    btnReset.onclick = () => setScale(1);",
-                "    btnFs.onclick = () => {",
-                "      if (!document.fullscreenElement) { container.requestFullscreen?.(); }",
-                "      else { document.exitFullscreen?.(); }",
-                "    };",
-                "    setScale(1);",
-                "  }());",
-                "</script>",
-            ]
-        )
-
     def _repr_html_(self) -> Optional[str]:  # pragma: no cover - exercised in notebooks
-        """HTML repr hook that reuses the graphviz SVG with controls."""
-        svg = self._repr_svg_()
-        if svg is None:
-            return None
-        container_id = f"kg-{self.graph_uuid or uuid4()}"
-        inner_id = f"{container_id}-inner"
-        zoom_in_id = f"{container_id}-zin"
-        zoom_out_id = f"{container_id}-zout"
-        reset_id = f"{container_id}-reset"
-        fullscreen_id = f"{container_id}-fs"
-        fragment = self._zoomable_html_fragment(
-            container_id=container_id,
-            inner_id=inner_id,
-            svg=svg,
-            zoom_in_id=zoom_in_id,
-            zoom_out_id=zoom_out_id,
-            reset_id=reset_id,
-            fullscreen_id=fullscreen_id,
-            container_class="node-graph-knowledge-graph",
-            container_style="overflow:auto; position:relative;",
-            viewport_style="transform-origin: top left; display:inline-block;",
-            controls_class="node-graph-kg-controls",
-        )
-        return "\n".join(
-            [
-                "<style>",
-                f"  #{container_id}, #{container_id} svg {{ background: #ffffff; }}",
-                f"  #{container_id}:fullscreen {{ background: #ffffff; }}",
-                "</style>",
-                fragment,
-            ]
-        )
+        """IPython/Jupyter HTML repr hook."""
+        from node_graph.knowledge.visualization import repr_html as _repr_html
+
+        return _repr_html(self)
 
     def to_html(self, title: Optional[str] = None) -> str:
-        """Return an HTML document embedding the rendered knowledge graph with basic zoom/fullscreen controls."""
-        svg = self.to_graphviz_svg()
-        page_title = title or f"{self.graph_uuid or 'Graph'} knowledge graph"
-        container_id = f"kg-{self.graph_uuid or uuid4()}"
-        inner_id = f"{container_id}-inner"
-        zoom_in_id = f"{container_id}-zin"
-        zoom_out_id = f"{container_id}-zout"
-        reset_id = f"{container_id}-reset"
-        fullscreen_id = f"{container_id}-fs"
-        fragment = self._zoomable_html_fragment(
-            container_id=container_id,
-            inner_id=inner_id,
-            svg=svg,
-            zoom_in_id=zoom_in_id,
-            zoom_out_id=zoom_out_id,
-            reset_id=reset_id,
-            fullscreen_id=fullscreen_id,
-            container_class="kg-container",
-            container_style="overflow:auto;",
-            viewport_class="kg-viewport",
-            controls_class="kg-controls",
-        )
-        return """<!DOCTYPE html>\n""" + "\n".join(
-            [
-                '<html lang="en">',
-                "  <head>",
-                '    <meta charset="utf-8" />',
-                f"    <title>{page_title}</title>",
-                "    <style>",
-                "      body {",
-                "        font-family: Helvetica, Arial, sans-serif;",
-                "        background-color: #f9f9fb;",
-                "        margin: 0;",
-                "        padding: 1.5rem;",
-                "        color: #212121;",
-                "      }",
-                "      .container {",
-                "        background-color: #ffffff;",
-                "        padding: 1.5rem;",
-                "        border-radius: 12px;",
-                "        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);",
-                "        overflow: auto;",
-                "        position: relative;",
-                "        min-height: 60vh;",
-                "      }",
-                "      .kg-container { background: #ffffff; }",
-                "      .kg-container:fullscreen { background: #ffffff; }",
-                "      .kg-container svg { background: #ffffff; }",
-                "      h1 {",
-                "        font-size: 1.5rem;",
-                "        margin-top: 0;",
-                "        margin-bottom: 1rem;",
-                "      }",
-                "      svg {",
-                "        height: auto;",
-                "      }",
-                "      .kg-controls {",
-                "        display: flex;",
-                "        gap: 0.5rem;",
-                "        margin-bottom: 0.75rem;",
-                "        flex-wrap: wrap;",
-                "      }",
-                "      .kg-controls button {",
-                "        padding: 0.35rem 0.75rem;",
-                "        border-radius: 6px;",
-                "        border: 1px solid #e0e0e0;",
-                "        background: #fafafa;",
-                "        cursor: pointer;",
-                "      }",
-                "      .kg-controls button:hover {",
-                "        background: #f1f1f1;",
-                "      }",
-                "      .kg-viewport {",
-                "        transform-origin: top left;",
-                "        display: inline-block;",
-                "      }",
-                "    </style>",
-                "  </head>",
-                "  <body>",
-                '    <div class="container">',
-                f"      <h1>{page_title}</h1>",
-                f"      {fragment}",
-                "    </div>",
-                "  </body>",
-                "</html>",
-            ]
-        )
+        """Return an HTML document embedding the rendered knowledge graph."""
+        from node_graph.knowledge.visualization import to_html as _to_html
+
+        return _to_html(self, title=title)
 
     def save_html(self, path: str, title: Optional[str] = None) -> str:
         """Serialize the HTML view to ``path`` and return the resolved path."""
-        html = self.to_html(title=title)
-        path_obj = Path(path)
-        path_obj.parent.mkdir(parents=True, exist_ok=True)
-        path_obj.write_text(html, encoding="utf-8")
-        return str(path_obj)
+        from node_graph.knowledge.visualization import save_html as _save_html
+
+        return _save_html(self, str(path), title=title)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-friendly snapshot of namespaces, sockets, and triples."""
@@ -544,11 +352,28 @@ class KnowledgeGraph:
         """Construct a KnowledgeGraph from a serialized payload."""
         if payload is None:
             return cls(graph_uuid=graph_uuid)
-        namespaces = payload.get("namespaces") or namespace_registry()
-        graph_uuid = payload.get("graph_uuid") or graph_uuid
+        semantics_payload = (
+            payload.get("semantics")
+            if isinstance(payload.get("semantics"), dict)
+            else None
+        )
+        base_payload: Mapping[str, Any] = semantics_payload or payload
+
+        namespaces = base_payload.get("namespaces") or namespace_registry()
+        graph_uuid = (
+            base_payload.get("graph_uuid") or payload.get("graph_uuid") or graph_uuid
+        )
         kg = cls(graph_uuid=graph_uuid, namespaces=namespaces)
-        sockets = payload.get("sockets") or {}
-        triples = payload.get("triples") or []
+        # Preserve non-semantics metadata if the caller passes a wrapper payload.
+        if semantics_payload is not None:
+            kg.metadata = {
+                key: value
+                for key, value in dict(payload).items()
+                if key not in {"semantics"}
+            }
+
+        sockets = base_payload.get("sockets") or {}
+        triples = base_payload.get("triples") or []
         if sockets or triples:
             kg.entities = {sid: dict(meta) for sid, meta in sockets.items()}
             kg.links = [list(t) for t in triples]
@@ -563,7 +388,7 @@ class KnowledgeGraph:
             }
             kg._dirty = False
         else:
-            semantics = payload.get("semantics")
+            semantics = base_payload.get("semantics")
             if isinstance(semantics, dict):
                 kg._payload = semantics  # type: ignore[attr-defined]
                 kg.entities = dict(semantics.get("sockets", {}))
@@ -656,39 +481,29 @@ class KnowledgeGraph:
                     entry["annotation"] = self._merge_annotation(
                         entry.get("annotation"), annotation
                     )
-
         return entries
 
     def _merge_context(
         self, entries: Dict[Tuple[str, str, str], Dict[str, Any]]
     ) -> Dict[str, str]:
-        """Build a merged namespace context from collected semantics."""
-        context: Dict[str, str] = {
-            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-        }
-        for annotation in (entry.get("annotation") for entry in entries.values()):
-            if annotation is None:
+        context: Dict[str, str] = {}
+        for entry in entries.values():
+            annotation = entry.get("annotation")
+            if not isinstance(annotation, SemanticsAnnotation):
                 continue
-            context.update(annotation.context)
+            for prefix, iri in annotation.context.items():
+                context[str(prefix)] = str(iri)
         return context
 
     def _object_value(self, value: Any) -> Any:
-        """Normalize attribute/relation payloads into serialisable objects."""
+        """Normalize attribute/relation payloads into JSON-friendly objects."""
         if isinstance(value, _SocketRef):
-            socket_id = getattr(
+            return getattr(
                 value,
                 "_full_name_with_task",
                 self._socket_name(value.task_name, value.kind, value.socket_path),
             )
-            return socket_id
-        if isinstance(value, (str, int, float, bool)):
-            return value
-        if isinstance(value, dict):
-            return json.dumps(value, default=str)
-        if isinstance(value, (list, tuple, set)):
-            return json.dumps(list(value), default=str)
-        return repr(value)
+        return json_ready(value)
 
     def _triples_from_entries(
         self, entries: Dict[Tuple[str, str, str], Dict[str, Any]]
@@ -702,11 +517,12 @@ class KnowledgeGraph:
                 for item in value:
                     _emit(subject, predicate, item)
                 return
-            sig = (subject, predicate, self._object_value(value))
+            obj_value = self._object_value(value)
+            sig = (subject, predicate, hashable_signature(obj_value))
             if sig in seen:
                 return
             seen.add(sig)
-            triples.append([subject, predicate, sig[2]])
+            triples.append([subject, predicate, obj_value])
 
         for (task_name, direction, socket_path), entry in sorted(
             entries.items(), key=lambda item: item[0]
@@ -715,34 +531,30 @@ class KnowledgeGraph:
             if annotation is None or annotation.is_empty:
                 continue
             subject_id = self._socket_name(task_name, direction, socket_path)
-            subject = subject_id
-            if subject is None:
-                continue
             default_label = f"{task_name}.{direction}.{socket_path or 'socket'}"
             socket_label = entry.get("socket_label")
             label_value = socket_label or annotation.label or default_label
-            _emit(subject, "rdfs:label", label_value)
+            _emit(subject_id, "rdfs:label", label_value)
             if annotation.label and annotation.label != label_value:
-                _emit(subject, "rdfs:label", annotation.label)
+                _emit(subject_id, "rdfs:label", annotation.label)
             if annotation.iri:
-                _emit(subject, "rdf:type", annotation.iri)
+                _emit(subject_id, "rdf:type", annotation.iri)
             for rdf_type in annotation.rdf_types:
-                _emit(subject, "rdf:type", rdf_type)
+                _emit(subject_id, "rdf:type", rdf_type)
             for predicate, value in annotation.attributes.items():
-                _emit(subject, str(predicate), value)
+                _emit(subject_id, str(predicate), value)
             for predicate, value in annotation.relations.items():
-                _emit(subject, str(predicate), value)
+                _emit(subject_id, str(predicate), value)
         return triples
 
     def update(self) -> Dict[str, Any]:
-        """
-        Refresh entities/links from the current graph structure.
-        """
-
+        """Refresh entities/links from the current graph structure."""
         graph = self._graph
         entries = self._collect_socket_semantics(graph)
         if not entries:
-            return
+            self._payload = self._rebuild_payload_from_entities()
+            return self._payload
+
         self.namespaces.update(self._merge_context(entries))
         new_sockets: Dict[str, Dict[str, Any]] = {}
         for key, entry in sorted(entries.items(), key=lambda item: item[0]):
@@ -768,11 +580,15 @@ class KnowledgeGraph:
         for sid, meta in new_sockets.items():
             if sid not in entities:
                 entities[sid] = dict(meta)
+            else:
+                entities[sid].update(
+                    {k: v for k, v in meta.items() if k not in entities[sid]}
+                )
 
         links: List[List[Any]] = list(self.links)
-        seen = {tuple(link) for link in links}
+        seen = {triple_signature(link) for link in links}
         for triple in new_triples:
-            sig = tuple(triple)
+            sig = triple_signature(triple)
             if sig in seen:
                 continue
             seen.add(sig)
@@ -785,6 +601,9 @@ class KnowledgeGraph:
             "sockets": entities,
             "triples": links,
         }
+        self._dirty = False
+        self._rdflib_graph = None
+        return self._payload
 
 
 __all__ = ["KnowledgeGraph"]

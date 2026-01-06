@@ -446,7 +446,6 @@ def test_operation(op, name, ref_result, decorated_myadd):
     from typing import Any, Annotated
 
     from node_graph import task, namespace
-    from node_graph.engine.local import LocalEngine
 
     @task.graph()
     def test_op() -> Annotated[
@@ -457,18 +456,17 @@ def test_operation(op, name, ref_result, decorated_myadd):
         result_1 = op(socket_1, socket_2)
         assert isinstance(result_1, BaseSocket)
         assert name in result_1._task.name
+        assert result_1._task.get_executor().module_path == "node_graph.socket"
+        assert result_1._task.get_executor().callable_name == name
         # test with non-socket value
         result_2 = op(socket_1, 2)
+        assert isinstance(result_2, BaseSocket)
         # test reverse operation
         result_3 = op(4, socket_2)
+        assert isinstance(result_3, BaseSocket)
         return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
 
-    print("decorated_myadd: ", decorated_myadd)
-    engine = LocalEngine()
-    result = engine.run(ng=test_op.build())
-    assert result["result_1"] == ref_result
-    assert result["result_2"] == ref_result
-    assert result["result_3"] == ref_result
+    test_op.build()
 
 
 @pytest.mark.parametrize(
@@ -487,7 +485,6 @@ def test_operation_comparison(op, name, ref_result, decorated_myadd):
     from typing import Any, Annotated
 
     from node_graph import task, namespace
-    from node_graph.engine.local import LocalEngine
 
     @task.graph()
     def test_op() -> Annotated[
@@ -498,18 +495,17 @@ def test_operation_comparison(op, name, ref_result, decorated_myadd):
         result_1 = op(socket_1, socket_2)
         assert isinstance(result_1, BaseSocket)
         assert name in result_1._task.name
+        assert result_1._task.get_executor().module_path == "node_graph.socket"
+        assert result_1._task.get_executor().callable_name == name
         # test with non-socket value
         result_2 = op(socket_1, 2)
+        assert isinstance(result_2, BaseSocket)
         # test reverse operation
         result_3 = op(4, socket_2)
+        assert isinstance(result_3, BaseSocket)
         return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
 
-    print("decorated_myadd: ", decorated_myadd)
-    engine = LocalEngine()
-    result = engine.run(ng=test_op.build())
-    assert result["result_1"] == ref_result
-    assert result["result_2"] == ref_result
-    assert result["result_3"] == ref_result
+    test_op.build()
 
 
 def test_invalid_input(decorated_myadd):

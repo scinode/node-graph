@@ -6,7 +6,7 @@ from rdflib.namespace import RDFS
 
 from node_graph import Graph, namespace, task
 from node_graph.socket_spec import meta
-from node_graph.knowledge_graph import KnowledgeGraph
+from node_graph.knowledge import KnowledgeGraph
 from node_graph.semantics import (
     SemanticsAnnotation,
     SemanticsPayload,

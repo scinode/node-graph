@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Dict, Any, Union
+from typing import Optional, Callable, Dict, Any, Union, ClassVar, Iterable
 
 
 class TaskProperty:
@@ -10,6 +10,27 @@ class TaskProperty:
     property_entry: str = "node_graph.property"
     identifier: str = "TaskProperty"
     allowed_types = (object,)  # Allow any type
+    NOT_ADAPTED: ClassVar[object] = object()
+    _validation_adapters: ClassVar[list[Callable[[Any], Any]]] = []
+
+    @classmethod
+    def register_validation_adapter(cls, adapter: Callable[[Any], Any]) -> None:
+        """Register a validation adapter used when `allowed_types` checks fail.
+
+        The adapter is called as `adapter(value)` and should return either:
+        - `TaskProperty.NOT_ADAPTED` if it cannot adapt the value
+        - an adapted value that can be validated against `allowed_types`
+        """
+        if adapter not in cls._validation_adapters:
+            cls._validation_adapters.append(adapter)
+
+    @classmethod
+    def unregister_validation_adapter(cls, adapter: Callable[[Any], Any]) -> None:
+        """Unregister a previously registered validation adapter."""
+        try:
+            cls._validation_adapters.remove(adapter)
+        except ValueError:
+            return
 
     def __init__(
         self,
@@ -97,14 +118,39 @@ class TaskProperty:
         if self.update:
             self.update()
 
+    def _iter_validation_candidates(self, value: Any) -> Iterable[Any]:
+        yield value
+
+        for adapter in type(self)._validation_adapters:
+            try:
+                adapted = adapter(value)
+            except Exception:
+                continue
+            if adapted is self.NOT_ADAPTED:
+                continue
+            yield adapted
+
+    def _select_validation_candidate(
+        self, value: Any, allowed_types: Optional[tuple[type, ...]] = None
+    ) -> Any:
+        """Select the first candidate matching `allowed_types` (or `self.allowed_types`)."""
+        allowed = self.allowed_types if allowed_types is None else allowed_types
+        for candidate in self._iter_validation_candidates(value):
+            if isinstance(candidate, allowed):
+                return candidate
+        return value
+
     def validate(self, value: Any) -> None:
         """Validate the given value based on allowed types."""
-        if not isinstance(value, self.allowed_types):
-            raise TypeError(
-                f"Invalid value for property '{self.name}': "
-                f"expected {self.allowed_types}, but got {type(value).__name__} "
-                f"(value={value!r})."
-            )
+        for candidate in self._iter_validation_candidates(value):
+            if isinstance(candidate, self.allowed_types):
+                return
+
+        raise TypeError(
+            f"Invalid value for property '{self.name}': "
+            f"expected {self.allowed_types}, but got {type(value).__name__} "
+            f"(value={value!r})."
+        )
 
     def copy(self) -> "TaskProperty":
         """Create a shallow copy of the property."""
