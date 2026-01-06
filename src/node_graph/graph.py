@@ -12,7 +12,7 @@ from node_graph.link import TaskLink
 from node_graph.utils import yaml_to_dict
 from .config import BuiltinPolicy, BUILTIN_TASKS, MAX_LINK_LIMIT
 from .mixins import IOOwnerMixin, WidgetRenderableMixin
-from node_graph.knowledge_graph import KnowledgeGraph
+from node_graph.knowledge import KnowledgeGraph
 from dataclasses import dataclass
 from dataclasses import replace
 

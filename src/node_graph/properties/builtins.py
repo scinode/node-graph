@@ -118,22 +118,25 @@ class PropertyVector(TaskProperty, SerializeJson):
 
     def validate(self, value: Any) -> None:
         """Validate the given value based on allowed types."""
-        if value is not None:
-            if len(value) != self.size:
+        seq = self._select_validation_candidate(value)
+        if seq is not None:
+            if len(seq) != self.size:
                 raise ValueError(
-                    f"Invalid size: Expected {self.size}, got {len(value)} instead."
+                    f"Invalid size: Expected {self.size}, got {len(seq)} instead."
                 )
-            for v in value:
+            for v in seq:
                 self.validate_item(v)
 
         return super().validate(value)
 
     def validate_item(self, value: Any) -> None:
         """Validate the given value based on allowed types."""
-        if not isinstance(value, self.allowed_item_types):
-            raise TypeError(
-                f"Expected value of type {self.allowed_item_types}, got {type(value).__name__} instead."
-            )
+        for candidate in self._iter_validation_candidates(value):
+            if isinstance(candidate, self.allowed_item_types):
+                return
+        raise TypeError(
+            f"Expected value of type {self.allowed_item_types}, got {type(value).__name__} instead."
+        )
 
     def set_value(self, value: Any) -> None:
         self.validate(value)
@@ -204,22 +207,25 @@ class MatrixProperty(TaskProperty, SerializeJson):
     def validate(self, value: Any) -> None:
         """Validate the given value based on allowed types."""
         length = self.size[0] * self.size[1]
-        if value is not None:
-            if not (len(value) == length):
+        seq = self._select_validation_candidate(value)
+        if seq is not None:
+            if not (len(seq) == length):
                 raise ValueError(
-                    f"Invalid size: Expected {length}, got {len(value)} instead."
+                    f"Invalid size: Expected {length}, got {len(seq)} instead."
                 )
-            for v in value:
+            for v in seq:
                 self.validate_item(v)
 
         return super().validate(value)
 
     def validate_item(self, value: Any) -> None:
         """Validate the given value based on allowed types."""
-        if not isinstance(value, self.allowed_item_types):
-            raise TypeError(
-                f"Expected value of type {self.allowed_item_types}, got {type(value).__name__} instead."
-            )
+        for candidate in self._iter_validation_candidates(value):
+            if isinstance(candidate, self.allowed_item_types):
+                return
+        raise TypeError(
+            f"Expected value of type {self.allowed_item_types}, got {type(value).__name__} instead."
+        )
 
     def copy(self):
         p = self.__class__(
