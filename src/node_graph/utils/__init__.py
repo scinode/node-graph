@@ -26,7 +26,7 @@ def gaph_to_short_json(
 
         ngdata_short["tasks"][name] = {
             "label": task["name"],
-            "task_type": task["spec"]["task_type"].upper(),
+            "node_type": task["spec"]["task_type"].upper(),
             "inputs": inputs,
             "properties": {},
             "outputs": [],

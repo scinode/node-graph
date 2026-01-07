@@ -46,7 +46,7 @@ def _build_subgraph_task_taskspec(
     from node_graph.executor import RuntimeExecutor
 
     meta = {
-        "task_type": "WorkGraph",
+        "task_type": "Graph",
     }
 
     return TaskSpec(
