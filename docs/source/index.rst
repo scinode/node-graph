@@ -50,6 +50,7 @@ Then spin up your first graph:
    autogen/quick_start
    autogen/annotate_inputs_outputs
    autogen/annotate_semantics
+   autogen/zone
    concept/index
    yaml
    customize
