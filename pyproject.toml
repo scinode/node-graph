@@ -69,6 +69,9 @@ tests = [
 "node_graph.test_add" = "node_graph.tasks.tests:test_add"
 "node_graph.test_enum" = "node_graph.tasks.tests:TestEnum"
 "node_graph.test_enum_update" = "node_graph.tasks.tests:TestEnumUpdate"
+"node_graph.while_zone" = "node_graph.tasks.builtins:While"
+"node_graph.zone" = "node_graph.tasks.builtins:Zone"
+"node_graph.if_zone" = "node_graph.tasks.builtins:If"
 
 [project.entry-points."node_graph.socket"]
 "node_graph.any" = "node_graph.sockets.builtins:SocketAny"
@@ -97,10 +100,10 @@ tests = [
 "node_graph.base_list" = "node_graph.properties.builtins:PropertyBaseList"
 
 [project.entry-points."node_graph.type_mapping"]
-"workgraph.builtins_mapping" = "node_graph.orm.mapping:type_mapping"
+"node_graph.builtins_mapping" = "node_graph.orm.mapping:type_mapping"
 
 [project.entry-points."node_graph.type_promotion"]
-"workgraph.builtins_mapping" = "node_graph.link:TYPE_PROMOTIONS"
+"node_graph.builtins_mapping" = "node_graph.link:TYPE_PROMOTIONS"
 
 [project.scripts]
 node-graph = "node_graph.cli:cli"

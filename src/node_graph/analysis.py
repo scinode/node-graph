@@ -162,7 +162,7 @@ class GraphAnalysis:
             }
 
         *External inputs* are compressed to the **closest ancestor** outside
-        the zone – matching the logic in ``WorkGraphSaver.find_zone_inputs``.
+        the zone.
         """
         self._ensure_cache_valid()
         return self._cache_zone
@@ -303,7 +303,6 @@ class GraphAnalysis:
         """
         Populate ``_cache_zone`` for every task (each task is a "zone").
 
-        This method faithfully implements the WorkGraphSaver logic:
 
         1) **Direct child / parent mapping**
            - Build `direct_children[task]` from `task.children`.
@@ -311,7 +310,6 @@ class GraphAnalysis:
 
         2) **Parent chains**
            - `parent_chain(name)` returns a list [`parent`, ..., None]
-             matching WorkGraphSaver.update_parent_task.
 
         3) **Recursive zone input discovery** via `zone_inputs(zone_name)`:
 
@@ -352,7 +350,6 @@ class GraphAnalysis:
             for k in kids:
                 parent_of[k] = parent
 
-        # helper – parent chain (like WorkGraphSaver.update_parent_task)
         parent_chain_cache: Dict[str, List[Optional[str]]] = {}
 
         def parent_chain(name: str) -> List[Optional[str]]:

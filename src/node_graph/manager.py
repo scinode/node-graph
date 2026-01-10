@@ -8,6 +8,10 @@ Note pitfalls:
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
+from node_graph.tasks.task_pool import TaskPool
+from node_graph.socket import TaskSocket
+
+_current_graph: ContextVar["Graph | None"] = ContextVar("current_graph", default=None)
 
 
 class CurrentGraphManager:
@@ -20,12 +24,11 @@ class CurrentGraphManager:
         """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._graph = None  # Storage for the active graph
         return cls._instance
 
     def peek_current_graph(self):
         """Return the active graph or None (do NOT auto-create)."""
-        return self._graph
+        return _current_graph.get()
 
     def get_current_graph(self):
         """
@@ -33,15 +36,17 @@ class CurrentGraphManager:
         """
         from node_graph.graph import Graph
 
-        if self._graph is None:
-            self._graph = Graph()
-        return self._graph
+        g = _current_graph.get()
+        if g is None:
+            g = Graph()
+            _current_graph.set(g)
+        return g
 
     def set_current_graph(self, graph):
         """
         Set the active graph to the given instance.
         """
-        self._graph = graph
+        _current_graph.set(graph)
 
     @contextmanager
     def active_graph(self, graph):
@@ -49,41 +54,109 @@ class CurrentGraphManager:
         Context manager that temporarily overrides the current graph
         with `graph`, restoring the old graph when exiting the context.
         """
-        old_graph = self._graph
-        self._graph = graph
+        token = _current_graph.set(graph)
         try:
             yield graph
         finally:
-            self._graph = old_graph
+            _current_graph.reset(token)
 
 
 # Create a global manager instance
 _manager = CurrentGraphManager()
-_current_graph: ContextVar["Graph | None"] = ContextVar("current_graph", default=None)
 
 
 def peek_current_graph():
-    return _current_graph.get()
+    return _manager.peek_current_graph()
 
 
 def get_current_graph():
-    from node_graph.graph import Graph
-
-    g = _current_graph.get()
-    if g is None:
-        g = Graph()  # fallback to a default core graph
-        _current_graph.set(g)
-    return g
+    return _manager.get_current_graph()
 
 
 def set_current_graph(graph):
-    _current_graph.set(graph)
+    _manager.set_current_graph(graph)
 
 
 @contextmanager
 def active_graph(graph):
-    token = _current_graph.set(graph)
+    with _manager.active_graph(graph) as ctx:
+        yield ctx
+
+
+@contextmanager
+def Zone():
+    """
+    Context manager to create a "zone" in the current graph.
+    """
+
+    graph = get_current_graph()
+
+    zone_task = graph.add_task(
+        TaskPool.node_graph.zone,
+    )
+
+    old_zone = getattr(graph, "_active_zone", None)
+    if old_zone:
+        old_zone.children.add(zone_task)
+    graph._active_zone = zone_task
+
     try:
-        yield graph
+        yield zone_task
     finally:
-        _current_graph.reset(token)
+        graph._active_zone = old_zone
+
+
+@contextmanager
+def If(condition_socket: TaskSocket, invert_condition: bool = False):
+    """
+    Context manager to create a "conditional zone" in the current graph.
+
+    :param condition_socket: A TaskSocket or boolean-like object (e.g. sum_ > 0)
+    :param invert_condition: Whether to invert the condition (useful for else-zones)
+    """
+
+    graph = get_current_graph()
+
+    zone_task = graph.add_task(
+        TaskPool.node_graph.if_zone,
+        conditions=condition_socket,
+        invert_condition=invert_condition,
+    )
+
+    old_zone = getattr(graph, "_active_zone", None)
+    if old_zone:
+        old_zone.children.add(zone_task)
+    graph._active_zone = zone_task
+
+    try:
+        yield zone_task
+    finally:
+        graph._active_zone = old_zone
+
+
+@contextmanager
+def While(condition_socket: TaskSocket, max_iterations: int = 10000):
+    """
+    Context manager to create a "while zone" in the current graph.
+
+    :param condition_socket: A TaskSocket or boolean-like object (e.g. sum_ > 0)
+    :param max_iterations: Maximum number of iterations before breaking the loop
+    """
+
+    graph = get_current_graph()
+
+    zone_task = graph.add_task(
+        TaskPool.node_graph.while_zone,
+        conditions=condition_socket,
+        max_iterations=max_iterations,
+    )
+
+    old_zone = getattr(graph, "_active_zone", None)
+    if old_zone:
+        old_zone.children.add(zone_task)
+    graph._active_zone = zone_task
+
+    try:
+        yield zone_task
+    finally:
+        graph._active_zone = old_zone

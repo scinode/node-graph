@@ -92,7 +92,7 @@ def _raise_illegal(sock, what: str, tips: list[str]):
     common = [
         "General guidance:",
         "  • Wrap logic in a nested @task.graph.",
-        "  • Or use the WorkGraph If zone for branching on predicates.",
+        "  • Or use the Graph If zone for branching on predicates.",
         "  • Or for loops, use the While zone or Map zone.",
     ]
 
@@ -155,14 +155,14 @@ class OperatorSocketMixin:
         return task
 
     def _create_operator_task(self, op_func, x, y):
-        """Create a "hidden" operator Task in the WorkGraph,
+        """Create a "hidden" operator Task in the Graph,
         hooking `self` up as 'x' and `other` as 'y'.
         Return the output socket from that new Task.
         """
 
         graph = self._task.graph
         if not graph:
-            raise ValueError("Socket does not belong to a WorkGraph.")
+            raise ValueError("Socket does not belong to a Graph.")
 
         new_node = graph.tasks._new(
             self._decorator()(op_func),

@@ -1,8 +1,10 @@
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Annotated
 
-from node_graph.task import BuiltinPolicy, Task
+from node_graph.task import BuiltinPolicy, Task, ChildTaskSet
 from node_graph.task_spec import TaskSpec
+from node_graph.socket_spec import SocketSpec
+from node_graph import namespace
 
 
 class _GraphIOSharedMixin:
@@ -58,3 +60,64 @@ class GraphLevelTask(_GraphIOSharedMixin, Task):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._unify_io()
+
+
+class Zone(Task):
+    """
+    Extend the Task class to include a 'children' attribute.
+    """
+
+    _default_spec = TaskSpec(
+        identifier="node_graph.zone",
+        task_type="ZONE",
+        catalog="Control",
+        base_class_path="node_graph.tasks.builtins.Zone",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.children = ChildTaskSet(parent=self)
+
+    def add_task(self, *args, **kwargs) -> Task:
+        """Syntactic sugar to add a task to the zone."""
+        task = self.graph.add_task(*args, **kwargs)
+        self.children.add(task)
+        task.parent = self
+        return task
+
+    def to_dict(self, **kwargs) -> Dict[str, Any]:
+        tdata = super().to_dict(**kwargs)
+        tdata["children"] = [task.name for task in self.children]
+        return tdata
+
+
+class While(Zone):
+    """While"""
+
+    _default_spec = TaskSpec(
+        identifier="node_graph.while_zone",
+        task_type="WHILE",
+        catalog="Control",
+        inputs=namespace(
+            max_iterations=Annotated[int, SocketSpec("node_graph.any", default=10000)],
+            conditions=Annotated[Any, SocketSpec("node_graph.any", link_limit=100000)],
+        ),
+        base_class_path="node_graph.tasks.builtins.While",
+    )
+
+
+class If(Zone):
+    """If task"""
+
+    _default_spec = TaskSpec(
+        identifier="node_graph.if_zone",
+        task_type="IF",
+        catalog="Control",
+        inputs=namespace(
+            invert_condition=Annotated[
+                bool, SocketSpec("node_graph.bool", default=False)
+            ],
+            conditions=Annotated[Any, SocketSpec("node_graph.any", link_limit=100000)],
+        ),
+        base_class_path="node_graph.tasks.builtins.If",
+    )
