@@ -8,7 +8,7 @@ from .collection import group
 from .socket_spec import namespace, dynamic
 from .manager import get_current_graph, While, If
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 
 __all__ = [
