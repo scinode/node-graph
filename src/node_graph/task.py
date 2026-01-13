@@ -491,7 +491,11 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         else:
             raw_value = socket._value
 
-        links = getattr(socket, "_links", [])
+        links = [
+            link
+            for link in getattr(socket, "_links", [])
+            if getattr(link, "to_socket", None) is socket
+        ]
         if not links:
             return raw_value
 
