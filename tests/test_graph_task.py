@@ -152,3 +152,14 @@ def test_dynamic_outputs():
         match="Output socket name 'x' not declared in Graph task outputs.",
     ):
         graph = test_graph.build(x=2, y=3)
+
+
+def test_graph_inputs_value():
+    @task.graph()
+    def test_graph(x, y):
+        add(x, y)
+        add(x, y)
+
+    graph = test_graph.build(x=2, y=3)
+    assert graph.inputs.x.value == 2
+    assert graph.inputs.y.value == 3

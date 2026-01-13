@@ -491,7 +491,11 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         else:
             raw_value = socket._value
 
-        links = getattr(socket, "_links", [])
+        links = [
+            link
+            for link in getattr(socket, "_links", [])
+            if getattr(link, "to_socket", None) is socket
+        ]
         if not links:
             return raw_value
 
@@ -512,9 +516,9 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             from_socket = lk.from_socket
             key = f"{lk.from_task.name}_{from_socket._scoped_name}"
             if from_socket._scoped_name == "_outputs":
-                bundle[key] = from_socket._task.outputs._collect_values(esolve=False)
+                bundle[key] = from_socket._task.outputs._collect_values(resolve=False)
             elif isinstance(from_socket, TaskSocketNamespace):
-                bundle[key] = from_socket._collect_values(esolve=False)
+                bundle[key] = from_socket._collect_values(resolve=False)
             else:
                 bundle[key] = from_socket._value
         return bundle or raw_value
