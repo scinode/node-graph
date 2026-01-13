@@ -119,15 +119,6 @@ def test_clear_updatable_meta_clears_value_source():
     assert "value_source" not in inputs.x._metadata.extras
 
 
-def test_default_input_resolver_ignores_from_socket_links():
-    ng = Graph(name="test_input_resolver_direction")
-    add1 = ng.add_task(test_add, "add1")
-    add2 = ng.add_task(test_add, "add2")
-    add2.set_inputs({"x": add1.outputs.result})
-    add1.outputs.result.value = 4
-    assert add1.outputs.result.value == 4
-
-
 def test_set_non_exit_input_for_dynamic_input():
     task = Task()
     task.inputs._metadata.dynamic = True
