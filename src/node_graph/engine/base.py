@@ -56,16 +56,16 @@ class BaseEngine(ABC):
             sub_ng = self._build_subgraph(task, graph_fn, kwargs)
             parent_pid = self._get_active_graph_pid()
             self._run_subgraph(task, sub_ng, parent_pid)
-            return sub_ng.outputs._collect_values(raw=False)
+            return sub_ng.outputs._collect_values(unwrap=False)
 
         return _graph_runner
 
     @staticmethod
     def _snapshot_builtins(ng: Graph) -> Dict[str, Dict[str, Any]]:
         return {
-            "graph_ctx": ng.ctx._collect_values(raw=False),
-            "graph_inputs": ng.inputs._collect_values(raw=False),
-            "graph_outputs": ng.outputs._collect_values(raw=False),
+            "graph_ctx": ng.ctx._collect_values(unwrap=False),
+            "graph_inputs": ng.inputs._collect_values(unwrap=False),
+            "graph_outputs": ng.outputs._collect_values(unwrap=False),
         }
 
     def _graph_flow_run_id(self, ng: Graph) -> str:
@@ -88,7 +88,7 @@ class BaseEngine(ABC):
             parent_pid=parent_pid,
         )
         self.recorder.record_inputs_payload(
-            graph_pid, ng.inputs._collect_values(raw=False)
+            graph_pid, ng.inputs._collect_values(unwrap=False)
         )
         return graph_pid
 
@@ -130,7 +130,7 @@ class BaseEngine(ABC):
                     f"Failed to parse outputs for task '{task.name}': {e}"
                 ) from e
         tag_socket_value(task.outputs, only_uuid=True)
-        return task.outputs._collect_values(raw=False)
+        return task.outputs._collect_values(unwrap=False)
 
     def _link_socket_value(
         self, from_name: str, from_socket: str, source_map: Dict[str, Any]

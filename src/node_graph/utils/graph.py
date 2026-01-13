@@ -170,7 +170,7 @@ def materialize_graph(
         inputs = clean_socket_reference(inputs)
         graph.graph_inputs.set_inputs(inputs)
         tag_socket_value(graph.inputs)
-        inputs = graph.inputs._collect_values(raw=False)
+        inputs = graph.inputs._collect_values(unwrap=False)
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)

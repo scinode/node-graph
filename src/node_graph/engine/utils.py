@@ -110,7 +110,7 @@ def update_nested_dict_with_special_keys(data: Dict[str, Any]) -> Dict[str, Any]
     return data
 
 
-def _collect_literals(task, raw=False) -> Dict[str, Any]:
+def _collect_literals(task, unwrap=False) -> Dict[str, Any]:
     """
     Recursively collect literal values from the task's input namespace, excluding
     values that are overridden by links at schedule time.
@@ -118,7 +118,7 @@ def _collect_literals(task, raw=False) -> Dict[str, Any]:
     from node_graph.utils import tag_socket_value
 
     tag_socket_value(task.inputs, only_uuid=True)
-    return task.inputs._collect_values(raw=raw)
+    return task.inputs._collect_values(unwrap=unwrap)
 
 
 def _resolve_tagged_value(value: Any) -> Any:
@@ -210,6 +210,11 @@ def _build_task_link_kwargs(
 
     kwargs: Dict[str, Any] = {}
     for to_sock, lks in grouped.items():
+        if any(
+            lk.to_socket._metadata.extras.get("value_source") == "property"
+            for lk in lks
+        ):
+            continue
         # ignore _wait edges for value propagation (handled separately)
         active_links = [lk for lk in lks if lk.from_socket._scoped_name != "_wait"]
         if not active_links:

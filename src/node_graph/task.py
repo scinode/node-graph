@@ -1,9 +1,9 @@
 from __future__ import annotations
 from uuid import uuid1
 from node_graph.registry import RegistryHub, registry_hub
-from typing import List, Optional, Dict, Any, Union, Set, Iterable
+from typing import List, Optional, Dict, Any, Union, Callable
 from node_graph.utils import deep_copy_only_dicts
-from .socket import WaitingOn
+from .socket import WaitingOn, TaskSocketNamespace
 from node_graph_widget import NodeGraphWidget
 from node_graph.collection import (
     PropertyCollection,
@@ -95,6 +95,10 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         self._args_data = None
         self._widget = None
         self._waiting_on = WaitingOn(task=self, graph=self.graph)
+        self._input_resolver: Optional[
+            Callable[[Any], Any]
+        ] = self._default_input_resolver
+        self._allow_input_overrides = False
 
     def _materialize_from_spec(self) -> None:
         """
@@ -199,6 +203,7 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             "description": self.description,
             "log": self.log,
             "hash": "",  # we can only calculate the hash during runtime when all the data is ready
+            "input_socket_meta": self._export_input_socket_updatable_meta(),
         }
         if include_sockets:
             data["input_sockets"] = self.inputs._to_dict()
@@ -309,6 +314,8 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             self.properties[name].value = prop["value"]
         # inputs
         self.inputs._set_socket_value(data.get("inputs", {}))
+        if "input_socket_meta" in data:
+            self._apply_input_socket_updatable_meta(data["input_socket_meta"])
 
     @classmethod
     def load(cls, uuid: str) -> None:
@@ -373,6 +380,9 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         for i in range(len(self.properties)):
             task.properties[i].value = self.properties[i].value
         task.inputs._set_socket_value(self.inputs._value)
+        task._apply_input_socket_updatable_meta(
+            self._export_input_socket_updatable_meta()
+        )
         return task
 
     def get_executor(self) -> Optional[BaseExecutor]:
@@ -437,14 +447,24 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             f"outputs=[{', '.join(repr(k) for k in self.get_output_names())}])"
         )
 
-    def set_inputs(self, data: Dict[str, Any]) -> None:
+    def set_inputs(
+        self, data: Dict[str, Any], *, value_source: Optional[str] = None
+    ) -> None:
         """Set properties by a dict.
 
         Args:
-            data (dict): _description_
+            data (dict): Input values keyed by socket/property name.
+            value_source (str, optional): "link" to prefer linked values,
+                or "property" to force property values even when linked.
         """
 
         data = deep_copy_only_dicts(data)
+        if value_source is None:
+            value_source = "property" if self._allow_input_overrides else "link"
+        if value_source not in ("link", "property"):
+            raise ValueError(
+                "value_source must be 'link' or 'property'; got " f"{value_source!r}."
+            )
         for key, value in data.items():
             # if the value is a task, link the task's top-level output to the input
             if value is None:
@@ -455,7 +475,61 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             if key in self.properties:
                 self.properties[key].value = value
             else:
-                self.inputs._set_socket_value({key: value})
+                self.inputs._set_socket_value({key: value}, value_source=value_source)
+
+    def set_input_resolver(self, resolver: Optional[Callable[[Any], Any]]) -> None:
+        """Set a resolver for input socket values."""
+        self._input_resolver = resolver
+
+    def clear_input_resolver(self) -> None:
+        self._input_resolver = None
+
+    def _default_input_resolver(self, socket: Any) -> Any:
+        """Resolve inputs using raw literals or upstream socket values."""
+        if isinstance(socket, TaskSocketNamespace):
+            raw_value = socket._collect_values(resolve=False)
+        else:
+            raw_value = socket._value
+
+        links = getattr(socket, "_links", [])
+        if not links:
+            return raw_value
+
+        active_links = [lk for lk in links if lk.from_socket._scoped_name != "_wait"]
+        if not active_links:
+            return raw_value
+
+        if len(active_links) == 1:
+            from_socket = active_links[0].from_socket
+            if from_socket._scoped_name == "_outputs":
+                return from_socket._task.outputs._collect_values(resolve=False)
+            if isinstance(from_socket, TaskSocketNamespace):
+                return from_socket._collect_values(resolve=False)
+            return from_socket._value
+
+        bundle = {}
+        for lk in active_links:
+            from_socket = lk.from_socket
+            key = f"{lk.from_task.name}_{from_socket._scoped_name}"
+            if from_socket._scoped_name == "_outputs":
+                bundle[key] = from_socket._task.outputs._collect_values(esolve=False)
+            elif isinstance(from_socket, TaskSocketNamespace):
+                bundle[key] = from_socket._collect_values(esolve=False)
+            else:
+                bundle[key] = from_socket._value
+        return bundle or raw_value
+
+    def _export_input_socket_updatable_meta(self) -> Dict[str, Dict[str, Any]]:
+        """Export updatable metadata for input sockets."""
+        return self.inputs._export_updatable_meta_map()
+
+    def _apply_input_socket_updatable_meta(
+        self, meta_map: Dict[str, Dict[str, Any]]
+    ) -> None:
+        """Apply updatable metadata for input sockets."""
+        if not meta_map:
+            return
+        self.inputs._apply_updatable_meta_map(meta_map)
 
     def get(self, key: str) -> Any:
         """Get the value of property by key.

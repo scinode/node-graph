@@ -1,4 +1,6 @@
 from node_graph import Graph
+from node_graph.engine.local import LocalEngine
+from node_graph.socket import TaggedValue, TaskSocketNamespace
 from node_graph.tasks.tests import test_add
 from node_graph.task import Task
 from node_graph.socket_spec import namespace
@@ -56,6 +58,65 @@ def test_set_link_as_input():
     add2.set_inputs({"x": add1.outputs["result"]})
     assert len(ng.links) == 1
     assert add2.inputs["x"].property.value is None
+
+
+def test_default_input_resolver_reads_linked_socket():
+    ng = Graph(name="test_input_resolver")
+    add1 = ng.add_task(test_add, "add1")
+    add2 = ng.add_task(test_add, "add2")
+    add1.outputs.result.value = 7
+    add2.set_inputs({"x": add1.outputs.result})
+    add2.inputs.y.value = 2
+    assert add2.inputs.x.value == 7
+    assert add2.inputs.y.value == 2
+
+
+def test_override_linked_input_persists_and_skips_links():
+    ng = Graph(name="test_override_inputs")
+    add1 = ng.add_task(test_add, "add1")
+    add2 = ng.add_task(test_add, "add2")
+    add1.set_inputs({"x": 1, "y": 2})
+    add2.set_inputs({"x": add1.outputs.result})
+    add2.set_inputs({"x": 10, "y": 5}, value_source="property")
+    assert add2.inputs.x.value == 10
+    assert add2.inputs.x._metadata.extras.get("value_source") == "property"
+
+    data = add2.to_dict()
+    ng2 = Graph(name="test_override_inputs_restore")
+    restored = Task.from_dict(data, graph=ng2)
+    assert restored.inputs.x._metadata.extras.get("value_source") == "property"
+
+    LocalEngine().run(ng)
+    result = add2.outputs.result.value
+    if isinstance(result, TaggedValue):
+        result = result.__wrapped__
+    assert result == 15
+
+
+def test_default_input_resolver_bundles_multi_links():
+    ng = Graph(name="test_input_resolver_bundle")
+    add1 = ng.add_task(test_add, "add1")
+    add2 = ng.add_task(test_add, "add2")
+    add3 = ng.add_task(test_add, "add3")
+    add3.inputs.x._link_limit = 2
+    ng.add_link(add1.outputs.result, add3.inputs.x)
+    ng.add_link(add2.outputs.result, add3.inputs.x)
+    add1.outputs.result.value = 1
+    add2.outputs.result.value = 2
+
+    bundle = add3.inputs.x.value
+    assert bundle["add1_result"] == 1
+    assert bundle["add2_result"] == 2
+
+
+def test_clear_updatable_meta_clears_value_source():
+    ng = Graph(name="test_input_resolver_bundle")
+    add1 = ng.add_task(test_add, "add1")
+    inputs = add1.inputs
+    assert isinstance(inputs, TaskSocketNamespace)
+    inputs.x._metadata.extras["value_source"] = "property"
+    inputs._clear_updatable_meta()
+    assert "value_source" not in inputs.x._metadata.extras
 
 
 def test_set_non_exit_input_for_dynamic_input():
