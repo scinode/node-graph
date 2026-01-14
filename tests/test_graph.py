@@ -217,7 +217,7 @@ def test_graph_definition_metadata_from_build():
 
     ng = test_graph.build(1)
     assert "definition" in ng._metadata
-    assert ng._metadata["definition"].get("task_identifier") == "test_graph"
+    assert ng._metadata["definition"].get("task_identifier") == "test_graph.test_graph"
 
 
 def test_expose_outputs_names(test_ng):
