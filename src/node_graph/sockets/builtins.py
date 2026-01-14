@@ -9,6 +9,13 @@ class SocketAny(TaskSocket, SerializeJson):
     _socket_property_identifier: str = "node_graph.any"
 
 
+class SocketAnnotated(TaskSocket, SerializeJson):
+    """Socket for annotated Python types stored in metadata."""
+
+    _identifier: str = "node_graph.annotated"
+    _socket_property_identifier: str = "node_graph.any"
+
+
 class SocketNamespace(TaskSocket, SerializeJson):
     """Socket that holds a namespace."""
 
