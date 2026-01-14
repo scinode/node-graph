@@ -2,7 +2,7 @@ import copy
 import pytest
 from node_graph import socket_spec as ss
 from node_graph.orm.mapping import type_mapping
-from typing import Any, Annotated
+from typing import Any, Annotated, Optional
 from node_graph import task
 from dataclasses import dataclass, MISSING
 from pydantic import BaseModel
@@ -54,6 +54,19 @@ def test_dynamic_namespace_without_item_type():
 
     meta = runtime_meta_from_spec(dyn, role="input")
     assert meta.extras["item"] is None
+
+
+def test_unknown_annotation_uses_annotated_socket():
+    class Dummy:
+        pass
+
+    spec = ss.SocketSpecAPI._spec_from_annotation(Dummy)
+    assert spec.identifier == ss.SocketSpecAPI.ANNOTATED
+    assert spec.meta.extras["py_type"].endswith(".Dummy")
+
+    opt_spec = ss.SocketSpecAPI._spec_from_annotation(Optional[Dummy])
+    assert opt_spec.identifier == ss.SocketSpecAPI.ANNOTATED
+    assert opt_spec.meta.extras["py_type"].endswith(".Dummy")
 
 
 def test_select_include_exclude_prefix_rename():

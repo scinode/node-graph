@@ -40,6 +40,10 @@ class TaskLink:
     def _is_any(self, sock: "Socket") -> bool:
         return self._lower_id(sock).split(".")[-1] == "any"
 
+    def _annotated_type(self, sock: "Socket") -> str | None:
+        extras = getattr(getattr(sock, "_metadata", None), "extras", {}) or {}
+        return extras.get("py_type")
+
     def _graph_type_promotions(self) -> set[tuple[str, str]]:
         """Optional, user-registered identifier-level promotions on the graph."""
         return getattr(self.from_task.graph, "type_promotions", set())
@@ -60,6 +64,22 @@ class TaskLink:
         # "any" accepts anything
         if self._is_any(self.from_socket) or self._is_any(self.to_socket):
             return
+
+        if from_id == to_id == "node_graph.annotated":
+            from_type = self._annotated_type(self.from_socket)
+            to_type = self._annotated_type(self.to_socket)
+            if from_type and to_type and from_type != to_type:
+                src = f"{self.from_task.name}.{self.from_socket._scoped_name}"
+                dst = f"{self.to_task.name}.{self.to_socket._scoped_name}"
+                lines = [
+                    "Socket annotated type mismatch:",
+                    f"  {src} [{from_type}] -> {dst} [{to_type}] is not allowed.",
+                    "",
+                    "Suggestions:",
+                    "  • Add a type mapping if these should be treated as the same socket type",
+                    "  • Insert an explicit conversion task",
+                ]
+                raise TypeError("\n".join(lines))
 
         # exact match
         if from_id == to_id:

@@ -55,6 +55,31 @@ In the ``pyproject.toml`` file of your packages, you should define the entry poi
     "abc.any" = "abc.sockets.test:SocketAny"
     "abc.int" = "abc.sockets.test:SocketInt"
 
+Type mapping for annotations
+-------------------
+
+When you use Python type annotations on task inputs/outputs, ``node-graph`` maps
+the annotated types to socket identifiers. If a type is not in the mapping,
+it falls back to the generic ``node_graph.annotated`` socket and records the
+Python type in socket metadata (``extras["py_type"]``). This keeps links type-safe
+without requiring custom socket classes for every domain type.
+
+You can extend the mapping via an entry point:
+
+.. code:: toml
+
+    [project.entry-points."node_graph.type_mapping"]
+    "abc.type_mapping" = "abc.mapping:type_mapping"
+
+.. code:: python
+
+    # abc/mapping.py
+    from some_pkg import CustomType
+
+    type_mapping = {
+        CustomType: "abc.custom_type",
+    }
+
 
 
 Installation

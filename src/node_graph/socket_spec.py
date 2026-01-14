@@ -35,6 +35,7 @@ from pydantic_core import PydanticUndefined
 
 # Cache UnionType if available (3.10+), else None
 _UNION_TYPE = getattr(types, "UnionType", None)
+NoneType = getattr(types, "NoneType", type(None))
 
 __all__ = [
     # Core datatypes / API
@@ -97,6 +98,17 @@ def _annotated_parts(annot: Any) -> tuple[Any, tuple[Any, ...]]:
     if meta is None:
         meta = tuple(args[1:]) if len(args) > 1 else ()
     return base, tuple(meta)
+
+
+def _strip_optional(tp: Any) -> Any:
+    """If tp is Optional[T] (or Union[T, None]), return T; else return tp."""
+    origin = get_origin(tp)
+    if not _is_union_origin(origin):
+        return tp
+    args = [arg for arg in get_args(tp) if arg is not NoneType]
+    if len(args) == 1:
+        return args[0]
+    return tp
 
 
 def _unwrap_annotated(tp: Any) -> tuple[Any, Optional["SocketMeta"]]:
@@ -486,6 +498,7 @@ class SocketSpecAPI:
     MAP: Dict[Any, str] = DEFAULT_TM
     NAMESPACE: str = "node_graph.namespace"
     DEFAULT: str = "node_graph.any"
+    ANNOTATED: str = "node_graph.annotated"
 
     # convenience re-exports
     SocketSpec = SocketSpec
@@ -518,6 +531,14 @@ class SocketSpecAPI:
     def _map_identifier(cls, tp: Any) -> str:
         return cls.resolve_type(tp)
 
+    @staticmethod
+    def _py_type_name(tp: Any) -> str:
+        module = getattr(tp, "__module__", None)
+        qualname = getattr(tp, "__qualname__", None) or getattr(tp, "__name__", None)
+        if module and qualname:
+            return f"{module}.{qualname}"
+        return repr(tp)
+
     @classmethod
     def socket(cls, T: Any, **meta) -> Any:
         """Wrap a type with optional metadata (help/required/extras/etc.)."""
@@ -537,6 +558,7 @@ class SocketSpecAPI:
                 child = annotated_spec
             else:
                 base_T, _ = _unwrap_annotated(T)
+                base_T = _strip_optional(base_T)
                 # Pydantic model
                 leaf_override = _annot_is_leaf_marker(T)
                 if leaf_override is not None and _is_struct_model_type(leaf_override):
@@ -548,9 +570,7 @@ class SocketSpecAPI:
                 elif isinstance(base_T, SocketView):
                     child = base_T.to_spec()
                 else:
-                    child = SocketSpec(
-                        identifier=cls._map_identifier(base_T), meta=SocketMeta()
-                    )
+                    child = cls._leaf_from_type(base_T)
 
             # overlay all meta from Annotated
             child = replace(child, meta=_merge_all_meta_from_annotation(T, child.meta))
@@ -579,6 +599,7 @@ class SocketSpecAPI:
             return base
 
         T, spec_meta = _unwrap_annotated(item_type)
+        T = _strip_optional(T)
         # Pydantic model
         leaf_override = _annot_is_leaf_marker(item_type)
         if leaf_override is not None and _is_struct_model_type(leaf_override):
@@ -586,13 +607,14 @@ class SocketSpecAPI:
         elif _is_struct_model_type(T):
             item_spec = cls.from_model(T)
         else:
-            item_spec = (
-                T
-                if isinstance(T, SocketSpec)
-                else SocketSpec(
-                    identifier=cls._map_identifier(T), meta=spec_meta or SocketMeta()
-                )
-            )
+            if isinstance(T, SocketSpec):
+                item_spec = T
+            else:
+                item_spec = cls._leaf_from_type(T)
+                if spec_meta is not None:
+                    item_spec = replace(
+                        item_spec, meta=merge_meta(item_spec.meta, spec_meta)
+                    )
 
         return replace(base, item=item_spec)
 
@@ -713,7 +735,24 @@ class SocketSpecAPI:
 
     @classmethod
     def _leaf_from_type(cls, T: Any) -> SocketSpec:
-        return SocketSpec(identifier=cls._map_identifier(T), meta=SocketMeta())
+        if T is Any or T is inspect._empty or T is object:
+            return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
+
+        origin = get_origin(T)
+        if origin in (list, tuple, set):
+            T = list
+        elif origin in (dict,):
+            T = dict
+
+        identifier = cls._map_identifier(T)
+        if identifier != cls.DEFAULT:
+            return SocketSpec(identifier=identifier, meta=SocketMeta())
+
+        if T in (list, dict, tuple, set):
+            return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
+
+        meta = SocketMeta(extras={"py_type": cls._py_type_name(T)})
+        return SocketSpec(identifier=cls.ANNOTATED, meta=meta)
 
     @classmethod
     def _child_spec_from_type(cls, ann: Any) -> SocketSpec:
@@ -723,6 +762,7 @@ class SocketSpecAPI:
             return cls._leaf_from_type(dict)
 
         base_T, _ = _unwrap_annotated(ann)
+        base_T = _strip_optional(base_T)
 
         # embedded SocketSpec/SocketView
         if isinstance(base_T, SocketSpec):
@@ -785,6 +825,7 @@ class SocketSpecAPI:
             return T.to_spec()
 
         base_T, _meta_ignored = _unwrap_annotated(T)
+        base_T = _strip_optional(base_T)
         # Already a SocketSpec
         if isinstance(base_T, SocketSpec):
             return base_T
@@ -796,7 +837,7 @@ class SocketSpecAPI:
         if _is_struct_model_type(base_T):
             return SocketSpecAPI.from_model(base_T)
 
-        return SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketMeta())
+        return SocketSpecAPI._leaf_from_type(base_T)
 
     @classmethod
     def build_inputs_from_signature(
@@ -828,6 +869,7 @@ class SocketSpecAPI:
         for name, param in sig.parameters.items():
             T = ann_map.get(name, param.annotation)
             base_T, _ = _unwrap_annotated(T)
+            base_T = _strip_optional(base_T)
 
             # Determine call_role
             if param.kind is inspect.Parameter.POSITIONAL_ONLY:
@@ -876,6 +918,7 @@ class SocketSpecAPI:
             # varargs/kwargs become dynamic namespaces
             if param.kind is inspect.Parameter.VAR_POSITIONAL:
                 item_T, _ = _unwrap_annotated(T)
+                item_T = _strip_optional(item_T)
                 item_spec = cls._spec_from_annotation(
                     item_T if item_T is not inspect._empty else Any
                 )
@@ -886,6 +929,7 @@ class SocketSpecAPI:
                 )
             elif param.kind is inspect.Parameter.VAR_KEYWORD:
                 item_T, _ = _unwrap_annotated(T)
+                item_T = _strip_optional(item_T)
                 # try Mapping[str, T] -> T else Any
                 origin = get_origin(item_T)
                 if origin in (dict,):
@@ -994,10 +1038,11 @@ class SocketSpecAPI:
 
         # Fallbacks
         if ret is None or ret is inspect._empty:
-            leaf = SocketSpec(identifier=cls._map_identifier(Any))
+            leaf = cls._leaf_from_type(Any)
             return cls._wrap_leaf_as_ns(leaf)
 
         base_T, _ = _unwrap_annotated(ret)
+        base_T = _strip_optional(base_T)
 
         if isinstance(base_T, SocketSpec):
             base_T = _apply_select_from_annotation(ret, base_T)
@@ -1015,7 +1060,7 @@ class SocketSpecAPI:
                 return replace(leaf, meta=replace(leaf.meta, call_role=CallRole.RETURN))
             return cls._wrap_leaf_as_ns(leaf)
 
-        leaf = SocketSpec(identifier=cls._map_identifier(base_T), meta=SocketMeta())
+        leaf = cls._leaf_from_type(base_T)
         leaf = _apply_select_from_annotation(ret, leaf)
         leaf = replace(leaf, meta=_merge_all_meta_from_annotation(ret, leaf.meta))
         return cls._wrap_leaf_as_ns(leaf)

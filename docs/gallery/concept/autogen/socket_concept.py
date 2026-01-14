@@ -38,9 +38,39 @@ ng.add_link(float1.outputs.result, float2.inputs.value)
 # - ``SocketBool``
 # - ``SocketString``
 # - ``SocketAny``
+# - ``SocketAnnotated`` (for annotated Python types without an explicit mapping)
 #
 # One can extend the socket type by designing a custom socket
 # (see the :ref:`custom_socket` page in the docs).
+
+# %%
+# Annotated types
+# ---------------
+#
+# When a task input/output is annotated with a Python type, the socket identifier
+# is resolved from the type mapping. If the type is not mapped, the socket falls
+# back to ``node_graph.annotated`` and records the Python type in metadata.
+#
+# This keeps links type-safe without requiring a custom socket for every domain
+# type. Links between two ``node_graph.annotated`` sockets must match the
+# recorded Python type, otherwise a ``Socket annotated type mismatch`` error
+# is raised.
+from typing import Optional
+from node_graph import task
+
+
+class CustomType:
+    pass
+
+
+@task()
+def takes_custom(x: CustomType) -> CustomType:
+    return x
+
+
+@task()
+def takes_custom_optional(x: Optional[CustomType]) -> Optional[CustomType]:
+    return x
 
 
 # %%
