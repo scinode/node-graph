@@ -44,6 +44,14 @@ class TaskLink:
         extras = getattr(getattr(sock, "_metadata", None), "extras", {}) or {}
         return extras.get("py_type")
 
+    def _format_socket_id(self, sock: "Socket") -> str:
+        identifier = self._lower_id(sock)
+        if identifier == "node_graph.annotated":
+            ann = self._annotated_type(sock)
+            if ann:
+                return f"{identifier}<{ann}>"
+        return identifier
+
     def _graph_type_promotions(self) -> set[tuple[str, str]]:
         """Optional, user-registered identifier-level promotions on the graph."""
         return getattr(self.from_task.graph, "type_promotions", set())
@@ -73,7 +81,7 @@ class TaskLink:
                 dst = f"{self.to_task.name}.{self.to_socket._scoped_name}"
                 lines = [
                     "Socket annotated type mismatch:",
-                    f"  {src} [{from_type}] -> {dst} [{to_type}] is not allowed.",
+                    f"  {src} [{from_id}<{from_type}>] -> {dst} [{to_id}<{to_type}>] is not allowed.",
                     "",
                     "Suggestions:",
                     "  • Add a type mapping if these should be treated as the same socket type",
@@ -94,7 +102,8 @@ class TaskLink:
 
         lines = [
             "Socket type mismatch:",
-            f"  {src} [{from_id}] -> {dst} [{to_id}] is not allowed.",
+            f"  {src} [{self._format_socket_id(self.from_socket)}] -> {dst} "
+            "[{self._format_socket_id(self.to_socket)}] is not allowed.",
             "",
             "Suggestions:",
             "  • Double-check you are linking the intended sockets \n"
