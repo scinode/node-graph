@@ -137,11 +137,12 @@ def test_set_property():
 def test_to_dict():
 
     ng = Graph(name="test_to_dict")
-    math = ng.add_task(test_add, "Math")
-    math.inputs["x"].property.value = 2
-    data = math.to_dict()
+    task1 = ng.add_task(test_add)
+    task1.name = "test_add"
+    task1.inputs["x"].property.value = 2
+    data = task1.to_dict()
     assert "spec" in data
-    assert data["spec"]["identifier"] == "test_add"
+    assert data["spec"]["identifier"] == "node_graph.test_add"
 
 
 def test_copy():

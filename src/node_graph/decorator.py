@@ -57,9 +57,17 @@ def decorator_task(
         callable_meta = inspect_callable_metadata(func)
         metadata = {"callable": callable_meta}
         version = callable_meta.get("package_version")
+        resolved_identifier = identifier
+        if resolved_identifier is None:
+            package = callable_meta.get("package")
+            func_name = getattr(func, "__name__", None) or callable_meta.get("qualname")
+            if package and func_name:
+                resolved_identifier = f"{package}.{func_name}"
+            else:
+                resolved_identifier = func_name or "task"
         return FunctionTask.build(
             obj=func,
-            identifier=identifier or func.__name__,
+            identifier=resolved_identifier,
             catalog=catalog,
             input_spec=inputs,
             output_spec=outputs,
@@ -92,9 +100,17 @@ def decorator_graph(
         callable_meta = inspect_callable_metadata(func)
         metadata = {"callable": callable_meta}
         version = callable_meta.get("package_version")
+        resolved_identifier = identifier
+        if resolved_identifier is None:
+            package = callable_meta.get("package")
+            func_name = getattr(func, "__name__", None) or callable_meta.get("qualname")
+            if package and func_name:
+                resolved_identifier = f"{package}.{func_name}"
+            else:
+                resolved_identifier = func_name or "graph"
         return FunctionTask.build(
             obj=func,
-            identifier=identifier or func.__name__,
+            identifier=resolved_identifier,
             task_type="graph",
             catalog=catalog,
             input_spec=inputs,
