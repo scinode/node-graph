@@ -128,7 +128,7 @@ Acceptable names are {self._get_keys()}. This collection belongs to {self.parent
         if item_class is not None:
             name = item_class._default_spec.identifier.split(".")[-1]
         elif identifier is not None:
-            name = identifier
+            name = identifier.split(".")[-1]
         else:
             name = f"item_{len(self._items) + 1}"
         if name not in self._items:
