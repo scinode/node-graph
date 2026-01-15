@@ -172,14 +172,30 @@ class TaskLink:
             return
 
         if self._is_namespace(self.from_socket) ^ self._is_namespace(self.to_socket):
-            ns_socket = (
-                self.from_socket
-                if self._is_namespace(self.from_socket)
-                else self.to_socket
-            )
+            from_is_ns = self._is_namespace(self.from_socket)
+            ns_socket = self.from_socket if from_is_ns else self.to_socket
             leaf_socket = (
                 self.to_socket if ns_socket is self.from_socket else self.from_socket
             )
+
+            if from_is_ns:
+                src = f"{self.from_task.name}.{self.from_socket._scoped_name}"
+                dst = f"{self.to_task.name}.{self.to_socket._scoped_name}"
+                lines = [
+                    "Namespace to leaf link is not allowed:",
+                    f"  {src} [{self._format_socket_id(self.from_socket)}] ->"
+                    f" {dst} [{self._format_socket_id(self.to_socket)}] is not allowed.",
+                    "",
+                    "Why this matters:",
+                    "  • Namespace sockets carry dict-like values; leaf sockets expect a single item.",
+                    "  • Python could pass a dict here, but we block this to keep strict data provenance.",
+                    "",
+                    "Suggestions:",
+                    "  • Link a specific item socket from the namespace",
+                    "  • Or gather leaf sockets into a namespace input",
+                ]
+                raise TypeError("\n".join(lines))
+
             item = self._namespace_item(ns_socket)
             if item is None:
                 return

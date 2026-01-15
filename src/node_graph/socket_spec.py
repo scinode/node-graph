@@ -17,18 +17,13 @@ from .socket import TaskSocketNamespace
 import ast
 import textwrap
 import types
-import sys
 from dataclasses import (
     is_dataclass as _is_dc,
     fields as _dc_fields,
     MISSING as _DC_MISSING,
 )
 
-if sys.version_info < (3, 10):
-    # Python 3.9 -> need typing_extensions for include_extras
-    from typing_extensions import Annotated, get_args, get_origin, get_type_hints
-else:
-    from typing import Annotated, get_args, get_origin, get_type_hints
+from typing import Annotated, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
@@ -68,10 +63,7 @@ def _is_union_origin(origin: Any) -> bool:
 
 def _is_annotated_type(tp: Any) -> bool:
     """True if tp is an Annotated[...] wrapper across versions."""
-    if get_origin(tp) is Annotated:
-        return True
-    # 3.9 fallback: Annotated instances expose __metadata__/__args__
-    return hasattr(tp, "__metadata__") and hasattr(tp, "__args__")
+    return get_origin(tp) is Annotated
 
 
 def _find_first_annotated(tp: Any) -> Optional[Any]:
@@ -820,11 +812,7 @@ class SocketSpecAPI:
 
     @staticmethod
     def _safe_type_hints(func):
-        try:
-            return get_type_hints(func, include_extras=True)
-        except TypeError:
-            # python 3.9 using typing_extensions.get_type_hints
-            return get_type_hints(func)
+        return get_type_hints(func, include_extras=True)
 
     @classmethod
     def _apply_structured_defaults_to_leaves(
