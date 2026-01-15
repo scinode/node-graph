@@ -1,5 +1,6 @@
+from __future__ import annotations
 import pytest
-from typing import Optional
+from typing import Optional, Union
 from node_graph import Graph, task
 
 
@@ -34,6 +35,21 @@ def take_b(x: DummyB) -> DummyB:
 @task()
 def take_a_optional(x: Optional[DummyA]) -> Optional[DummyA]:
     return x
+
+
+@task()
+def add_union(x: Union[int, float], y: Union[int, float]) -> Union[int, float]:
+    return x + y
+
+
+@task()
+def add_union_pep604(x: int | float, y: int | float) -> int | float:
+    return x + y
+
+
+@task()
+def multiply_int(x: int, y: int) -> int:
+    return x * y
 
 
 @pytest.fixture
@@ -106,3 +122,13 @@ def test_annotated_socket_match(add_multiply_ng):
 
     with pytest.raises(TypeError, match="Socket annotated type mismatch:"):
         ng.add_link(ng.tasks.take_a1.outputs.result, ng.tasks.take_b1.inputs.x)
+
+
+def test_union_link_accepts_members():
+    ng = Graph()
+    ng.add_task(add_union, "add1")
+    ng.add_task(add_union_pep604, "add2")
+    ng.add_task(multiply_int, "multiply1")
+
+    ng.add_link(ng.tasks.add1.outputs.result, ng.tasks.add2.inputs.x)
+    ng.add_link(ng.tasks.add2.outputs.result, ng.tasks.multiply1.inputs.x)

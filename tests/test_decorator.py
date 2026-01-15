@@ -5,6 +5,7 @@ from node_graph.socket_spec import namespace
 from node_graph.task_spec import SchemaSource
 import pytest
 from node_graph.tasks.tests import test_add
+from typing import Any
 
 
 def test_build_task():
@@ -86,9 +87,9 @@ def test_decorator_parameters() -> None:
     """Test passing parameters to decorators."""
 
     @task(
-        outputs=namespace(sum=any, product=any),
+        outputs=namespace(sum=Any, product=Any),
     )
-    def test(a, c: namespace(c1=any, c2=any), b=1, **kwargs):
+    def test(a, c: namespace(c1=Any, c2=Any), b=1, **kwargs):
         return {"sum": a + b, "product": a * b}
 
     test1 = test()._task
@@ -107,7 +108,7 @@ def test_decorator_parameters() -> None:
 
 
 def test_socket():
-    @task(outputs=namespace(sum=any, product=any))
+    @task(outputs=namespace(sum=Any, product=Any))
     def func(x: int, y: int = 1):
         return {"sum": x + y, "product": x * y}
 
@@ -159,7 +160,7 @@ def test_decorator_task_in_decorator_task(decorated_myadd, task_with_decorated_t
 
 
 def test_use_socket_view():
-    @task(outputs=namespace(sum=any, product=any))
+    @task(outputs=namespace(sum=Any, product=Any))
     def test(a, b):
         return {"sum": a + b, "product": a * b}
 

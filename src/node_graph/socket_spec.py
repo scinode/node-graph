@@ -739,6 +739,38 @@ class SocketSpecAPI:
             return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
 
         origin = get_origin(T)
+        if _is_union_origin(origin):
+            args = []
+            for arg in get_args(T):
+                if arg is NoneType:
+                    continue
+                if _is_union_origin(get_origin(arg)):
+                    args.extend(get_args(arg))
+                else:
+                    args.append(arg)
+            if not args:
+                return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
+            if len(args) == 1:
+                return cls._leaf_from_type(args[0])
+
+            entries: list[dict[str, Any]] = []
+            seen: set[tuple[str, Optional[str]]] = set()
+            for arg in args:
+                member = cls._leaf_from_type(arg)
+                entry: dict[str, Any] = {"identifier": member.identifier}
+                if member.identifier == cls.ANNOTATED:
+                    py = member.meta.extras.get("py_type")
+                    if py:
+                        entry["py_type"] = py
+                key = (entry["identifier"].lower(), entry.get("py_type"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                entries.append(entry)
+            meta = SocketMeta(
+                extras={"py_type": cls._py_type_name(T), "union": entries}
+            )
+            return SocketSpec(identifier=cls.ANNOTATED, meta=meta)
         if origin in (list, tuple, set):
             T = list
         elif origin in (dict,):
@@ -833,11 +865,11 @@ class SocketSpecAPI:
         # Pydantic model?
         leaf_override = _annot_is_leaf_marker(T)
         if leaf_override is not None and _is_struct_model_type(leaf_override):
-            return SocketSpecAPI._leaf_from_type(dict)
+            return cls._leaf_from_type(dict)
         if _is_struct_model_type(base_T):
-            return SocketSpecAPI.from_model(base_T)
+            return cls.from_model(base_T)
 
-        return SocketSpecAPI._leaf_from_type(base_T)
+        return cls._leaf_from_type(base_T)
 
     @classmethod
     def build_inputs_from_signature(
