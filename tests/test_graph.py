@@ -120,9 +120,9 @@ def test_get_items(ng):
 
 def test_load_graph():
     @task(
-        outputs=namespace(sum=any, product=any, nested=namespace(sum=any, product=any)),
+        outputs=namespace(sum=Any, product=Any, nested=namespace(sum=Any, product=Any)),
     )
-    def test(a, b=1, nested: namespace(d=any, f=namespace(g=any, h=any)) = {}):
+    def test(a, b=1, nested: namespace(d=Any, f=namespace(g=Any, h=Any)) = {}):
         return {
             "sum": a + b,
             "product": a * b,
@@ -242,8 +242,8 @@ def test_build_inputs_outputs(ng):
     """Test build graph inputs and outputs."""
     ng = Graph(
         name="test_graph_inputs_outputs",
-        inputs=namespace(a=any, b=any, c=namespace(x=any, y=any)),
-        outputs=namespace(sum=any, product=any, nested=namespace(sum=any, product=any)),
+        inputs=namespace(a=Any, b=Any, c=namespace(x=Any, y=Any)),
+        outputs=namespace(sum=Any, product=Any, nested=namespace(sum=Any, product=Any)),
     )
     assert "a" in ng.inputs
     assert "x" in ng.inputs.c

@@ -10,14 +10,13 @@ authors = [{ name = "Xing Wang", email = "xingwang1991@gmail.com" }]
 readme = "README.md"
 license = {file = "LICENSE"}
 keywords = ["graph", "workflows"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 1 - Planning",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,7 +29,6 @@ dependencies = [
     "cloudpickle",
     "node-graph-widget",
     "wrapt",
-    "typing_extensions>=4.7; python_version < '3.11'",
     "pydantic~=2.6",
     "pyyaml",
     "rdflib>=6.0",

@@ -10,14 +10,9 @@ TypePromotionPair = Tuple[str, str]
 
 @lru_cache(maxsize=None)
 def _ep_group(group: str) -> tuple[EntryPoint, ...]:
-    """Load an entry-point group once (cached), compatible with py3.9-3.12."""
+    """Load an entry-point group once (cached)."""
     eps = entry_points()
-    try:
-        # Python 3.10+: returns EntryPoints, iterable
-        res = eps.select(group=group)
-    except Exception:
-        # Python <3.10 compatibility
-        res = eps.get(group, [])
+    res = eps.select(group=group)
     # cache wants hashable; callers can iterate the tuple
     return tuple(res)
 
