@@ -388,16 +388,14 @@ wg.engine.recorder
 # %%
 # .. important::
 #
-#    Models/dataclasses are annotation-only
-#    Even when you annotate with BaseModel or @dataclass, do not pass instances of these types to
-#    tasks/graphs. Always pass plain dictionaries:
+#    Structured models (Pydantic or dataclasses) are supported as *runtime* values.
+#    You may pass instances to tasks/graphs and return them from tasks:
 #
-#    - This lets Graph expand inputs/outputs into individual sockets, so it can wire provenance
-#      edges precisely (e.g., data.x --> task.data.x).
-#    - It allows graph inputs to be collected from task outputs as a dict of AiiDA ORM nodes,
+#    - Instances are expanded to plain dicts when assigned to namespace sockets, so Graph can wire
+#      provenance edges precisely (e.g., data.x --> task.data.x).
+#    - Graph inputs can still be collected from task outputs as a dict of AiiDA ORM nodes,
 #      preserving AiiDA links between nodes.
-#    - Validation still happens via the Graph spec (derived from your annotations)--you’re
-#      just not constructing runtime model/dataclass objects.
+#    - Validation still happens via the Graph spec (derived from your annotations).
 #
 # Data linkage
 # ------------

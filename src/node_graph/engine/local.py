@@ -12,6 +12,7 @@ from .utils import (
     update_nested_dict_with_special_keys,
     _resolve_tagged_value,
 )
+from node_graph.utils.struct_utils import coerce_inputs_from_spec
 
 
 class LocalEngine(BaseEngine):
@@ -99,6 +100,7 @@ class LocalEngine(BaseEngine):
 
             try:
                 raw_kwargs = _resolve_tagged_value(run_kwargs)
+                raw_kwargs = coerce_inputs_from_spec(raw_kwargs, task.spec.inputs)
                 if is_graph and fn is not None:
                     res = fn(**run_kwargs)
                 elif fn is None:

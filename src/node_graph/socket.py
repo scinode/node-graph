@@ -8,6 +8,7 @@ from dataclasses import MISSING, replace
 from node_graph.orm.mapping import type_mapping
 from node_graph.socket_meta import SocketMeta, UPDATABLE_SOCKET_META_FIELDS
 from node_graph.registry import EntryPointPool
+from node_graph.utils.struct_utils import is_structured_instance, structured_to_dict
 import wrapt
 
 if TYPE_CHECKING:
@@ -1159,6 +1160,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
 
         if value is None:
             return
+        if is_structured_instance(value):
+            value = structured_to_dict(value)
 
         # Link another socket directly to this namespace
         if isinstance(value, BaseSocket):
@@ -1283,6 +1286,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
             # Now we’re guaranteed the key exists; delegate appropriately
             target = self._sockets[key]
             if isinstance(target, TaskSocketNamespace):
+                if is_structured_instance(val):
+                    val = structured_to_dict(val)
                 # If incoming val is a dict, recurse. If it’s a socket, link to the namespace.
                 if isinstance(val, dict):
                     target._set_socket_value(val, value_source=value_source)

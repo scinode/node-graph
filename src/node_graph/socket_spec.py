@@ -13,6 +13,7 @@ import inspect
 from copy import deepcopy
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from node_graph.socket_meta import CallRole, SocketMeta, merge_meta
+from node_graph.utils.struct_utils import structured_type_info
 from .socket import TaskSocketNamespace
 import ast
 import textwrap
@@ -967,6 +968,16 @@ class SocketSpecAPI:
 
             # Apply selection/transform directives from Annotated
             spec = _apply_select_from_annotation(T, spec)
+
+            if _is_struct_model_type(base_T) and _annot_is_leaf_marker(T) is None:
+                info = structured_type_info(base_T)
+                if info is not None and "structured_type" not in spec.meta.extras:
+                    spec = replace(
+                        spec,
+                        meta=merge_meta(
+                            spec.meta, SocketMeta(extras={"structured_type": info})
+                        ),
+                    )
 
             # Defaults: scalar -> leaf default; dict -> traverse into leaves
             if param.default is not inspect._empty and param.default is not None:

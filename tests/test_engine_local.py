@@ -6,6 +6,8 @@ from node_graph.socket_spec import namespace as ns
 from node_graph.engine.local import LocalEngine
 from node_graph.engine.provenance import ProvenanceRecorder
 from typing import Annotated, Any
+from dataclasses import dataclass
+from pydantic import BaseModel
 
 
 @task()
@@ -154,3 +156,59 @@ def test_local_engine_records_call_edges():
     )
     edges = {(edge["src"], edge["dst"], edge["label"]) for edge in prov["edges"]}
     assert (graph_proc, nested_proc, "call") in edges
+
+
+class PydanticInputs(BaseModel):
+    x: int
+    y: int
+
+
+class PydanticOutputs(BaseModel):
+    sum: int
+    product: int
+
+
+@task()
+def add_multiply_pydantic(data: PydanticInputs) -> PydanticOutputs:
+    return PydanticOutputs(sum=data.x + data.y, product=data.x * data.y)
+
+
+@dataclass
+class DataclassInputs:
+    x: int
+    y: int
+
+
+@dataclass
+class DataclassOutputs:
+    sum: int
+    product: int
+
+
+@task()
+def add_multiply_dataclass(data: DataclassInputs) -> DataclassOutputs:
+    return DataclassOutputs(sum=data.x + data.y, product=data.x * data.y)
+
+
+def test_local_engine_accepts_pydantic_models():
+    ng = Graph(name="local-pydantic", outputs=ns(sum=int, product=int))
+    node = ng.add_task(add_multiply_pydantic, "calc", data=PydanticInputs(x=2, y=5))
+    ng.add_link(node.outputs.sum, ng.outputs.sum)
+    ng.add_link(node.outputs.product, ng.outputs.product)
+
+    results = LocalEngine().run(ng)
+
+    assert results["sum"] == 7
+    assert results["product"] == 10
+
+
+def test_local_engine_accepts_dataclass_models():
+    ng = Graph(name="local-dataclass", outputs=ns(sum=int, product=int))
+    node = ng.add_task(add_multiply_dataclass, "calc", data=DataclassInputs(x=3, y=4))
+    ng.add_link(node.outputs.sum, ng.outputs.sum)
+    ng.add_link(node.outputs.product, ng.outputs.product)
+
+    results = LocalEngine().run(ng)
+
+    assert results["sum"] == 7
+    assert results["product"] == 12
