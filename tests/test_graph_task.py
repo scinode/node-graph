@@ -2,6 +2,7 @@ from node_graph import Graph, task
 from node_graph.socket_spec import namespace, dynamic
 from typing import Any
 import pytest
+from pydantic import BaseModel
 
 
 @task()
@@ -163,3 +164,46 @@ def test_graph_inputs_value():
     graph = test_graph.build(x=2, y=3)
     assert graph.inputs.x.value == 2
     assert graph.inputs.y.value == 3
+
+
+class SubInputs(BaseModel):
+    x: int
+    y: int
+
+
+class SubOutputs(BaseModel):
+    sum: int
+    product: int
+
+
+class MyInputs(BaseModel):
+    data1: SubInputs
+    data2: SubInputs
+
+
+@task()
+def add_multiply_pydantic(data: SubInputs) -> SubOutputs:
+    return SubOutputs(sum=data.x + data.y, product=data.x * data.y)
+
+
+def test_graph_inputs_pydantic_link_to_task_inputs():
+    @task.graph()
+    def add_graph(data: MyInputs):
+        add_multiply_pydantic(data=data.data1)
+        add_multiply_pydantic(data=data.data2)
+
+    data = MyInputs(data1=SubInputs(x=6, y=7), data2=SubInputs(x=1, y=2))
+    graph = add_graph.build(data=data)
+
+    def has_link(from_socket: str, to_socket: str) -> bool:
+        return any(
+            lk.from_task.name == "graph_inputs"
+            and lk.from_socket._scoped_name == from_socket
+            and lk.to_socket._scoped_name == to_socket
+            for lk in graph.links
+        )
+
+    assert has_link("data.data1.x", "data.x")
+    assert has_link("data.data1.y", "data.y")
+    assert has_link("data.data2.x", "data.x")
+    assert has_link("data.data2.y", "data.y")

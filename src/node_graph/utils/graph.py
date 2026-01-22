@@ -150,6 +150,7 @@ def materialize_graph(
     assign its outputs and return the Graph.
     """
     from node_graph.utils import tag_socket_value, clean_socket_reference
+    from node_graph.utils.struct_utils import coerce_inputs_from_spec
     from node_graph.utils.function import (
         prepare_function_inputs,
         inspect_callable_metadata,
@@ -171,6 +172,7 @@ def materialize_graph(
         graph.graph_inputs.set_inputs(inputs)
         tag_socket_value(graph.inputs)
         inputs = graph.inputs._collect_values(unwrap=False)
+        inputs = coerce_inputs_from_spec(inputs, in_spec)
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)

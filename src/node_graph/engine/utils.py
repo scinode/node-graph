@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 from node_graph.link import TaskLink
 from node_graph import Graph
 from node_graph.socket_spec import SocketSpec
+from node_graph.utils.struct_utils import is_structured_instance, structured_to_dict
 
 
 def get_nested_dict(d: Dict, name: str, **kwargs) -> Any:
@@ -259,6 +260,8 @@ def parse_outputs(
     """
     fields = spec.fields or {}
     is_dyn = bool(spec.dynamic)
+    if is_structured_instance(results) and (fields or is_dyn):
+        results = structured_to_dict(results)
 
     # tuple -> map by order of fixed field names
     if isinstance(results, tuple):
