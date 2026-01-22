@@ -64,13 +64,9 @@ def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
         if contains_tagged_value(value):
             if hasattr(cls, "model_construct"):
                 return cls.model_construct(**value)
-            if hasattr(cls, "construct"):
-                return cls.construct(**value)
             return cls(**value)
         if hasattr(cls, "model_validate"):
             return cls.model_validate(value)
-        if hasattr(cls, "parse_obj"):
-            return cls.parse_obj(value)
         return cls(**value)
     if kind == "dataclass":
         return cls(**value)

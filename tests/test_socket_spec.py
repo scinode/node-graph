@@ -603,6 +603,8 @@ def test_leaf_pydantic_model():
 
     spec = ss.from_model(MySpec)
     assert not spec.is_namespace()
+    assert spec.identifier.endswith("annotated")
+    assert spec.meta.extras.get("py_type", "").endswith("MySpec")
 
     # Per-use leaf wrapper (even if model had no flag)
     class Other(BaseModel):
@@ -611,6 +613,8 @@ def test_leaf_pydantic_model():
 
     spec = ss.from_model(ss.Leaf[Other])
     assert not spec.is_namespace()
+    assert spec.identifier.endswith("annotated")
+    assert spec.meta.extras.get("py_type", "").endswith("Other")
 
 
 def test_dataclass_model_namespace_and_roundtrip():
@@ -683,6 +687,8 @@ def test_leaf_dataclass_model():
 
     spec = ss.from_model(MyLeafDC)
     assert not spec.is_namespace()
+    assert spec.identifier.endswith("annotated")
+    assert spec.meta.extras.get("py_type", "").endswith("MyLeafDC")
 
     @dataclass
     class OtherDC:
@@ -691,3 +697,5 @@ def test_leaf_dataclass_model():
 
     spec = ss.from_model(ss.Leaf[OtherDC])
     assert not spec.is_namespace()
+    assert spec.identifier.endswith("annotated")
+    assert spec.meta.extras.get("py_type", "").endswith("OtherDC")

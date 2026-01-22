@@ -555,7 +555,7 @@ class SocketSpecAPI:
                 # Pydantic model
                 leaf_override = _annot_is_leaf_marker(T)
                 if leaf_override is not None and _is_struct_model_type(leaf_override):
-                    child = cls._leaf_from_type(dict)
+                    child = cls._leaf_from_type(leaf_override)
                 elif _is_struct_model_type(base_T):
                     child = cls.from_model(base_T)
                 elif isinstance(base_T, SocketSpec):
@@ -596,7 +596,7 @@ class SocketSpecAPI:
         # Pydantic model
         leaf_override = _annot_is_leaf_marker(item_type)
         if leaf_override is not None and _is_struct_model_type(leaf_override):
-            item_spec = cls._leaf_from_type(dict)
+            item_spec = cls._leaf_from_type(leaf_override)
         elif _is_struct_model_type(T):
             item_spec = cls.from_model(T)
         else:
@@ -645,7 +645,8 @@ class SocketSpecAPI:
 
         # Leaf override (config or Leaf[...] handled earlier)
         if _struct_is_leaf(model_cls):
-            return cls._leaf_from_type(dict)
+            leaf_target = _annot_is_leaf_marker(model_cls)
+            return cls._leaf_from_type(leaf_target or model_cls)
 
         # Build fields + defaults via a unified path
         if _is_pydantic_model_type(model_cls):
@@ -784,7 +785,7 @@ class SocketSpecAPI:
         # Leaf[...] override
         leaf_target = _annot_is_leaf_marker(ann)
         if leaf_target is not None:
-            return cls._leaf_from_type(dict)
+            return cls._leaf_from_type(leaf_target)
 
         base_T, _ = _unwrap_annotated(ann)
         base_T = _strip_optional(base_T)
@@ -854,7 +855,7 @@ class SocketSpecAPI:
         # Pydantic model?
         leaf_override = _annot_is_leaf_marker(T)
         if leaf_override is not None and _is_struct_model_type(leaf_override):
-            return cls._leaf_from_type(dict)
+            return cls._leaf_from_type(leaf_override)
         if _is_struct_model_type(base_T):
             return cls.from_model(base_T)
 
@@ -919,7 +920,7 @@ class SocketSpecAPI:
                 # Pydantic-aware leaf override?
                 leaf_override = _annot_is_leaf_marker(T)
                 if leaf_override is not None and _is_struct_model_type(leaf_override):
-                    spec = cls._leaf_from_type(dict)
+                    spec = cls._leaf_from_type(leaf_override)
                 # Pydantic model?
                 elif _is_struct_model_type(base_T):
                     spec = cls.from_model(base_T)
@@ -969,7 +970,11 @@ class SocketSpecAPI:
             # Apply selection/transform directives from Annotated
             spec = _apply_select_from_annotation(T, spec)
 
-            if _is_struct_model_type(base_T) and _annot_is_leaf_marker(T) is None:
+            if (
+                _is_struct_model_type(base_T)
+                and _annot_is_leaf_marker(T) is None
+                and not _struct_is_leaf(base_T)
+            ):
                 info = structured_type_info(base_T)
                 if info is not None and "structured_type" not in spec.meta.extras:
                     spec = replace(
@@ -1065,7 +1070,7 @@ class SocketSpecAPI:
         # Leaf override for Pydantic
         leaf_override = _annot_is_leaf_marker(ret)
         if leaf_override is not None and _is_struct_model_type(leaf_override):
-            return cls._wrap_leaf_as_ns(cls._leaf_from_type(dict))
+            return cls._wrap_leaf_as_ns(cls._leaf_from_type(leaf_override))
 
         # Fallbacks
         if ret is None or ret is inspect._empty:

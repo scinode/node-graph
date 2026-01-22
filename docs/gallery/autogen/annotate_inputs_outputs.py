@@ -294,7 +294,8 @@ wg.engine.recorder
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Sometimes you want to **validate** with a Pydantic model but store it as a **single node** instead
-# of expanding fields.
+# of expanding fields. For leaf models, the value is treated as a blob; the socket stays annotated
+# and the object is stored as-is.
 # There are two ways:
 #
 # 1) Mark the model: ``model_config = {"leaf": True}``
@@ -311,7 +312,7 @@ class BlobModel(BaseModel):
 @task()
 def consume_blob(m: BlobModel) -> dict:
     # 'm' is validated by Pydantic but stored/treated as one leaf node
-    return {"sum": m["a"] + m["b"]}
+    return {"sum": m.a + m.b}
 
 
 # Per-use override without modifying the model:
@@ -322,13 +323,13 @@ class AnotherModel(BaseModel):
 
 @task()
 def consume_blob_per_use(m: Leaf[AnotherModel]) -> dict:
-    return {"sum": m["a"] + m["b"]}
+    return {"sum": m.a + m.b}
 
 
 @task.graph()
 def BlobExamples():
-    consume_blob(m={"a": 1, "b": 2})
-    consume_blob_per_use(m={"a": 3, "b": 4})
+    consume_blob(m=BlobModel(a=1, b=2))
+    consume_blob_per_use(m=AnotherModel(a=3, b=4))
 
 
 wg = BlobExamples.build()
