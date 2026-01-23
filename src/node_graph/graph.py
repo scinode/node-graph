@@ -7,7 +7,7 @@ from node_graph.socket_spec import SocketSpec, SocketSpecAPI
 from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.task import Task
-from node_graph.socket import TaskSocket
+from node_graph.socket import TaskSocket, TaskSocketNamespace
 from node_graph.link import TaskLink
 from node_graph.utils import yaml_to_dict
 from .config import BuiltinPolicy, BUILTIN_TASKS, MAX_LINK_LIMIT
@@ -330,21 +330,39 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self._version += 1
         return task
 
-    def add_link(self, source: TaskSocket | Task, target: TaskSocket) -> TaskLink:
+    def add_link(
+        self,
+        source: TaskSocket | Task,
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> TaskLink | None:
         """Add a link between two tasks."""
-        from node_graph.socket import TaskSocketNamespace
 
         if isinstance(source, Task):
             source = source.outputs["graph_outputs"]
         elif source._parent is None and isinstance(source, TaskSocketNamespace):
-            # if the source is the top-level outputs,
-            # we use the built-in "_outputs" socket to represent it
-            if "_outputs" in source:
-                source = source["_outputs"]
-            else:
-                raise ValueError(
-                    f"You try to link a top-level output socket {source._name} without a parent."
-                )
+            if not isinstance(target, TaskSocketNamespace):
+                # if the source is the top-level outputs,
+                # we use the built-in "_outputs" socket to represent it
+                if "_outputs" in source:
+                    source = source["_outputs"]
+                else:
+                    raise ValueError(
+                        f"You try to link a top-level output socket {source._name} without a parent."
+                    )
+
+        if isinstance(source, TaskSocketNamespace) or isinstance(
+            target, TaskSocketNamespace
+        ):
+            if isinstance(source, TaskSocketNamespace) and isinstance(
+                target, TaskSocketNamespace
+            ):
+                return self._add_namespace_link(source, target)
+            src = getattr(source, "_full_name_with_task", "<unknown>")
+            dst = getattr(target, "_full_name_with_task", "<unknown>")
+            raise TypeError(
+                "Linking a namespace socket directly to a leaf socket is not allowed. "
+                f"Got {src} -> {dst}."
+            )
         #
         key = f"{source._task.name}.{source._scoped_name} -> {target._task.name}.{target._scoped_name}"
         if key in self.links:
@@ -352,6 +370,40 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         link = self.links._new(source, target)
         self._version += 1
         return link
+
+    def _add_namespace_link(
+        self,
+        source: "TaskSocketNamespace",
+        target: "TaskSocketNamespace",
+    ) -> TaskLink | None:
+        last_link: TaskLink | None = None
+        for name, target_child in target._sockets.items():
+            if name not in source._sockets:
+                src = source._full_name_with_task
+                dst = target._full_name_with_task
+                raise ValueError(
+                    f"Namespace link mismatch: '{name}' not found in source {src} "
+                    f"while linking to {dst}."
+                )
+            source_child = source._sockets[name]
+            if isinstance(source_child, TaskSocketNamespace) and isinstance(
+                target_child, TaskSocketNamespace
+            ):
+                child_link = self._add_namespace_link(source_child, target_child)
+                if child_link is not None:
+                    last_link = child_link
+                continue
+            if isinstance(source_child, TaskSocketNamespace) or isinstance(
+                target_child, TaskSocketNamespace
+            ):
+                src = source_child._full_name_with_task
+                dst = target_child._full_name_with_task
+                raise TypeError(
+                    "Namespace link mismatch: tried to link a namespace with a leaf "
+                    f"socket at {src} -> {dst}."
+                )
+            last_link = self.add_link(source_child, target_child)
+        return last_link
 
     def append_task(self, task: Task) -> None:
         """Appends a task to the task graph."""
