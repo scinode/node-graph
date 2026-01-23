@@ -2,7 +2,12 @@ import copy
 import pytest
 from node_graph import socket_spec as ss
 from node_graph.orm.mapping import type_mapping
-from typing import Any, Annotated, Optional
+from typing import Any, Annotated, Optional, TypedDict
+
+try:
+    from typing import Unpack
+except ImportError:  # pragma: no cover - Python < 3.11
+    from typing_extensions import Unpack
 from node_graph import task
 from dataclasses import dataclass, MISSING
 from pydantic import BaseModel
@@ -699,3 +704,42 @@ def test_leaf_dataclass_model():
     assert not spec.is_namespace()
     assert spec.identifier.endswith("annotated")
     assert spec.meta.extras.get("py_type", "").endswith("OtherDC")
+
+
+def test_typeddict_model_namespace():
+    class RowTD(TypedDict):
+        sum: int
+        product: int
+
+    spec = ss.from_model(RowTD)
+    assert spec.is_namespace()
+    assert set(spec.fields.keys()) == {"sum", "product"}
+
+    spec = ss.namespace(x=int, y=RowTD)
+    assert spec.fields["y"].is_namespace()
+    assert set(spec.fields["y"].fields.keys()) == {"sum", "product"}
+
+
+def test_typeddict_optional_keys():
+    class PartialTD(TypedDict, total=False):
+        a: int
+        b: str
+
+    spec = ss.from_model(PartialTD)
+    assert spec.is_namespace()
+    assert spec.fields["a"].meta.required is False
+    assert spec.fields["b"].meta.required is False
+
+
+def test_unpack_typeddict_kwargs():
+    class XYIn(TypedDict):
+        x: int
+        y: int
+
+    def add(**kwargs: Unpack[XYIn]):
+        return kwargs["x"] + kwargs["y"]
+
+    spec = ss.SocketSpecAPI.build_inputs_from_signature(add)
+    assert set(spec.fields.keys()) == {"x", "y"}
+    assert spec.fields["x"].meta.call_role == ss.CallRole.KWARGS
+    assert spec.fields["y"].meta.call_role == ss.CallRole.KWARGS

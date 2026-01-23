@@ -223,7 +223,47 @@ wg.engine.recorder
 # The output shows a dictionary with dynamic keys (``data_0``, ``data_1``, etc.),
 # where each value is itself a dictionary with a fixed ``square`` and ``cube`` structure,
 # as specified by ``dynamic(namespace(...))``.
+# Using TypedDict
+# ----------------
+#
+# ``TypedDict`` works like a static namespace with one socket per key. Optional keys
+# (``total=False``) become optional sockets.
 
+from typing import TypedDict
+
+
+class XYIn(TypedDict):
+    x: int
+    y: int
+
+
+class AddMultiplyOut(TypedDict):
+    sum: int
+    product: int
+
+
+@task()
+def add_multiply_typed_dict(**kwargs) -> AddMultiplyOut:
+    return {"sum": kwargs["x"] + kwargs["y"], "product": kwargs["x"] * kwargs["y"]}
+
+
+@task.graph()
+def AddMultiplyTypedDict():
+    add_multiply_typed_dict(x=2, y=5)
+
+
+wg = AddMultiplyTypedDict.build()
+wg.run()
+wg.engine.recorder
+
+# %%
+# .. note::
+#
+#    You can also expand ``**kwargs`` with ``Unpack[YourTypedDict]`` to make the
+#    inputs explicit in the function signature (same socket expansion).
+#    Optional keys can be expressed with ``total=False`` or ``NotRequired``.
+#    ``NotRequired`` requires Python 3.11+ (or ``typing_extensions``).
+#
 # %%
 # Using Pydantic models
 # ---------------------
@@ -634,7 +674,7 @@ def AnnotateExtras(
 # ----------
 #
 # You now know how to annotate task and graph inputs and outputs in `node-graph`.
-# By leveraging static (``namespace``), dynamic (``dynamic``), nested namespaces, and **Pydantic models**,
+# By leveraging static (``namespace``), dynamic (``dynamic``), nested namespaces, and structured models,
 # you can precisely control data serialization and create transparent data lineages.
 #
 # The key takeaways are:
@@ -642,10 +682,11 @@ def AnnotateExtras(
 # - Annotate task/graph outputs to unpack results into individual AiiDA nodes.
 # - Annotate inputs to specify input structures.
 # - Employ ``dynamic`` (or Pydantic models with ``extra='allow'``) for tasks with a variable number of outputs.
-# - Use **Pydantic model** or dataclass for reusable, validated schemas:
-#     * Plain ``BaseModel`` or dataclass --> expanded namespace
+# - Use **Pydantic model**, dataclass, or ``TypedDict`` for reusable, validated schemas:
+#     * Plain ``BaseModel``, dataclass, or ``TypedDict`` --> expanded namespace
 #     * ``model_config={'extra':'allow', 'item_type': T}`` --> dynamic namespace
 #     * ``model_config={'leaf': True}`` or ``Leaf[Model]`` --> single leaf (blob)
+# - Use ``Unpack[TypedDict]`` to expand ``**kwargs`` into a fixed namespace.
 # - Reuse ``.inputs`` and ``.outputs`` specifications at the graph level to build modular and robust workflows.
 # - Use ``select`` inside ``Annotated`` to reshape reused specifications
 #   (e.g., ``include``/``exclude`` with dotted paths, ``rename``, ``prefix``).
