@@ -30,6 +30,7 @@ dependencies = [
     "node-graph-widget",
     "wrapt",
     "pydantic~=2.6",
+    "typing_extensions",
     "pyyaml",
     "rdflib>=6.0",
     "graphviz>=0.20",

@@ -26,6 +26,12 @@ from dataclasses import (
 
 from typing import Annotated, get_args, get_origin, get_type_hints
 
+try:
+    from typing import Unpack
+except ImportError:  # pragma: no cover - Python < 3.11
+    from typing_extensions import Unpack
+from typing import is_typeddict as _is_typeddict
+
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
@@ -428,16 +434,35 @@ def _is_dataclass_type(tp: Any) -> bool:
     return isinstance(tp, type) and _is_dc(tp)
 
 
+def _is_typeddict_type(tp: Any) -> bool:
+    try:
+        return _is_typeddict(tp)
+    except TypeError:
+        return False
+
+
+def _unpack_typeddict_type(ann: Any) -> Optional[type]:
+    base, _ = _unwrap_annotated(ann)
+    origin = get_origin(base)
+    if origin is Unpack:
+        args = get_args(base)
+        if len(args) == 1 and _is_typeddict_type(args[0]):
+            return args[0]
+    return None
+
+
 def _is_struct_model_type(tp: Any) -> bool:
-    # “Structured models” are Pydantic models or dataclasses
-    return _is_pydantic_model_type(tp) or _is_dataclass_type(tp)
+    # “Structured models” are Pydantic models, dataclasses, or TypedDicts
+    return (
+        _is_pydantic_model_type(tp) or _is_dataclass_type(tp) or _is_typeddict_type(tp)
+    )
 
 
-def _struct_cfg(model_cls: type[BaseModel]) -> dict:
+def _struct_cfg(model_cls: type[Any]) -> dict:
     return getattr(model_cls, "model_config", {}) or {}
 
 
-def _struct_is_dynamic(model_cls: type[BaseModel]) -> bool:
+def _struct_is_dynamic(model_cls: type[Any]) -> bool:
     return _struct_cfg(model_cls).get("extra", None) == "allow"
 
 
@@ -457,7 +482,7 @@ def _struct_is_leaf(model_or_ann: Any) -> bool:
     return False
 
 
-def _struct_dynamic_item_type(model_cls: type[BaseModel]) -> Any:
+def _struct_dynamic_item_type(model_cls: type[Any]) -> Any:
     cfg = _struct_cfg(model_cls)
     return cfg.get("item_type")
 
@@ -483,7 +508,7 @@ def _normalize_explicit_spec(explicit: Any) -> SocketSpec:
     if isinstance(explicit, type) and _is_struct_model_type(explicit):
         return SocketSpecAPI.from_model(explicit)
     raise TypeError(
-        "Unsupported explicit spec. Use SocketSpec, SocketView, Pydantic BaseModel subclass or dataclass."
+        "Unsupported explicit spec. Use SocketSpec, SocketView, Pydantic BaseModel subclass, dataclass, or TypedDict."
     )
 
 
@@ -635,7 +660,8 @@ class SocketSpecAPI:
     @classmethod
     def from_model(cls, model_cls: Type[Any]) -> SocketSpec:
         """
-        Expand a structured type (Pydantic BaseModel subclass or dataclass) into a namespace spec.
+        Expand a structured type (Pydantic BaseModel subclass, dataclass, or TypedDict)
+        into a namespace spec.
 
         Honors `model_config` for both kinds:
         - extra='allow'  -> dynamic namespace
@@ -722,15 +748,37 @@ class SocketSpecAPI:
                 ns.fields[f.name] = child
             return ns
 
+        elif _is_typeddict_type(model_cls):
+            # ---------- TypedDict ----------
+            hints = get_type_hints(model_cls, include_extras=True)
+            required_keys = getattr(model_cls, "__required_keys__", None)
+            if required_keys is None:
+                total = getattr(model_cls, "__total__", True)
+                required_keys = set(hints.keys()) if total else set()
+            else:
+                required_keys = set(required_keys)
+
+            ns = SocketSpec(identifier=cls._ns_identifier(), fields={})
+            for name, ann in hints.items():
+                child = cls._child_spec_from_type(ann)
+                child = replace(
+                    child, meta=replace(child.meta, required=name in required_keys)
+                )
+                ns.fields[name] = child
+            return ns
+
         else:
             raise TypeError(
-                "from_model expects a Pydantic BaseModel subclass or a dataclass class."
+                "from_model expects a Pydantic BaseModel subclass, dataclass, or TypedDict."
             )
 
     @classmethod
     def _leaf_from_type(cls, T: Any) -> SocketSpec:
         if T is Any or T is inspect._empty or T is object:
             return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
+
+        if _is_typeddict_type(T):
+            return cls._leaf_from_type(dict)
 
         origin = get_origin(T)
         if _is_union_origin(origin):
@@ -892,16 +940,15 @@ class SocketSpecAPI:
             T = ann_map.get(name, param.annotation)
             base_T, _ = _unwrap_annotated(T)
             base_T = _strip_optional(base_T)
+            unpack_td = _unpack_typeddict_type(T)
 
             # Determine call_role
             if param.kind is inspect.Parameter.POSITIONAL_ONLY:
                 call_role = CallRole.ARGS
             elif param.kind is inspect.Parameter.VAR_POSITIONAL:
                 call_role = CallRole.VAR_ARGS
-                is_dyn = True
             elif param.kind is inspect.Parameter.VAR_KEYWORD:
                 call_role = CallRole.VAR_KWARGS
-                is_dyn = True
             else:
                 call_role = CallRole.KWARGS
 
@@ -924,6 +971,8 @@ class SocketSpecAPI:
                 # Pydantic model?
                 elif _is_struct_model_type(base_T):
                     spec = cls.from_model(base_T)
+                elif unpack_td is not None:
+                    spec = cls.from_model(unpack_td)
                 else:
                     spec = cls._spec_from_annotation(base_T)
 
@@ -937,8 +986,30 @@ class SocketSpecAPI:
             )
             spec = replace(spec, meta=merge_meta(spec.meta, merged_meta))
 
+            # Unpack[TypedDict] on **kwargs -> expand into top-level kwargs
+            if param.kind is inspect.Parameter.VAR_KEYWORD and unpack_td is not None:
+                if not spec.is_namespace():
+                    raise TypeError(
+                        "Unpack[TypedDict] must resolve to a namespace spec."
+                    )
+                group_meta = _merge_all_meta_from_annotation(
+                    T, SocketMeta(required=None, call_role=CallRole.KWARGS)
+                )
+                for child_name, child_spec in (spec.fields or {}).items():
+                    if child_name in fields:
+                        raise ValueError(
+                            f"Unpack[TypedDict] field '{child_name}' conflicts with existing "
+                            f"parameter '{child_name}'."
+                        )
+                    child_spec = replace(
+                        child_spec, meta=merge_meta(child_spec.meta, group_meta)
+                    )
+                    fields[child_name] = child_spec
+                continue
+
             # varargs/kwargs become dynamic namespaces
             if param.kind is inspect.Parameter.VAR_POSITIONAL:
+                is_dyn = True
                 item_T, _ = _unwrap_annotated(T)
                 item_T = _strip_optional(item_T)
                 item_spec = cls._spec_from_annotation(
@@ -950,22 +1021,24 @@ class SocketSpecAPI:
                     meta=replace(spec.meta, dynamic=True),
                 )
             elif param.kind is inspect.Parameter.VAR_KEYWORD:
-                item_T, _ = _unwrap_annotated(T)
-                item_T = _strip_optional(item_T)
-                # try Mapping[str, T] -> T else Any
-                origin = get_origin(item_T)
-                if origin in (dict,):
-                    args = get_args(item_T)
-                    if args and len(args) == 2 and (args[0] in (str, Any)):
-                        item_T = args[1]
-                else:
-                    item_T = Any if item_T is inspect._empty else item_T
-                item_spec = cls._spec_from_annotation(item_T)
-                spec = SocketSpec(
-                    identifier=cls._ns_identifier(),
-                    item=item_spec,
-                    meta=replace(spec.meta, dynamic=True),
-                )
+                if unpack_td is None:
+                    is_dyn = True
+                    item_T, _ = _unwrap_annotated(T)
+                    item_T = _strip_optional(item_T)
+                    # try Mapping[str, T] -> T else Any
+                    origin = get_origin(item_T)
+                    if origin in (dict,):
+                        args = get_args(item_T)
+                        if args and len(args) == 2 and (args[0] in (str, Any)):
+                            item_T = args[1]
+                    else:
+                        item_T = Any if item_T is inspect._empty else item_T
+                    item_spec = cls._spec_from_annotation(item_T)
+                    spec = SocketSpec(
+                        identifier=cls._ns_identifier(),
+                        item=item_spec,
+                        meta=replace(spec.meta, dynamic=True),
+                    )
 
             # Apply selection/transform directives from Annotated
             spec = _apply_select_from_annotation(T, spec)
