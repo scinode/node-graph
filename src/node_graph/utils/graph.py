@@ -162,10 +162,10 @@ def materialize_graph(
         graph_class = Graph
 
     merged = {**kwargs, **(var_kwargs or {})}
-    name = identifier or func.__name__
+    name = identifier.split(".")[-1] or func.__name__
     with graph_class(name=name, inputs=in_spec, outputs=out_spec) as graph:
         definition_meta = inspect_callable_metadata(func)
-        definition_meta["task_identifier"] = name
+        definition_meta["task_identifier"] = identifier
         graph._metadata.setdefault("definition", definition_meta)
         inputs = prepare_function_inputs(func, *args, **merged)
         inputs = clean_socket_reference(inputs)
