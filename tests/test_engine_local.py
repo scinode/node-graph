@@ -101,6 +101,7 @@ def test_local_engine_handles_nested_and_dynamic_outputs():
     ng = composed.build(data={"x": 2, "y": 3})
     engine = LocalEngine()
     values = engine.run(ng)
+    print("values: ", values)
 
     assert values["add_multiply"]["sum"] == 11
     assert values["square"]["square_4"] == 16

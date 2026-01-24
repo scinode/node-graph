@@ -176,13 +176,22 @@ def test_expose_inputs_names_invalid(test_ng):
 
 
 def test_expose_inputs_skip_linked(test_ng):
-    """Test generation of inputs from tasks, skip linked sockets"""
+    """Test generation of inputs from tasks, skip linking for linked sockets"""
     ng = test_ng
     ng.add_link(ng.tasks.add1.outputs.output1.x, ng.tasks.add2.inputs.input1.x)
     ng.expose_inputs()
     assert "add2" in ng.inputs
-    assert "input1.x" not in ng.inputs.add2
+    assert "input1.x" in ng.inputs.add2
     assert "input1.y" in ng.inputs.add2
+    assert all(
+        link.from_socket is not ng.inputs.add2.input1.x
+        for link in ng.tasks.add2.inputs.input1.x._links
+    )
+    assert any(
+        link.from_socket is ng.inputs.add2.input1.y
+        and link.to_socket is ng.tasks.add2.inputs.input1.y
+        for link in ng.tasks.add2.inputs.input1.y._links
+    )
     # outputs will still have all sockets
     ng.expose_outputs()
     assert "add1" in ng.outputs

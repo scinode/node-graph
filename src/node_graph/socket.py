@@ -1289,10 +1289,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                 if is_structured_instance(val):
                     val = structured_to_dict(val)
                 # If incoming val is a dict, recurse. If it’s a socket, link to the namespace.
-                if isinstance(val, dict):
+                if isinstance(val, (dict, TaskSocketNamespace)):
                     target._set_socket_value(val, value_source=value_source)
-                elif isinstance(val, BaseSocket):
-                    self._task.graph.add_link(val, target)
                 else:
                     # Treat setting a leaf value into a namespace as error for clarity
                     _raise_namespace_assignment_error(
@@ -1634,3 +1632,20 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
     def __repr__(self) -> str:
         nested = list(self._sockets.keys())
         return f"{self.__class__.__name__}(name='{self._name}', sockets={nested})"
+
+    def _relative_keys(self, *, include_builtins: bool = False) -> set[str]:
+        """Return leaf socket paths relative to this namespace."""
+        keys: set[str] = set()
+
+        def _walk(namespace: "TaskSocketNamespace", prefix: str = "") -> None:
+            for name, child in namespace._sockets.items():
+                if not include_builtins and name.startswith("_"):
+                    continue
+                path = f"{prefix}{name}" if prefix else name
+                if isinstance(child, TaskSocketNamespace):
+                    _walk(child, f"{path}.")
+                else:
+                    keys.add(path)
+
+        _walk(self)
+        return keys

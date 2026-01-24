@@ -233,8 +233,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from tasks."""
-        from node_graph.socket_spec import remove_spec_field
-
         all_names = set(self.tasks._get_keys())
         names = set(names or all_names)
         missing = names - all_names
@@ -244,22 +242,13 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             task = self.tasks[name]
             # update the _inputs spec
             if task.spec.inputs is not None:
-                # skip linked sockets
-                names = [
-                    link.to_socket._scoped_name
-                    for link in self.links
-                    if link.to_task == task
-                ]
-                spec = remove_spec_field(task.spec.inputs, names=names)
-                socket = self.add_input_spec(spec, name=task.name)
-                keys = task.inputs._get_all_keys()
-                exist_keys = socket._get_all_keys()
-                for key in keys:
-                    new_key = f"{task.name}.{key}"
-                    if new_key not in exist_keys:
-                        continue
-                    # add link from group inputs to task inputs
-                    self.add_link(self.inputs[new_key], task.inputs[key])
+                socket = self.add_input_spec(task.spec.inputs, name=task.name)
+                # add link from group inputs to task inputs
+                self.add_link(
+                    socket,
+                    task.inputs,
+                    allow_skip_linked=True,
+                )
 
     def expose_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from tasks."""
@@ -272,14 +261,12 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             task = self.tasks[name]
             if task.spec.outputs is not None:
                 socket = self.add_output_spec(task.spec.outputs, name=task.name)
-                keys = task.outputs._get_all_keys()
-                exist_keys = socket._get_all_keys()
-                for key in keys:
-                    new_key = f"{task.name}.{key}"
-                    if new_key not in exist_keys:
-                        continue
-                    # add link from task outputs to group outputs
-                    self.add_link(task.outputs[key], self.outputs[new_key])
+                # add link from task outputs to group outputs
+                self.add_link(
+                    task.outputs,
+                    socket,
+                    allow_skip_linked=True,
+                )
 
     def set_inputs(self, inputs: Dict[str, Any]):
         for name, input in inputs.items():
@@ -334,8 +321,16 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self,
         source: TaskSocket | Task,
         target: TaskSocket | "TaskSocketNamespace",
+        *,
+        allow_skip_linked: bool = False,
     ) -> TaskLink | None:
-        """Add a link between two tasks."""
+        """Add a link between two sockets or namespace sockets.
+
+        When linking namespaces, all leaf sockets are linked recursively and a
+        namespace-level link is also created for bookkeeping. Set
+        allow_skip_linked=True to skip targets that are already linked.
+        """
+        from node_graph.socket import TaskSocketNamespace
 
         if isinstance(source, Task):
             source = source.outputs["graph_outputs"]
@@ -356,7 +351,21 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             if isinstance(source, TaskSocketNamespace) and isinstance(
                 target, TaskSocketNamespace
             ):
-                return self._add_namespace_link(source, target)
+                if not (source._metadata.dynamic or target._metadata.dynamic):
+                    source_keys = source._relative_keys()
+                    target_keys = target._relative_keys()
+                    if source_keys != target_keys:
+                        src = source._full_name_with_task
+                        dst = target._full_name_with_task
+                        raise ValueError(
+                            "Namespace structures do not match for linking: "
+                            f"{src} vs {dst}. "
+                            f"Missing in source: {sorted(target_keys - source_keys)}. "
+                            f"Missing in target: {sorted(source_keys - target_keys)}."
+                        )
+                return self._add_namespace_link(
+                    source, target, allow_skip_linked=allow_skip_linked
+                )
             src = getattr(source, "_full_name_with_task", "<unknown>")
             dst = getattr(target, "_full_name_with_task", "<unknown>")
             raise TypeError(
@@ -371,13 +380,39 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self._version += 1
         return link
 
+    def _has_incoming_links(self, item: TaskSocket | "TaskSocketNamespace") -> bool:
+        """Return True if the target socket already has incoming links."""
+        return any(link.to_socket is item for link in item._links)
+
     def _add_namespace_link(
         self,
         source: "TaskSocketNamespace",
         target: "TaskSocketNamespace",
+        *,
+        allow_skip_linked: bool = False,
     ) -> TaskLink | None:
+        """Link two namespaces, optionally skipping already-linked targets."""
+        from node_graph.socket import TaskSocketNamespace
+
         last_link: TaskLink | None = None
+        link_source: TaskSocket | TaskSocketNamespace = source
+        if source._parent is None and "_outputs" in source:
+            link_source = source["_outputs"]
+
+        if not (allow_skip_linked and self._has_incoming_links(target)):
+            key = (
+                f"{link_source._task.name}.{link_source._scoped_name} -> "
+                f"{target._task.name}.{target._scoped_name}"
+            )
+            if key in self.links:
+                last_link = self.links[key]
+            else:
+                last_link = self.links._new(link_source, target)
+                self._version += 1
+
         for name, target_child in target._sockets.items():
+            if name.startswith("_"):
+                continue
             if name not in source._sockets:
                 src = source._full_name_with_task
                 dst = target._full_name_with_task
@@ -386,10 +421,23 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                     f"while linking to {dst}."
                 )
             source_child = source._sockets[name]
+            if self._has_incoming_links(target_child):
+                if allow_skip_linked:
+                    continue
+                src = source_child._full_name_with_task
+                dst = target_child._full_name_with_task
+                raise ValueError(
+                    "Namespace link conflict: target socket already linked at "
+                    f"{src} -> {dst}."
+                )
             if isinstance(source_child, TaskSocketNamespace) and isinstance(
                 target_child, TaskSocketNamespace
             ):
-                child_link = self._add_namespace_link(source_child, target_child)
+                child_link = self._add_namespace_link(
+                    source_child,
+                    target_child,
+                    allow_skip_linked=allow_skip_linked,
+                )
                 if child_link is not None:
                     last_link = child_link
                 continue
