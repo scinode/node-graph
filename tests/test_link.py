@@ -147,10 +147,7 @@ def test_namespace_link_blocked_with_leaf_socket():
     ng.add_task(produce_ints, "produce_ints")
     ng.add_task(take_int, "take_int")
 
-    with pytest.raises(
-        TypeError, match="Linking a namespace socket directly to a leaf socket"
-    ):
-        ng.add_link(ng.tasks.take_int.outputs.result, ng.tasks.produce_ints.inputs.data)
+    ng.add_link(ng.tasks.take_int.outputs.result, ng.tasks.produce_ints.inputs.data)
     with pytest.raises(
         TypeError, match="Linking a namespace socket directly to a leaf socket"
     ):
@@ -173,6 +170,11 @@ def test_namespace_to_namespace_link_recurses():
     ng.add_link(ng.tasks.make_pair.outputs, ng.tasks.consume.inputs)
 
     assert any(
+        link.from_socket is ng.tasks.make_pair.outputs["_outputs"]
+        and link.to_socket is ng.tasks.consume.inputs
+        for link in ng.links
+    )
+    assert any(
         link.from_socket is ng.tasks.make_pair.outputs.a
         for link in ng.tasks.consume.inputs.a._links
     )
@@ -183,6 +185,38 @@ def test_namespace_to_namespace_link_recurses():
     assert any(
         link.from_socket is ng.tasks.make_pair.outputs.nested.y
         for link in ng.tasks.consume.inputs.nested.y._links
+    )
+
+
+def test_dynamic_namespace_accepts_leaf_link():
+    @task()
+    def emit(x: int) -> int:
+        return x
+
+    @task()
+    def collect(datas: dynamic(int)) -> int:
+        return 0
+
+    ng = Graph()
+    ng.add_task(emit, "emit")
+    ng.add_task(collect, "collect")
+
+    ng.add_link(ng.tasks.emit.outputs.result, ng.tasks.collect.inputs.datas)
+
+
+def test_outputs_leaf_links_to_namespace():
+    @task()
+    def add_pair(x: int, y: int) -> namespace(sum=int, product=int):
+        return {"sum": x + y, "product": x * y}
+
+    ng = Graph(outputs=namespace(out1=namespace(sum=int, product=int)))
+    ng.add_task(add_pair, "add_pair", x=1, y=2)
+
+    ng.add_link(ng.tasks.add_pair.outputs._outputs, ng.outputs.out1)
+    assert any(
+        link.from_socket is ng.tasks.add_pair.outputs._outputs
+        and link.to_socket is ng.outputs.out1
+        for link in ng.links
     )
 
 

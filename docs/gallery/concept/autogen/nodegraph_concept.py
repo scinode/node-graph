@@ -34,7 +34,7 @@ add1 = g.add_task("node_graph.test_add", name="add1")
 
 g.add_link(float1.outputs.result, add1.inputs.x)
 
-g.to_html()
+g
 # %%
 # Save to dict
 # ------------

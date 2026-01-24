@@ -104,7 +104,7 @@ def AddMultiplyInputs(x: int, y: int):
 
 
 wg = AddMultiplyInputs.build(x=1, y=2)
-wg.to_html()
+wg
 
 # %%
 # Note how the ``x`` input is passed to ``data.x`` (and similarly for ``y``).
@@ -499,7 +499,7 @@ wg = AddMultiplyFinal.build(
         "add_multiply2": {"data": {"x": 3, "y": 4}},
     },
 )
-wg.to_html()
+wg
 
 # %%
 # In the example above:
@@ -611,7 +611,7 @@ wg = UseExclude.build(
         },
     },
 )
-wg.to_html()
+wg
 
 # %%
 # In the GUI representation, you can see that the graph has a top-level ``structure`` input,

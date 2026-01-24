@@ -1142,6 +1142,148 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
     def _value(self, value: Dict[str, Any]) -> None:
         self._set_socket_value(value)
 
+    def _link_namespace_socket(self, value: BaseSocket) -> None:
+        """Link a socket directly to this namespace."""
+        self._clear_updatable_meta()
+        self._task.graph.add_link(value, self)
+
+    def _append_dynamic_child(self, key: str, val: Any) -> None:
+        from node_graph.socket_spec import SocketSpec
+
+        extras = self._metadata.extras or {}
+        item_snapshot = extras.get("item") if isinstance(extras, dict) else None
+        if item_snapshot is None:
+            if isinstance(val, (dict, TaskSocketNamespace)):
+                item_snapshot = {
+                    "identifier": self._type_mapping["namespace"],
+                    "dynamic": True,
+                }
+            else:
+                item_snapshot = {"identifier": self._type_mapping["default"]}
+        item_spec = (
+            SocketSpec.from_dict(item_snapshot)
+            if isinstance(item_snapshot, dict)
+            else None
+        )
+        self._append_from_spec(
+            self,
+            key,
+            item_spec,
+            task=self._task,
+            graph=self._graph,
+            role="input",
+        )
+
+    def _get_or_create_child(self, key: str, val: Any) -> object:
+        if key in self._sockets:
+            return self._sockets[key]
+        if key.startswith("_"):
+            _raise_namespace_assignment_error(
+                target_ns=self,
+                incoming_desc=f"key '{key}'",
+                reason=f"Field '{key}' is a reserved builtin socket.",
+                fixes=[
+                    "Remove the builtin key from the assignment; or",
+                    "link to an explicit leaf socket instead of the namespace.",
+                ],
+            )
+        if not self._metadata.dynamic:
+            _raise_namespace_assignment_error(
+                target_ns=self,
+                incoming_desc=f"key '{key}'",
+                reason=f"Field '{key}' is not defined and this namespace is not dynamic.",
+                fixes=[
+                    "Add the field to the namespace spec; or",
+                    "make the namespace dynamic if it should grow automatically.",
+                ],
+            )
+        self._append_dynamic_child(key, val)
+        return self._sockets[key]
+
+    def _assign_key_value(self, key: str, val: Any, *, value_source: str) -> None:
+        if "." in key:
+            head, tail = key.split(".", 1)
+            if head not in self._sockets:
+                if head.startswith("_"):
+                    _raise_namespace_assignment_error(
+                        target_ns=self,
+                        incoming_desc=f"key '{head}'",
+                        reason=f"Field '{head}' is a reserved builtin socket.",
+                        fixes=[
+                            "Remove the builtin key from the assignment; or",
+                            "link to an explicit leaf socket instead of the namespace.",
+                        ],
+                    )
+                if not self._metadata.dynamic:
+                    _raise_namespace_assignment_error(
+                        target_ns=self,
+                        incoming_desc=f"key '{head}'",
+                        reason=f"Field '{head}' is not defined and this namespace is not dynamic.",
+                        fixes=[
+                            "Define the field in the socket spec (preferred); or",
+                            "mark this namespace dynamic if it must accept arbitrary keys;",
+                            "or correct the key path being assigned.",
+                        ],
+                    )
+                self._new(
+                    self._SocketPool["namespace"],
+                    head,
+                    metadata={
+                        "dynamic": True,
+                        "child_default_link_limit": self._metadata.child_default_link_limit,
+                    },
+                )
+            child = self._sockets[head]
+            if not isinstance(child, TaskSocketNamespace):
+                _raise_namespace_assignment_error(
+                    target_ns=self,
+                    incoming_desc=f"nested key '{key}' under leaf '{head}'",
+                    reason=f"'{head}' is a leaf socket, but you attempted to assign nested data below it.",
+                    fixes=[
+                        "Use a namespace socket for hierarchical data; update your SocketSpec accordingly; or",
+                        "flatten your assignment to target a leaf socket directly.",
+                    ],
+                )
+            child._set_socket_value({tail: val}, value_source=value_source)
+            return
+
+        target = self._get_or_create_child(key, val)
+        if isinstance(target, TaskSocketNamespace):
+            if is_structured_instance(val):
+                val = structured_to_dict(val)
+            if isinstance(val, TaskSocketNamespace):
+                target._set_socket_value(val, value_source=value_source)
+                return
+            if isinstance(val, BaseSocket):
+                if target._metadata.dynamic:
+                    target._set_socket_value(val, value_source=value_source)
+                    return
+                if getattr(val, "_scoped_name", None) == "_outputs":
+                    target._set_socket_value(val, value_source=value_source)
+                    return
+                _raise_namespace_assignment_error(
+                    target_ns=target,
+                    incoming_desc=type(val).__name__,
+                    reason="A non-dynamic namespace cannot accept a direct socket link.",
+                    fixes=[
+                        "Link a specific leaf socket instead of the namespace; or",
+                        "make the namespace dynamic if it should accept multiple links.",
+                    ],
+                )
+            if isinstance(val, (dict, TaskSocketNamespace)):
+                target._set_socket_value(val, value_source=value_source)
+                return
+            _raise_namespace_assignment_error(
+                target_ns=target,
+                incoming_desc=type(val).__name__,
+                reason="A namespace expects a mapping of fields, but a non-dict value was provided.",
+                fixes=[
+                    "Provide a dict like {'x': 1, 'y': 2} that matches the namespace shape.",
+                ],
+            )
+        else:
+            target._set_socket_value(val, value_source=value_source)
+
     def _set_socket_value(
         self, value: Dict[str, Any] | TaskSocket, *, value_source: str = "link"
     ) -> None:
@@ -1156,8 +1298,6 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         - Missing immediate children can be created only if *this* namespace is dynamic.
         - Intermediate dotted segments are created as namespaces (dynamic=True) when needed.
         """
-        from node_graph.socket_spec import SocketSpec
-
         if value is None:
             return
         if is_structured_instance(value):
@@ -1165,8 +1305,7 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
 
         # Link another socket directly to this namespace
         if isinstance(value, BaseSocket):
-            self._clear_updatable_meta()
-            self._task.graph.add_link(value, self)
+            self._link_namespace_socket(value)
             return
 
         if isinstance(value, TaggedValue):
@@ -1202,108 +1341,7 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
             )
 
         for key, val in value.items():
-            # If the key is dotted, descend or create per segment
-            if "." in key:
-                head, tail = key.split(".", 1)
-
-                # Ensure the immediate child exists (create if allowed)
-                if head not in self._sockets:
-                    if not self._metadata.dynamic:
-                        _raise_namespace_assignment_error(
-                            target_ns=self,
-                            incoming_desc=f"key '{head}'",
-                            reason=f"Field '{head}' is not defined and this namespace is not dynamic.",
-                            fixes=[
-                                "Define the field in the socket spec (preferred); or",
-                                "mark this namespace dynamic if it must accept arbitrary keys;",
-                                "or correct the key path being assigned.",
-                            ],
-                        )
-                    # We are going to descend (tail exists), so create a namespace
-                    self._new(
-                        self._SocketPool["namespace"],
-                        head,
-                        metadata={
-                            "dynamic": True,
-                            "child_default_link_limit": self._metadata.child_default_link_limit,
-                        },
-                    )
-
-                child = self._sockets[head]
-                if not isinstance(child, TaskSocketNamespace):
-                    _raise_namespace_assignment_error(
-                        target_ns=self,
-                        incoming_desc=f"nested key '{key}' under leaf '{head}'",
-                        reason=f"'{head}' is a leaf socket, but you attempted to assign nested data below it.",
-                        fixes=[
-                            "Use a namespace socket for hierarchical data; update your SocketSpec accordingly; or",
-                            "flatten your assignment to target a leaf socket directly.",
-                        ],
-                    )
-
-                # Recurse into the child namespace with the remaining tail
-                child._set_socket_value({tail: val}, value_source=value_source)
-                continue  # next key
-
-            # Non-dotted key path (single-segment)
-            if key not in self._sockets:
-                if not self._metadata.dynamic:
-                    _raise_namespace_assignment_error(
-                        target_ns=self,
-                        incoming_desc=f"key '{key}'",
-                        reason=f"Field '{key}' is not defined and this namespace is not dynamic.",
-                        fixes=[
-                            "Add the field to the namespace spec; or",
-                            "make the namespace dynamic if it should grow automatically.",
-                        ],
-                    )
-
-                # Create a leaf or namespace based on the dynamic item type
-                extras = self._metadata.extras or {}
-                item_snapshot = extras.get("item") if isinstance(extras, dict) else None
-                if item_snapshot is None:
-                    if isinstance(val, (dict, TaskSocketNamespace)):
-                        item_snapshot = {
-                            "identifier": self._type_mapping["namespace"],
-                            "dynamic": True,
-                        }
-                    else:
-                        item_snapshot = {"identifier": self._type_mapping["default"]}
-                item_spec = (
-                    SocketSpec.from_dict(item_snapshot)
-                    if isinstance(item_snapshot, dict)
-                    else None
-                )
-                self._append_from_spec(
-                    self,
-                    key,
-                    item_spec,
-                    task=self._task,
-                    graph=self._graph,
-                    role="input",
-                )
-
-            # Now we’re guaranteed the key exists; delegate appropriately
-            target = self._sockets[key]
-            if isinstance(target, TaskSocketNamespace):
-                if is_structured_instance(val):
-                    val = structured_to_dict(val)
-                # If incoming val is a dict, recurse. If it’s a socket, link to the namespace.
-                if isinstance(val, (dict, TaskSocketNamespace)):
-                    target._set_socket_value(val, value_source=value_source)
-                else:
-                    # Treat setting a leaf value into a namespace as error for clarity
-                    _raise_namespace_assignment_error(
-                        target_ns=target,
-                        incoming_desc=type(val).__name__,
-                        reason="A namespace expects a mapping of fields, but a non-dict value was provided.",
-                        fixes=[
-                            "Provide a dict like {'x': 1, 'y': 2} that matches the namespace shape.",
-                        ],
-                    )
-            else:
-                # Leaf socket: forward to its own setter (which handles linking or value assignment)
-                target._set_socket_value(val, value_source=value_source)
+            self._assign_key_value(key, val, value_source=value_source)
 
     def _export_updatable_meta_map(self) -> Dict[str, Dict[str, Any]]:
         """Export whitelisted metadata extras keyed by scoped socket path."""
@@ -1633,14 +1671,25 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         nested = list(self._sockets.keys())
         return f"{self.__class__.__name__}(name='{self._name}', sockets={nested})"
 
+    def _iter_children(
+        self, *, include_builtins: bool = False
+    ) -> list[tuple[str, object]]:
+        """Iterate namespace children, optionally including builtin sockets."""
+        items = []
+        for name, child in self._sockets.items():
+            if not include_builtins and name.startswith("_"):
+                continue
+            items.append((name, child))
+        return items
+
     def _relative_keys(self, *, include_builtins: bool = False) -> set[str]:
         """Return leaf socket paths relative to this namespace."""
         keys: set[str] = set()
 
         def _walk(namespace: "TaskSocketNamespace", prefix: str = "") -> None:
-            for name, child in namespace._sockets.items():
-                if not include_builtins and name.startswith("_"):
-                    continue
+            for name, child in namespace._iter_children(
+                include_builtins=include_builtins
+            ):
                 path = f"{prefix}{name}" if prefix else name
                 if isinstance(child, TaskSocketNamespace):
                     _walk(child, f"{path}.")

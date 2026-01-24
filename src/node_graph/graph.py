@@ -332,18 +332,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         """
         from node_graph.socket import TaskSocketNamespace
 
-        if isinstance(source, Task):
-            source = source.outputs["graph_outputs"]
-        elif source._parent is None and isinstance(source, TaskSocketNamespace):
-            if not isinstance(target, TaskSocketNamespace):
-                # if the source is the top-level outputs,
-                # we use the built-in "_outputs" socket to represent it
-                if "_outputs" in source:
-                    source = source["_outputs"]
-                else:
-                    raise ValueError(
-                        f"You try to link a top-level output socket {source._name} without a parent."
-                    )
+        source, target = self._normalize_link_endpoints(source, target)
 
         if isinstance(source, TaskSocketNamespace) or isinstance(
             target, TaskSocketNamespace
@@ -351,21 +340,42 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             if isinstance(source, TaskSocketNamespace) and isinstance(
                 target, TaskSocketNamespace
             ):
-                if not (source._metadata.dynamic or target._metadata.dynamic):
+                if not self._namespace_structures_match(source, target):
                     source_keys = source._relative_keys()
                     target_keys = target._relative_keys()
-                    if source_keys != target_keys:
-                        src = source._full_name_with_task
-                        dst = target._full_name_with_task
-                        raise ValueError(
-                            "Namespace structures do not match for linking: "
-                            f"{src} vs {dst}. "
-                            f"Missing in source: {sorted(target_keys - source_keys)}. "
-                            f"Missing in target: {sorted(source_keys - target_keys)}."
-                        )
+                    src = source._full_name_with_task
+                    dst = target._full_name_with_task
+                    raise ValueError(
+                        "Namespace structures do not match for linking: "
+                        f"{src} vs {dst}. "
+                        f"Missing in source: {sorted(target_keys - source_keys)}. "
+                        f"Missing in target: {sorted(source_keys - target_keys)}."
+                    )
                 return self._add_namespace_link(
                     source, target, allow_skip_linked=allow_skip_linked
                 )
+            if (
+                isinstance(target, TaskSocketNamespace)
+                and target._metadata.dynamic
+                and not isinstance(source, TaskSocketNamespace)
+            ):
+                return self._add_leaf_link(source, target)
+            if (
+                isinstance(target, TaskSocketNamespace)
+                and not isinstance(source, TaskSocketNamespace)
+                and getattr(source, "_scoped_name", None) == "_outputs"
+            ):
+                return self._add_leaf_link(source, target)
+            if isinstance(source, TaskSocketNamespace):
+                normalized = self._normalize_namespace_source(source)
+                if normalized is None:
+                    src = getattr(source, "_full_name_with_task", "<unknown>")
+                    dst = getattr(target, "_full_name_with_task", "<unknown>")
+                    raise TypeError(
+                        "Linking a namespace socket directly to a leaf socket is not allowed. "
+                        f"Got {src} -> {dst}."
+                    )
+                return self._add_leaf_link(normalized, target)
             src = getattr(source, "_full_name_with_task", "<unknown>")
             dst = getattr(target, "_full_name_with_task", "<unknown>")
             raise TypeError(
@@ -373,12 +383,64 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                 f"Got {src} -> {dst}."
             )
         #
-        key = f"{source._task.name}.{source._scoped_name} -> {target._task.name}.{target._scoped_name}"
+        return self._add_leaf_link(source, target)
+
+    def _normalize_link_endpoints(
+        self,
+        source: TaskSocket | Task,
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> tuple[TaskSocket | "TaskSocketNamespace", TaskSocket | "TaskSocketNamespace"]:
+        from node_graph.socket import TaskSocketNamespace
+
+        if isinstance(source, Task):
+            source = source.outputs["graph_outputs"]
+        elif source._parent is None and isinstance(source, TaskSocketNamespace):
+            if not isinstance(target, TaskSocketNamespace):
+                # if the source is the top-level outputs,
+                # we use the built-in "_outputs" socket to represent it
+                normalized = self._normalize_namespace_source(source)
+                if normalized is None:
+                    raise ValueError(
+                        f"You try to link a top-level output socket {source._name} without a parent."
+                    )
+                source = normalized
+        return source, target
+
+    def _normalize_namespace_source(
+        self, source: "TaskSocketNamespace"
+    ) -> TaskSocket | "TaskSocketNamespace":
+        if "_outputs" in source:
+            return source["_outputs"]
+        return None
+
+    def _link_key(
+        self,
+        source: TaskSocket | "TaskSocketNamespace",
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> str:
+        return (
+            f"{source._task.name}.{source._scoped_name} -> "
+            f"{target._task.name}.{target._scoped_name}"
+        )
+
+    def _add_leaf_link(
+        self,
+        source: TaskSocket | "TaskSocketNamespace",
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> TaskLink:
+        key = self._link_key(source, target)
         if key in self.links:
             return self.links[key]
         link = self.links._new(source, target)
         self._version += 1
         return link
+
+    def _namespace_structures_match(
+        self, source: "TaskSocketNamespace", target: "TaskSocketNamespace"
+    ) -> bool:
+        if source._metadata.dynamic or target._metadata.dynamic:
+            return True
+        return source._relative_keys() == target._relative_keys()
 
     def _has_incoming_links(self, item: TaskSocket | "TaskSocketNamespace") -> bool:
         """Return True if the target socket already has incoming links."""
@@ -400,19 +462,13 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             link_source = source["_outputs"]
 
         if not (allow_skip_linked and self._has_incoming_links(target)):
-            key = (
-                f"{link_source._task.name}.{link_source._scoped_name} -> "
-                f"{target._task.name}.{target._scoped_name}"
-            )
+            key = self._link_key(link_source, target)
             if key in self.links:
                 last_link = self.links[key]
             else:
-                last_link = self.links._new(link_source, target)
-                self._version += 1
+                last_link = self._add_leaf_link(link_source, target)
 
-        for name, target_child in target._sockets.items():
-            if name.startswith("_"):
-                continue
+        for name, target_child in target._iter_children(include_builtins=False):
             if name not in source._sockets:
                 src = source._full_name_with_task
                 dst = target._full_name_with_task

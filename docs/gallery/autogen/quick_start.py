@@ -48,7 +48,7 @@ def AddMultiply(x, y, z):
 
 
 ng = AddMultiply.build(x=1, y=2, z=3)
-ng.to_html()
+ng
 
 
 # %%
@@ -86,7 +86,7 @@ ng = Graph("first_workflow")
 ng.add_task(add, name="add", x=2, y=3)
 ng.add_task(multiply, name="multiply", y=4)
 ng.add_link(ng.tasks.add.outputs.result, ng.tasks.multiply.inputs.x)
-ng.to_html()
+ng
 
 # %%
 # What's Next
