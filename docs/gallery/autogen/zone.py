@@ -59,7 +59,7 @@ def while_with_if(index=0, limit=10, total=0, increment=1):
 
 
 g = while_with_if.build(index=0, limit=10, total=0, increment=1)
-g.to_html()
+g
 
 # %%
 # If and While are available for both context-manager graphs and ``@task.graph``

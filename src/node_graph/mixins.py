@@ -97,6 +97,25 @@ class WidgetRenderableMixin:
             return self.widget._repr_mimebundle_(*args, **kwargs)
         return self.widget._ipython_display_(*args, **kwargs)
 
+    def _repr_html_(self):
+        """Return a standalone iframe embedding the widget HTML for static docs."""
+        try:
+            from node_graph_widget.html_template import html_template
+        except Exception:
+            return None
+        import html
+        import json
+
+        self.widget.value = self.to_widget_value()
+        html_content = html_template.replace(
+            "__NODEGRAPH_DATA__", json.dumps(self.widget.value)
+        )
+        return (
+            '<iframe srcdoc="'
+            + html.escape(html_content, quote=True)
+            + '" width="100%" height="600px" frameborder="0" allowfullscreen></iframe>'
+        )
+
     def to_html(self, output: str = None, **kwargs):
         """Write a standalone html file to visualize the task."""
         self.widget.value = self.to_widget_value()

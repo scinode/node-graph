@@ -12,8 +12,6 @@
 #
 import os
 import sys
-import shutil
-from pathlib import Path
 
 
 sys.path.insert(0, os.path.abspath("../.."))
@@ -68,6 +66,7 @@ sphinx_gallery_conf = {
     "filename_pattern": "/*",
     "examples_dirs": gallery_src_dirs,  # in sphinx-gallery doc referred as gallery source
     "gallery_dirs": sphinx_src_autogen_dirs,  # path to where to gallery puts generated files
+    "capture_repr": ("_repr_html_", "__repr__"),
 }
 
 exclude_patterns = []
@@ -123,53 +122,3 @@ html_theme_options = {
 
 # pygments_style = "colorful"
 # pygments_dark_style = "monokai"
-
-
-# Function to copy HTML files
-def copy_html_files(app, exception):
-    """
-    Copy all .html files from source to build directory, maintaining the directory structure.
-    """
-    copy_print_info = "Copying HTML files to build directory"
-    print()
-    print(copy_print_info)
-    print(len(copy_print_info) * "=")
-    if exception is not None:  # Only copy files if the build succeeded
-        print(
-            "Build failed, but we still try to copy the HTML files to the build directory"
-        )
-    try:
-        src_path = Path(app.builder.srcdir)
-        build_path = Path(app.builder.outdir)
-
-        copy_print_info = f"Copying html files from sphinx src directory {src_path}"
-        print()
-        print(copy_print_info)
-        print(len(copy_print_info) * "-")
-        for html_file in src_path.rglob("*.html"):
-            relative_path = html_file.relative_to(src_path)
-            destination_file = build_path / relative_path
-            destination_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(html_file, destination_file)
-            print(f"Copy {html_file} to {destination_file}")
-
-        gallery_src_path = Path(app.builder.srcdir / Path(gallery_src_relative_dir))
-
-        copy_print_info = (
-            f"Copying html files from gallery src directory {gallery_src_path} to build"
-        )
-        print()
-        print(copy_print_info)
-        print(len(copy_print_info) * "-")
-        for html_file in gallery_src_path.rglob("*.html"):
-            relative_path = html_file.relative_to(gallery_src_path)
-            destination_file = build_path / relative_path
-            destination_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(html_file, destination_file)
-            print(f"Copy {html_file} to {destination_file}")
-    except Exception as e:
-        print(f"Failed to copy HTML files: {e}")
-
-
-def setup(app):
-    app.connect("build-finished", copy_html_files)

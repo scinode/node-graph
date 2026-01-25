@@ -74,6 +74,7 @@ class LocalEngine(BaseEngine):
                 links=incoming.get("graph_outputs", []),
                 source_map=values,
             )
+            # graph_outputs = update_nested_dict_with_special_keys(graph_outputs)
             return self._finalize_graph_success(ng, graph_pid, graph_outputs)
         except Exception as e:
             self._record_graph_failure(graph_pid, e)

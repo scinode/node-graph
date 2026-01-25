@@ -7,7 +7,7 @@ from node_graph.socket_spec import SocketSpec, SocketSpecAPI
 from typing import Dict, Any, List, Optional, Union, Callable
 import yaml
 from node_graph.task import Task
-from node_graph.socket import TaskSocket
+from node_graph.socket import TaskSocket, TaskSocketNamespace
 from node_graph.link import TaskLink
 from node_graph.utils import yaml_to_dict
 from .config import BuiltinPolicy, BUILTIN_TASKS, MAX_LINK_LIMIT
@@ -233,8 +233,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     def expose_inputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group inputs from tasks."""
-        from node_graph.socket_spec import remove_spec_field
-
         all_names = set(self.tasks._get_keys())
         names = set(names or all_names)
         missing = names - all_names
@@ -244,22 +242,13 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             task = self.tasks[name]
             # update the _inputs spec
             if task.spec.inputs is not None:
-                # skip linked sockets
-                names = [
-                    link.to_socket._scoped_name
-                    for link in self.links
-                    if link.to_task == task
-                ]
-                spec = remove_spec_field(task.spec.inputs, names=names)
-                socket = self.add_input_spec(spec, name=task.name)
-                keys = task.inputs._get_all_keys()
-                exist_keys = socket._get_all_keys()
-                for key in keys:
-                    new_key = f"{task.name}.{key}"
-                    if new_key not in exist_keys:
-                        continue
-                    # add link from group inputs to task inputs
-                    self.add_link(self.inputs[new_key], task.inputs[key])
+                socket = self.add_input_spec(task.spec.inputs, name=task.name)
+                # add link from group inputs to task inputs
+                self.add_link(
+                    socket,
+                    task.inputs,
+                    allow_skip_linked=True,
+                )
 
     def expose_outputs(self, names: Optional[List[str]] = None) -> None:
         """Generate group outputs from tasks."""
@@ -272,14 +261,12 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             task = self.tasks[name]
             if task.spec.outputs is not None:
                 socket = self.add_output_spec(task.spec.outputs, name=task.name)
-                keys = task.outputs._get_all_keys()
-                exist_keys = socket._get_all_keys()
-                for key in keys:
-                    new_key = f"{task.name}.{key}"
-                    if new_key not in exist_keys:
-                        continue
-                    # add link from task outputs to group outputs
-                    self.add_link(task.outputs[key], self.outputs[new_key])
+                # add link from task outputs to group outputs
+                self.add_link(
+                    task.outputs,
+                    socket,
+                    allow_skip_linked=True,
+                )
 
     def set_inputs(self, inputs: Dict[str, Any]):
         for name, input in inputs.items():
@@ -330,28 +317,197 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self._version += 1
         return task
 
-    def add_link(self, source: TaskSocket | Task, target: TaskSocket) -> TaskLink:
-        """Add a link between two tasks."""
+    def add_link(
+        self,
+        source: TaskSocket | Task,
+        target: TaskSocket | "TaskSocketNamespace",
+        *,
+        allow_skip_linked: bool = False,
+    ) -> TaskLink | None:
+        """Add a link between two sockets or namespace sockets.
+
+        When linking namespaces, all leaf sockets are linked recursively and a
+        namespace-level link is also created for bookkeeping. Set
+        allow_skip_linked=True to skip targets that are already linked.
+        """
+        from node_graph.socket import TaskSocketNamespace
+
+        source, target = self._normalize_link_endpoints(source, target)
+
+        if isinstance(source, TaskSocketNamespace) or isinstance(
+            target, TaskSocketNamespace
+        ):
+            if isinstance(source, TaskSocketNamespace) and isinstance(
+                target, TaskSocketNamespace
+            ):
+                if not self._namespace_structures_match(source, target):
+                    source_keys = source._relative_keys()
+                    target_keys = target._relative_keys()
+                    src = source._full_name_with_task
+                    dst = target._full_name_with_task
+                    raise ValueError(
+                        "Namespace structures do not match for linking: "
+                        f"{src} vs {dst}. "
+                        f"Missing in source: {sorted(target_keys - source_keys)}. "
+                        f"Missing in target: {sorted(source_keys - target_keys)}."
+                    )
+                return self._add_namespace_link(
+                    source, target, allow_skip_linked=allow_skip_linked
+                )
+            if (
+                isinstance(target, TaskSocketNamespace)
+                and target._metadata.dynamic
+                and not isinstance(source, TaskSocketNamespace)
+            ):
+                return self._add_leaf_link(source, target)
+            if (
+                isinstance(target, TaskSocketNamespace)
+                and not isinstance(source, TaskSocketNamespace)
+                and getattr(source, "_scoped_name", None) == "_outputs"
+            ):
+                return self._add_leaf_link(source, target)
+            if isinstance(source, TaskSocketNamespace):
+                normalized = self._normalize_namespace_source(source)
+                if normalized is None:
+                    src = getattr(source, "_full_name_with_task", "<unknown>")
+                    dst = getattr(target, "_full_name_with_task", "<unknown>")
+                    raise TypeError(
+                        "Linking a namespace socket directly to a leaf socket is not allowed. "
+                        f"Got {src} -> {dst}."
+                    )
+                return self._add_leaf_link(normalized, target)
+            src = getattr(source, "_full_name_with_task", "<unknown>")
+            dst = getattr(target, "_full_name_with_task", "<unknown>")
+            raise TypeError(
+                "Linking a namespace socket directly to a leaf socket is not allowed. "
+                f"Got {src} -> {dst}."
+            )
+        #
+        return self._add_leaf_link(source, target)
+
+    def _normalize_link_endpoints(
+        self,
+        source: TaskSocket | Task,
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> tuple[TaskSocket | "TaskSocketNamespace", TaskSocket | "TaskSocketNamespace"]:
         from node_graph.socket import TaskSocketNamespace
 
         if isinstance(source, Task):
             source = source.outputs["graph_outputs"]
         elif source._parent is None and isinstance(source, TaskSocketNamespace):
-            # if the source is the top-level outputs,
-            # we use the built-in "_outputs" socket to represent it
-            if "_outputs" in source:
-                source = source["_outputs"]
-            else:
-                raise ValueError(
-                    f"You try to link a top-level output socket {source._name} without a parent."
-                )
-        #
-        key = f"{source._task.name}.{source._scoped_name} -> {target._task.name}.{target._scoped_name}"
+            if not isinstance(target, TaskSocketNamespace):
+                # if the source is the top-level outputs,
+                # we use the built-in "_outputs" socket to represent it
+                normalized = self._normalize_namespace_source(source)
+                if normalized is None:
+                    raise ValueError(
+                        f"You try to link a top-level output socket {source._name} without a parent."
+                    )
+                source = normalized
+        return source, target
+
+    def _normalize_namespace_source(
+        self, source: "TaskSocketNamespace"
+    ) -> TaskSocket | "TaskSocketNamespace":
+        if "_outputs" in source:
+            return source["_outputs"]
+        return None
+
+    def _link_key(
+        self,
+        source: TaskSocket | "TaskSocketNamespace",
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> str:
+        return (
+            f"{source._task.name}.{source._scoped_name} -> "
+            f"{target._task.name}.{target._scoped_name}"
+        )
+
+    def _add_leaf_link(
+        self,
+        source: TaskSocket | "TaskSocketNamespace",
+        target: TaskSocket | "TaskSocketNamespace",
+    ) -> TaskLink:
+        key = self._link_key(source, target)
         if key in self.links:
             return self.links[key]
         link = self.links._new(source, target)
         self._version += 1
         return link
+
+    def _namespace_structures_match(
+        self, source: "TaskSocketNamespace", target: "TaskSocketNamespace"
+    ) -> bool:
+        if source._metadata.dynamic or target._metadata.dynamic:
+            return True
+        return source._relative_keys() == target._relative_keys()
+
+    def _has_incoming_links(self, item: TaskSocket | "TaskSocketNamespace") -> bool:
+        """Return True if the target socket already has incoming links."""
+        return any(link.to_socket is item for link in item._links)
+
+    def _add_namespace_link(
+        self,
+        source: "TaskSocketNamespace",
+        target: "TaskSocketNamespace",
+        *,
+        allow_skip_linked: bool = False,
+    ) -> TaskLink | None:
+        """Link two namespaces, optionally skipping already-linked targets."""
+        from node_graph.socket import TaskSocketNamespace
+
+        last_link: TaskLink | None = None
+        link_source: TaskSocket | TaskSocketNamespace = source
+        if source._parent is None and "_outputs" in source:
+            link_source = source["_outputs"]
+
+        if not (allow_skip_linked and self._has_incoming_links(target)):
+            key = self._link_key(link_source, target)
+            if key in self.links:
+                last_link = self.links[key]
+            else:
+                last_link = self._add_leaf_link(link_source, target)
+
+        for name, target_child in target._iter_children(include_builtins=False):
+            if name not in source._sockets:
+                src = source._full_name_with_task
+                dst = target._full_name_with_task
+                raise ValueError(
+                    f"Namespace link mismatch: '{name}' not found in source {src} "
+                    f"while linking to {dst}."
+                )
+            source_child = source._sockets[name]
+            if self._has_incoming_links(target_child):
+                if allow_skip_linked:
+                    continue
+                src = source_child._full_name_with_task
+                dst = target_child._full_name_with_task
+                raise ValueError(
+                    "Namespace link conflict: target socket already linked at "
+                    f"{src} -> {dst}."
+                )
+            if isinstance(source_child, TaskSocketNamespace) and isinstance(
+                target_child, TaskSocketNamespace
+            ):
+                child_link = self._add_namespace_link(
+                    source_child,
+                    target_child,
+                    allow_skip_linked=allow_skip_linked,
+                )
+                if child_link is not None:
+                    last_link = child_link
+                continue
+            if isinstance(source_child, TaskSocketNamespace) or isinstance(
+                target_child, TaskSocketNamespace
+            ):
+                src = source_child._full_name_with_task
+                dst = target_child._full_name_with_task
+                raise TypeError(
+                    "Namespace link mismatch: tried to link a namespace with a leaf "
+                    f"socket at {src} -> {dst}."
+                )
+            last_link = self.add_link(source_child, target_child)
+        return last_link
 
     def append_task(self, task: Task) -> None:
         """Appends a task to the task graph."""

@@ -25,7 +25,7 @@ def myadd(x, y):
 ng2 = Graph(name="test_decorator")
 add1 = ng2.add_task(myadd, "add1", x=1, y=2)
 add2 = ng2.add_task(myadd, "add2", x=3, y=add1.outputs.result)
-ng2.to_html()
+ng2
 
 # %%
 # Define a custom task class

@@ -41,7 +41,7 @@ def add_multiply(x, y, z):
 #
 
 ng = add_multiply.build(1, 2, 3)
-ng.to_html()
+ng
 
 
 # %%
@@ -54,4 +54,4 @@ from node_graph import Graph
 
 g1 = Graph(name="group_usage")
 grp = g1.add_task(add_multiply, name="my_group")
-g1.to_html()
+g1

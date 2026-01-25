@@ -134,7 +134,7 @@ def test_union_link_accepts_members():
     ng.add_link(ng.tasks.add2.outputs.result, ng.tasks.multiply1.inputs.x)
 
 
-def test_namespace_item_type_linking():
+def test_namespace_link_blocked_with_leaf_socket():
     @task()
     def produce_ints(data: dynamic(int)) -> namespace(data=dynamic(int)):
         return {"data": data}
@@ -143,20 +143,81 @@ def test_namespace_item_type_linking():
     def take_int(x: int) -> int:
         return x
 
-    @task()
-    def take_str(x: str) -> str:
-        return x
-
     ng = Graph()
     ng.add_task(produce_ints, "produce_ints")
     ng.add_task(take_int, "take_int")
-    ng.add_task(take_str, "take_str")
 
     ng.add_link(ng.tasks.take_int.outputs.result, ng.tasks.produce_ints.inputs.data)
-    with pytest.raises(TypeError, match="Namespace item type mismatch:"):
-        ng.add_link(ng.tasks.take_str.outputs.result, ng.tasks.produce_ints.inputs.data)
-    with pytest.raises(TypeError, match="Namespace to leaf link is not allowed:"):
+    with pytest.raises(
+        TypeError, match="Linking a namespace socket directly to a leaf socket"
+    ):
         ng.add_link(ng.tasks.produce_ints.outputs.data, ng.tasks.take_int.inputs.x)
+
+
+def test_namespace_to_namespace_link_recurses():
+    @task()
+    def make_pair(x: int, y: int) -> namespace(a=int, nested=namespace(x=int, y=int)):
+        return {"a": x, "nested": {"x": x, "y": y}}
+
+    @task()
+    def consume(a: int, nested: namespace(x=int, y=int)) -> int:
+        return a + nested["x"] + nested["y"]
+
+    ng = Graph()
+    ng.add_task(make_pair, "make_pair")
+    ng.add_task(consume, "consume")
+
+    ng.add_link(ng.tasks.make_pair.outputs, ng.tasks.consume.inputs)
+
+    assert any(
+        link.from_socket is ng.tasks.make_pair.outputs["_outputs"]
+        and link.to_socket is ng.tasks.consume.inputs
+        for link in ng.links
+    )
+    assert any(
+        link.from_socket is ng.tasks.make_pair.outputs.a
+        for link in ng.tasks.consume.inputs.a._links
+    )
+    assert any(
+        link.from_socket is ng.tasks.make_pair.outputs.nested.x
+        for link in ng.tasks.consume.inputs.nested.x._links
+    )
+    assert any(
+        link.from_socket is ng.tasks.make_pair.outputs.nested.y
+        for link in ng.tasks.consume.inputs.nested.y._links
+    )
+
+
+def test_dynamic_namespace_accepts_leaf_link():
+    @task()
+    def emit(x: int) -> int:
+        return x
+
+    @task()
+    def collect(datas: dynamic(int)) -> int:
+        return 0
+
+    ng = Graph()
+    ng.add_task(emit, "emit")
+    ng.add_task(collect, "collect")
+
+    ng.add_link(ng.tasks.emit.outputs.result, ng.tasks.collect.inputs.datas)
+
+
+def test_outputs_leaf_links_to_namespace():
+    @task()
+    def add_pair(x: int, y: int) -> namespace(sum=int, product=int):
+        return {"sum": x + y, "product": x * y}
+
+    ng = Graph(outputs=namespace(out1=namespace(sum=int, product=int)))
+    ng.add_task(add_pair, "add_pair", x=1, y=2)
+
+    ng.add_link(ng.tasks.add_pair.outputs._outputs, ng.outputs.out1)
+    assert any(
+        link.from_socket is ng.tasks.add_pair.outputs._outputs
+        and link.to_socket is ng.outputs.out1
+        for link in ng.links
+    )
 
 
 def test_namespace_item_annotated_match():
