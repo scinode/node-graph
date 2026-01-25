@@ -1,4 +1,5 @@
 from node_graph import Graph, task, namespace
+from node_graph.config import INPUT_SOCKET_NAME, OUTPUT_SOCKET_NAME
 import pytest
 from typing import Any
 from node_graph.tasks.tests import test_float, test_add
@@ -34,6 +35,48 @@ def test_from_dict(ng_decorator):
     assert len(ng.tasks) == len(ng1.tasks)
     assert len(ng.links) == len(ng1.links)
     assert ng.to_dict() == ng1.to_dict()
+
+
+def test_from_dict_namespace_links():
+    @task()
+    def make_pair(x: int, y: int) -> namespace(a=int, nested=namespace(x=int, y=int)):
+        return {"a": x, "nested": {"x": x, "y": y}}
+
+    @task()
+    def consume(a: int, nested: namespace(x=int, y=int)) -> int:
+        return a + nested["x"] + nested["y"]
+
+    ng = Graph()
+    ng.add_task(make_pair, "make_pair")
+    ng.add_task(consume, "consume")
+    ng.add_link(ng.tasks.make_pair.outputs, ng.tasks.consume.inputs)
+
+    payload = ng.to_dict()
+    ns_link = next(
+        link
+        for link in payload["links"]
+        if link["from_task"] == "make_pair"
+        and link["to_task"] == "consume"
+        and link["to_socket"] == INPUT_SOCKET_NAME
+    )
+    assert ns_link["from_socket"] == OUTPUT_SOCKET_NAME
+
+    restored = Graph.from_dict(payload)
+
+    assert len(restored.links) == len(ng.links)
+    assert any(
+        link.from_socket is restored.tasks.make_pair.outputs["_outputs"]
+        and link.to_socket is restored.tasks.consume.inputs
+        for link in restored.links
+    )
+    assert any(
+        link.from_socket is restored.tasks.make_pair.outputs.nested.x
+        for link in restored.tasks.consume.inputs.nested.x._links
+    )
+    assert any(
+        link.from_socket is restored.tasks.make_pair.outputs.nested.y
+        for link in restored.tasks.consume.inputs.nested.y._links
+    )
 
 
 def test_new_node(ng):

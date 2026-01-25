@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from node_graph.config import INPUT_SOCKET_NAME
+
 
 TYPE_PROMOTIONS: set[tuple[str, str]] = {
     ("node_graph.bool", "node_graph.int"),
@@ -334,10 +336,17 @@ class TaskLink:
 
     def to_dict(self) -> dict:
         """Data to be saved to database"""
+        from_socket_name = self.from_socket._scoped_name
+        to_socket_name = self.to_socket._scoped_name
+        if (
+            to_socket_name == "inputs"
+            and getattr(self.to_socket, "_parent", None) is None
+        ):
+            to_socket_name = INPUT_SOCKET_NAME
         dbdata = {
-            "from_socket": self.from_socket._scoped_name,
+            "from_socket": from_socket_name,
             "from_task": self.from_task.name,
-            "to_socket": self.to_socket._scoped_name,
+            "to_socket": to_socket_name,
             "to_task": self.to_task.name,
         }
         return dbdata
