@@ -34,6 +34,25 @@ Your package should follow the following structure similar to this:
 
 Define your new Task, Socket and Property in the folders ``tasks``, ``sockets`` and ``properties`` respectively. Define your executor, serialization methods in the folders ``executors`` and ``serialization``. For example, in the ``tasks.test.py`` file, define your test Task class.
 
+Serialization adapters
+-------------------
+
+Serialization is mounted per-graph via ``Graph(serialization=...)``. The adapter
+is responsible for validating and serializing values for persistence, while the
+core graph remains framework-agnostic.
+
+For per-socket control, override serialization on the socket itself:
+
+.. code:: python
+
+    def serialize_special(self, store: bool = False):
+        return {"special": self._value}
+
+    task.inputs["x"].set_serializer(serialize_special)
+
+When ``Task.to_dict(should_serialize=True)`` is called, inputs are collected
+through sockets, so socket-level serialization runs before the adapter fallback.
+
 
 Entry point
 -------------------

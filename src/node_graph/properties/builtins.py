@@ -1,44 +1,43 @@
 from node_graph.property import TaskProperty
-from node_graph.serializer import SerializeJson
 from typing import Any
 
 
-class PropertyAny(TaskProperty, SerializeJson):
+class PropertyAny(TaskProperty):
     """A new class for Any type."""
 
     identifier: str = "node_graph.any"
     allowed_types = (object,)  # Allow any type
 
 
-class PropertyInt(TaskProperty, SerializeJson):
+class PropertyInt(TaskProperty):
     """A new class for integer type."""
 
     identifier: str = "node_graph.int"
     allowed_types = (int, type(None))
 
 
-class PropertyFloat(TaskProperty, SerializeJson):
+class PropertyFloat(TaskProperty):
     """A new class for float type."""
 
     identifier: str = "node_graph.float"
     allowed_types = (int, float, type(None))
 
 
-class PropertyBool(TaskProperty, SerializeJson):
+class PropertyBool(TaskProperty):
     """A new class for bool type."""
 
     identifier: str = "node_graph.bool"
     allowed_types = (bool, int, type(None))
 
 
-class PropertyString(TaskProperty, SerializeJson):
+class PropertyString(TaskProperty):
     """A new class for string type."""
 
     identifier: str = "node_graph.string"
     allowed_types = (str, type(None))
 
 
-class PropertyEnum(TaskProperty, SerializeJson):
+class PropertyEnum(TaskProperty):
     """A new class for enumeration type.
 
     Each option has:
@@ -104,7 +103,7 @@ class PropertyEnum(TaskProperty, SerializeJson):
 
 # ====================================
 # Vector
-class PropertyVector(TaskProperty, SerializeJson):
+class PropertyVector(TaskProperty):
     """node_graph Vector property"""
 
     identifier: str = "node_graph.vector"
@@ -191,7 +190,7 @@ class PropertyBoolVector(PropertyVector):
 
 # =======================================
 # matrix
-class MatrixProperty(TaskProperty, SerializeJson):
+class MatrixProperty(TaskProperty):
     """node_graph Matrix property"""
 
     identifier: str = "node_graph.matrix"
@@ -268,7 +267,7 @@ def validate_base_type(value):
             )
 
 
-class PropertyBaseDict(TaskProperty, SerializeJson):
+class PropertyBaseDict(TaskProperty):
     """node_graph BaseDict property.
     All the elements should be a base type (int, float, string, bool).
     """
@@ -290,7 +289,7 @@ class PropertyBaseDict(TaskProperty, SerializeJson):
             raise Exception("{} is not a dict.".format(value))
 
 
-class PropertyBaseList(TaskProperty, SerializeJson):
+class PropertyBaseList(TaskProperty):
     """node_graph BaseList property.
     All the elements should be a base type (int, float, string, bool).
     """

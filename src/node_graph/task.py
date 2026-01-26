@@ -188,6 +188,9 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
         metadata = self.get_metadata()
         properties = self.export_properties()
+        inputs_value = self.inputs._value
+        if should_serialize and type(self).serialize_data is Task.serialize_data:
+            inputs_value = self.inputs._collect_values(serialize=True)
         data = {
             "identifier": self.identifier,
             "uuid": self.uuid,
@@ -198,7 +201,7 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             "metadata": metadata,
             "spec": self.spec.to_dict(),
             "properties": properties,
-            "inputs": self.inputs._value,
+            "inputs": inputs_value,
             "position": self.position,
             "description": self.description,
             "log": self.log,
@@ -209,12 +212,7 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             data["input_sockets"] = self.inputs._to_dict()
             data["output_sockets"] = self.outputs._to_dict()
         data["parent_task"] = [self.parent.name] if self.parent else [None]
-        # to avoid some dict has the same address with others tasks
-        # which happens when {} is used as default value
-        # we copy the value only
-        data = deep_copy_only_dicts(data)
-        if should_serialize:
-            self.serialize_data(data)
+
         return data
 
     def serialize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
