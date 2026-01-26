@@ -728,9 +728,12 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             )
 
     def _serialize_value(self, store: bool = False) -> Any:
+        """Serialize the socket value unless it's metadata (stored as raw)."""
         value = _unwrap_tagged_value(self._value)
         if value is None:
             return None
+        if self._metadata.is_metadata:
+            return value
         graph = getattr(self, "_graph", None)
         if graph is None and getattr(self, "_task", None) is not None:
             graph = getattr(self._task, "graph", None)
@@ -1070,7 +1073,6 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
             else:
                 value = item.value if resolve else item._value
                 if serialize:
-                    print("socket: ", item)
                     value = item._serialize_value(store=False)
                 if value is not None:
                     if unwrap and isinstance(value, TaggedValue):

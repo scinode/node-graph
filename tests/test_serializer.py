@@ -36,3 +36,27 @@ def test_socket_level_serialization_override():
     data = task.to_dict(should_serialize=True)
     assert data["inputs"]["x"] == {"custom": 5}
     assert data["inputs"]["y"] == 7
+
+
+def test_metadata_socket_skips_serialization():
+    """Metadata sockets should bypass serialization."""
+    from typing import Annotated
+
+    from node_graph import Graph, task
+    from node_graph.socket_spec import meta
+
+    class DummySerializer:
+        def serialize(self, value, socket, *, store: bool):
+            return {"serialized": value}
+
+    @task()
+    def add(x: int, info: Annotated[int, meta(is_metadata=True)]):
+        return x
+
+    ng = Graph(name="test_metadata_socket", serialization=DummySerializer())
+    node = ng.add_task(add, name="add1")
+    node.set_inputs({"x": 2, "info": 9})
+
+    data = node.to_dict(should_serialize=True)
+    assert data["inputs"]["x"] == {"serialized": 2}
+    assert data["inputs"]["info"] == 9
