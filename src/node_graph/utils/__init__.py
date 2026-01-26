@@ -90,6 +90,21 @@ def deep_copy_only_dicts(
         return original
 
 
+def resolve_tagged_values(inputs: Any) -> Any:
+    """Recursively resolve TaggedValue instances in nested dictionaries."""
+    from node_graph.socket import TaggedValue
+
+    if isinstance(inputs, TaggedValue):
+        return inputs.__wrapped__
+    if isinstance(inputs, dict):
+        for key, value in inputs.items():
+            if isinstance(value, TaggedValue):
+                inputs[key] = value.__wrapped__
+            else:
+                resolve_tagged_values(value)
+    return inputs
+
+
 def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
     """Get the argument type from the input data."""
     if arg_type.upper() == "ARGS":

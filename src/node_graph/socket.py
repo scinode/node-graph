@@ -9,6 +9,7 @@ from node_graph.orm.mapping import type_mapping
 from node_graph.socket_meta import SocketMeta, UPDATABLE_SOCKET_META_FIELDS
 from node_graph.registry import EntryPointPool
 from node_graph.utils.struct_utils import is_structured_instance, structured_to_dict
+from node_graph.utils import resolve_tagged_values
 import wrapt
 
 if TYPE_CHECKING:
@@ -496,12 +497,6 @@ class TaggedValue(wrapt.ObjectProxy):
         return f"TaggedValue({self.__wrapped__!r}, socket={self._socket!r}, uuid={self._uuid})"
 
 
-def _unwrap_tagged_value(value: Any) -> Any:
-    if isinstance(value, TaggedValue):
-        return value.__wrapped__
-    return value
-
-
 class BaseSocket:
     """Socket object for input and output sockets of a Task.
 
@@ -729,7 +724,7 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
 
     def _serialize_value(self, store: bool = False) -> Any:
         """Serialize the socket value unless it's metadata (stored as raw)."""
-        value = _unwrap_tagged_value(self._value)
+        value = resolve_tagged_values(self._value)
         if value is None:
             return None
         if self._metadata.is_metadata:
