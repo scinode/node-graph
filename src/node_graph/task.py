@@ -188,6 +188,14 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
         metadata = self.get_metadata()
         properties = self.export_properties()
+        inputs_value = self.inputs._value
+        if should_serialize and type(self).serialize_data is Task.serialize_data:
+            graph = getattr(self, "graph", None)
+            serializer = getattr(graph, "serialization", None) if graph else None
+            if serializer is not None and hasattr(serializer, "serialize_ports"):
+                inputs_value = serializer.serialize_ports(
+                    inputs_value, self.spec.inputs, store=False
+                )
         data = {
             "identifier": self.identifier,
             "uuid": self.uuid,
@@ -198,7 +206,7 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
             "metadata": metadata,
             "spec": self.spec.to_dict(),
             "properties": properties,
-            "inputs": self.inputs._value,
+            "inputs": inputs_value,
             "position": self.position,
             "description": self.description,
             "log": self.log,

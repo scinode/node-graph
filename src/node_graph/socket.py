@@ -713,6 +713,14 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             elif is_input and value_source != "property":
                 self._update_updatable_meta({"value_source": "link"})
 
+            graph = getattr(self._task, "graph", None)
+            if graph is not None:
+                policy = getattr(graph, "serialization_policy", "off")
+                if policy in {"validate", "eager"}:
+                    serialized = graph.serialization.serialize(value, self, store=False)
+                    if policy == "eager":
+                        self._serialized_preview = serialized
+
             self.property.value = value
         else:
             raise AttributeError(

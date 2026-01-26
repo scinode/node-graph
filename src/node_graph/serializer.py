@@ -1,54 +1,25 @@
-from typing import Any, Dict
-import json
+from typing import Any
 
 
-class SerializeNone:
-    def get_serialize(self) -> Dict[str, str]:
-        serialize: Dict[str, str] = {
-            "module_path": "node_graph.serializer",
-            "callable_name": "serialize_none",
-        }
-        return serialize
+class SerializationAdapter:
+    id: str = "null"
+    name: str = "null"
 
-    def get_deserialize(self) -> Dict[str, str]:
-        deserialize: Dict[str, str] = {
-            "module_path": "node_graph.serializer",
-            "callable_name": "deserialize_none",
-        }
-        return deserialize
+    def validate(self, value: Any, socket: Any, *, mode: str = "assign") -> Any:
+        return value
 
+    def serialize(self, value: Any, socket: Any, *, store: bool) -> Any:
+        return value
 
-class SerializeJson:
-    def get_serialize(self) -> Dict[str, str]:
-        serialize: Dict[str, str] = {
-            "module_path": "node_graph.serializer",
-            "callable_name": "serialize_json",
-        }
-        return serialize
+    def deserialize(self, value: Any, socket: Any) -> Any:
+        return value
 
-    def get_deserialize(self) -> Dict[str, str]:
-        deserialize: Dict[str, str] = {
-            "module_path": "node_graph.serializer",
-            "callable_name": "deserialize_json",
-        }
-        return deserialize
+    def serialize_ports(
+        self, python_data: Any, port_schema: Any, *, store: bool
+    ) -> Any:
+        return python_data
 
 
-def serialize_none(data: Any) -> Any:
-    return data
-
-
-def deserialize_none(data: Any) -> Any:
-    return data
-
-
-def serialize_json(data: Any) -> str:
-
-    data = json.dumps(data)
-    return data
-
-
-def deserialize_json(data: str) -> Any:
-
-    data = json.loads(data)
-    return data
+class NullSerializationAdapter(SerializationAdapter):
+    id: str = "null"
+    name: str = "null"

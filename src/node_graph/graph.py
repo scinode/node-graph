@@ -108,6 +108,8 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         interactive_widget: bool = False,
         init_graph_level_tasks: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
+        serialization: Optional[object] = None,
+        serialization_policy: str = "off",
     ) -> None:
         """Initializes a new instance of the Graph class.
 
@@ -129,6 +131,16 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         self._widget = None
         self.interactive_widget = interactive_widget
         self._version = 0  # keep track the changes
+        if serialization_policy not in {"off", "validate", "eager"}:
+            raise ValueError(
+                "serialization_policy must be one of: off, validate, eager"
+            )
+        if serialization is None:
+            from node_graph.serializer import NullSerializationAdapter
+
+            serialization = NullSerializationAdapter()
+        self.serialization = serialization
+        self.serialization_policy = serialization_policy
         self._init_graph_spec(inputs, outputs, ctx)
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
