@@ -496,6 +496,12 @@ class TaggedValue(wrapt.ObjectProxy):
         return f"TaggedValue({self.__wrapped__!r}, socket={self._socket!r}, uuid={self._uuid})"
 
 
+def _unwrap_tagged_value(value: Any) -> Any:
+    if isinstance(value, TaggedValue):
+        return value.__wrapped__
+    return value
+
+
 class BaseSocket:
     """Socket object for input and output sockets of a Task.
 
@@ -584,12 +590,6 @@ class BaseSocket:
                     }
                 )
 
-        # Conditionally add serializer/deserializer if they are defined
-        if hasattr(self, "get_serialize") and callable(self.get_serialize):
-            data["serialize"] = self.get_serialize()
-
-        if hasattr(self, "get_deserialize") and callable(self.get_deserialize):
-            data["deserialize"] = self.get_deserialize()
         return data
 
     def _update_updatable_meta(self, payload: Dict[str, Any]) -> None:
@@ -726,6 +726,24 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             raise AttributeError(
                 f"Socket '{self._name}' has no property to set a value."
             )
+
+    def _serialize_value(self, store: bool = False) -> Any:
+        value = _unwrap_tagged_value(self._value)
+        if value is None:
+            return None
+        graph = getattr(self, "_graph", None)
+        if graph is None and getattr(self, "_task", None) is not None:
+            graph = getattr(self._task, "graph", None)
+        serializer = getattr(graph, "serialization", None) if graph else None
+        if serializer is not None and hasattr(serializer, "serialize"):
+            return serializer.serialize(value, self, store=store)
+        return value
+
+    def set_serializer(self, func) -> None:
+        """Override socket-level serialization with a callable."""
+        import types
+
+        self._serialize_value = types.MethodType(func, self)
 
     def _to_dict(self):
         data = super()._to_dict()
@@ -1039,16 +1057,21 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         return self._collect_values()
 
     def _collect_values(
-        self, unwrap: bool = True, resolve: bool = False
+        self, unwrap: bool = True, resolve: bool = False, serialize: bool = False
     ) -> Dict[str, Any]:
         data = {}
         for name, item in self._sockets.items():
             if isinstance(item, TaskSocketNamespace):
-                value = item._collect_values(unwrap=unwrap, resolve=resolve)
+                value = item._collect_values(
+                    unwrap=unwrap, resolve=resolve, serialize=serialize
+                )
                 if value:
                     data[name] = value
             else:
                 value = item.value if resolve else item._value
+                if serialize:
+                    print("socket: ", item)
+                    value = item._serialize_value(store=False)
                 if value is not None:
                     if unwrap and isinstance(value, TaggedValue):
                         data[name] = value.__wrapped__
