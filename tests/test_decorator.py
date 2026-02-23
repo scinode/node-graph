@@ -57,6 +57,7 @@ def test_decorator_args() -> None:
     def test(a, /, b, *, c, d=1, **e):
         return 1
 
+    assert not hasattr(test, "build")
     task1 = test()._task
     assert task1.get_executor().mode == "pickled_callable"
     assert task1.inputs.e._link_limit > 1
@@ -168,6 +169,7 @@ def test_use_socket_view():
     def test_graph(a, b):
         return test(a, b)
 
+    assert hasattr(test_graph, "build")
     graph = test_graph.build(a=1, b=2)
     assert "sum" in graph.outputs
     assert "product" in graph.outputs

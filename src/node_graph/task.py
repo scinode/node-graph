@@ -408,12 +408,7 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
 
     def execute(self):
         """Execute the task."""
-        from node_graph.task_spec import BaseHandle
-
-        executor = self.get_executor().callable
-        # the imported executor could be a wrapped function
-        if isinstance(executor, BaseHandle) and hasattr(executor, "_callable"):
-            executor = getattr(executor, "_callable")
+        executor = self.resolve_executor_callable(require=True)
         inputs = self.inputs._value
         args = [inputs[arg] for arg in self.args_data["args"]]
         kwargs = {key: inputs[key] for key in self.args_data["kwargs"]}
@@ -427,6 +422,18 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         else:
             result = executor(*args, **kwargs, **var_kwargs)
         return result
+
+    def resolve_executor_callable(self, *, require: bool = False):
+        """Return the runtime callable, unwrapping handle wrappers when needed."""
+        from node_graph.task_spec import BaseHandle
+
+        executor_spec = self.get_executor()
+        executor = executor_spec.callable if executor_spec is not None else None
+        if isinstance(executor, BaseHandle) and hasattr(executor, "_callable"):
+            executor = getattr(executor, "_callable")
+        if require and executor is None:
+            raise RuntimeError(f"No executor callable available for {self.identifier}.")
+        return executor
 
     def get_results(self) -> None:
         """Item data from database"""

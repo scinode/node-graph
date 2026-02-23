@@ -4,6 +4,7 @@ from node_graph.socket_spec import infer_specs_from_callable, SocketSpec
 from node_graph.task_spec import (
     TaskSpec,
     TaskHandle,
+    GraphTaskHandle,
     SchemaSource,
 )
 from node_graph.executor import RuntimeExecutor
@@ -63,6 +64,7 @@ class FunctionTask(Task):
             metadata=metadata,
             version=version,
         )
-        handle = TaskHandle(spec)
+        is_graph_task = str(task_type).upper() == "GRAPH"
+        handle = GraphTaskHandle(spec) if is_graph_task else TaskHandle(spec)
         handle._callable = obj
         return handle

@@ -45,3 +45,18 @@ def test_taskhandle_call_flow():
     out = h(3, y=4)  # returns FakeTask.outputs
     assert isinstance(out, TaskSocketNamespace)
     assert "sum" in out
+
+
+def test_taskhandle_run_returns_result():
+    def add(x, y):
+        return x + y
+
+    spec = TaskSpec(
+        identifier="pkg.add",
+        inputs=ns(x=int, y=int),
+        outputs=ns(sum=int),
+        executor=RuntimeExecutor.from_callable(add),
+        base_class=Task,
+    )
+    h = TaskHandle(spec)
+    assert h.run(3, y=4) == 7
