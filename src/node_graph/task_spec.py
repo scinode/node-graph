@@ -228,9 +228,18 @@ class BaseHandle:
             raise AttributeError(f"{self.identifier} has no outputs spec")
         return SocketView(self._outputs_spec)
 
-    def __call__(self, *args, **kwargs):
+    def _prepare_call_inputs(self, exec_obj, *args, **kwargs):
         from node_graph.utils.function import prepare_function_inputs, is_function_like
 
+        if is_function_like(exec_obj):
+            return prepare_function_inputs(exec_obj, *args, **kwargs)
+        if args:
+            raise TypeError(
+                f"{self.identifier} expects keyword-only inputs; got positional args {args!r}."
+            )
+        return dict(kwargs)
+
+    def __call__(self, *args, **kwargs):
         graph = self._get_current_graph()
 
         if graph is None:
@@ -245,25 +254,31 @@ class BaseHandle:
         exec_obj = self._spec.executor.callable if self._spec.executor else None
         if isinstance(exec_obj, BaseHandle) and hasattr(exec_obj, "_callable"):
             exec_obj = exec_obj._callable
-
-        if is_function_like(exec_obj):
-            prepared_inputs = prepare_function_inputs(exec_obj, *args, **kwargs)
-        else:
-            if args:
-                raise TypeError(
-                    f"{self.identifier} expects keyword-only inputs; got positional args {args!r}."
-                )
-            prepared_inputs = dict(kwargs)
+        prepared_inputs = self._prepare_call_inputs(exec_obj, *args, **kwargs)
 
         task.set_inputs(prepared_inputs)
 
         return task.outputs
 
+    def run(self, /, *args, **kwargs):
+        task = self._spec.to_task(name=self.identifier.split(".")[-1])
+        exec_obj = task.resolve_executor_callable(require=True)
+        prepared_inputs = self._prepare_call_inputs(exec_obj, *args, **kwargs)
+        task.set_inputs(prepared_inputs)
+        return task.execute()
+
+
+class TaskHandle(BaseHandle):
+    def __init__(self, spec):
+        from node_graph.manager import get_current_graph
+
+        super().__init__(spec, get_current_graph)
+
+
+class GraphTaskHandle(TaskHandle):
     def build(self, /, *args, **kwargs):
         from node_graph.utils.graph import materialize_graph
 
-        if self._spec.task_type.upper() != "GRAPH":
-            raise TypeError(".build() is only available on graph specs")
         if self._spec.executor is None:
             raise RuntimeError("Spec has no executor")
         func = self._spec.executor.callable
@@ -281,10 +296,3 @@ class BaseHandle:
             args=args,
             kwargs=kwargs,
         )
-
-
-class TaskHandle(BaseHandle):
-    def __init__(self, spec):
-        from node_graph.manager import get_current_graph
-
-        super().__init__(spec, get_current_graph)
