@@ -446,6 +446,27 @@ _RUNTIME_EXTRA_KEYS = {
 
 
 class TaggedValue(wrapt.ObjectProxy):
+    # ``wrapt.ObjectProxy`` forwards every dunder to the wrapped value, including
+    # ``__iter__``, which is a method *slot* at the C level — so it is always
+    # present in ``ObjectProxy.__dict__`` regardless of what is wrapped. That
+    # makes ``isinstance(TaggedValue(1.5), collections.abc.Iterable)`` return
+    # True even though actually iterating raises TypeError, because
+    # ``Iterable.__subclasshook__`` only asks "does the class have ``__iter__``".
+    #
+    # To make the ABC check honest we dispatch to a subclass based on whether
+    # the wrapped value really is iterable. ``_TaggedScalar`` shadows
+    # ``__iter__`` with ``None``; Python's ``_check_methods`` treats that as
+    # "this method is intentionally unset", so the subclass hook returns
+    # ``NotImplemented`` and ``isinstance`` falls back to False — which is the
+    # right answer for a wrapped float / int / bool.
+    def __new__(cls, wrapped, socket=None):
+        if cls is TaggedValue:
+            from collections.abc import Iterable as _Iterable
+
+            target = _TaggedIterable if isinstance(wrapped, _Iterable) else _TaggedScalar
+            return super().__new__(target)
+        return super().__new__(cls)
+
     def __init__(self, wrapped, socket=None):
         super().__init__(wrapped)
 
@@ -495,6 +516,19 @@ class TaggedValue(wrapt.ObjectProxy):
 
     def __repr__(self):
         return f"TaggedValue({self.__wrapped__!r}, socket={self._socket!r}, uuid={self._uuid})"
+
+
+class _TaggedScalar(TaggedValue):
+    """Wrapper for non-iterable values. Shadows ``__iter__`` so the
+    ``collections.abc.Iterable`` subclass hook returns NotImplemented and
+    ``isinstance(..., Iterable)`` correctly reports False."""
+
+    __iter__ = None
+
+
+class _TaggedIterable(TaggedValue):
+    """Wrapper for iterable values. Inherits ObjectProxy's delegating
+    ``__iter__`` so iteration forwards to the wrapped object."""
 
 
 class BaseSocket:

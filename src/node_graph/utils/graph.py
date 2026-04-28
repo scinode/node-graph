@@ -134,6 +134,38 @@ def _assign_graph_outputs(outputs: Any, graph: Graph) -> None:
         )
 
 
+def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
+    """Walk a socket namespace and values dict in parallel, deserializing leaves.
+
+    For each leaf socket in ``namespace``, applies
+    ``adapter.deserialize(value, socket)`` to the corresponding value. Nested
+    namespaces recurse. This is the symmetric counterpart to the
+    serialize-on-write path: a ``@task.graph`` body whose signature declares
+    a primitive type should receive a primitive, even if the stored value
+    round-tripped through an AiiDA ``BaseType`` node for provenance.
+
+    Graphs without a serialization adapter (plain ``node_graph``) get a
+    no-op; the base ``SerializationAdapter.deserialize`` is identity.
+    """
+    from node_graph.socket import TaskSocketNamespace
+
+    if adapter is None or not hasattr(adapter, "deserialize"):
+        return values
+    if not isinstance(values, dict):
+        return values
+    out = dict(values)
+    for name, item in namespace._sockets.items():
+        if name not in out:
+            continue
+        value = out[name]
+        if isinstance(item, TaskSocketNamespace):
+            if isinstance(value, dict):
+                out[name] = _deserialize_inputs(item, value, adapter)
+        else:
+            out[name] = adapter.deserialize(value, item)
+    return out
+
+
 def materialize_graph(
     func: Callable,
     in_spec: SocketSpec,
@@ -173,6 +205,9 @@ def materialize_graph(
         tag_socket_value(graph.inputs)
         inputs = graph.inputs._collect_values(unwrap=False)
         inputs = coerce_inputs_from_spec(inputs, in_spec)
+        inputs = _deserialize_inputs(
+            graph.inputs, inputs, getattr(graph, "serialization", None)
+        )
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)
