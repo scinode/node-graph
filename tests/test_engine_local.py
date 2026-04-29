@@ -7,6 +7,7 @@ from node_graph.engine.local import LocalEngine
 from node_graph.engine.provenance import ProvenanceRecorder
 from typing import Annotated, Any
 from dataclasses import dataclass
+from enum import Enum
 from pydantic import BaseModel
 
 
@@ -213,3 +214,28 @@ def test_local_engine_accepts_dataclass_models():
 
     assert results["sum"] == 7
     assert results["product"] == 12
+
+
+class Color(str, Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
+
+@task(outputs=ns(name=str))
+def color_name(color: Color) -> dict:
+    # Without enum coercion ``color`` would arrive as a plain string and
+    # ``color.name`` would resolve to ``str.name`` (an attribute lookup
+    # surprise), so this asserts the spec rebuilt the member.
+    assert isinstance(color, Color), f"expected Color, got {type(color).__name__}"
+    return {"name": color.name}
+
+
+def test_local_engine_coerces_str_enum():
+    ng = Graph(name="local-enum", outputs=ns(name=str))
+    node = ng.add_task(color_name, "pick", color=Color.GREEN)
+    ng.add_link(node.outputs.name, ng.outputs.name)
+
+    results = LocalEngine().run(ng)
+
+    assert results["name"] == "GREEN"

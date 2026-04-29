@@ -13,7 +13,7 @@ import inspect
 from copy import deepcopy
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from node_graph.socket_meta import CallRole, SocketMeta, merge_meta
-from node_graph.utils.struct_utils import structured_type_info
+from node_graph.utils.struct_utils import is_enum_type, structured_type_info
 from .socket import TaskSocketNamespace
 import ast
 import textwrap
@@ -1047,7 +1047,11 @@ class SocketSpecAPI:
                 _is_struct_model_type(base_T)
                 and _annot_is_leaf_marker(T) is None
                 and not _struct_is_leaf(base_T)
-            ):
+            ) or is_enum_type(base_T):
+                # Enums are leaves (no field expansion) but need the same
+                # ``structured_type`` extras so ``coerce_inputs_from_spec``
+                # can reconstruct the member after a process boundary has
+                # serialized it down to its bare value.
                 info = structured_type_info(base_T)
                 if info is not None and "structured_type" not in spec.meta.extras:
                     spec = replace(
