@@ -1048,10 +1048,8 @@ class SocketSpecAPI:
                 and _annot_is_leaf_marker(T) is None
                 and not _struct_is_leaf(base_T)
             ) or is_enum_type(base_T):
-                # Enums are leaves (no field expansion) but need the same
-                # ``structured_type`` extras so ``coerce_inputs_from_spec``
-                # can reconstruct the member after a process boundary has
-                # serialized it down to its bare value.
+                # Enums are leaves but still need structured_type extras so
+                # coerce_inputs_from_spec can rebuild the member after serialization.
                 info = structured_type_info(base_T)
                 if info is not None and "structured_type" not in spec.meta.extras:
                     spec = replace(

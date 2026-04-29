@@ -35,13 +35,7 @@ def structured_to_dict(value: Any) -> Any:
 
 
 def structured_type_info(tp: Any) -> Dict[str, str] | None:
-    """Return a serializable descriptor for structured types.
-
-    ``Enum`` subclasses are treated as structured leaves: the descriptor lets
-    ``coerce_structured_value`` rebuild the member from its serialized value
-    (``str``-Enum, ``int``-Enum, etc.) after a process boundary has flattened
-    it.
-    """
+    """Return a serializable descriptor for structured types (incl. ``Enum``)."""
     if is_dataclass(tp):
         return {"kind": "dataclass", "path": structured_type_path(tp)}
     if isinstance(tp, type) and issubclass(tp, BaseModel):
@@ -65,15 +59,12 @@ def import_structured_type(path: str) -> Any:
 
 
 def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
-    """Rebuild a structured instance from a flat value when spec says so.
-
-    ``Enum`` is handled before the dict-only gate because its serialized form
-    is the bare member value (``str``, ``int``, ...), not a dict.
-    """
+    """Rebuild a structured instance from a flat value when spec says so."""
     if info is None:
         return value
     cls = import_structured_type(info["path"])
     kind = info.get("kind")
+    # Enum check goes before the dict gate: its serialized form is a bare value.
     if kind == "enum":
         if isinstance(value, cls):
             return value

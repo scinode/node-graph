@@ -224,9 +224,6 @@ class Color(str, Enum):
 
 @task(outputs=ns(name=str))
 def color_name(color: Color) -> dict:
-    # Without enum coercion ``color`` would arrive as a plain string and
-    # ``color.name`` would resolve to ``str.name`` (an attribute lookup
-    # surprise), so this asserts the spec rebuilt the member.
     assert isinstance(color, Color), f"expected Color, got {type(color).__name__}"
     return {"name": color.name}
 

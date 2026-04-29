@@ -446,19 +446,9 @@ _RUNTIME_EXTRA_KEYS = {
 
 
 class TaggedValue(wrapt.ObjectProxy):
-    # ``wrapt.ObjectProxy`` forwards every dunder to the wrapped value, including
-    # ``__iter__``, which is a method *slot* at the C level — so it is always
-    # present in ``ObjectProxy.__dict__`` regardless of what is wrapped. That
-    # makes ``isinstance(TaggedValue(1.5), collections.abc.Iterable)`` return
-    # True even though actually iterating raises TypeError, because
-    # ``Iterable.__subclasshook__`` only asks "does the class have ``__iter__``".
-    #
-    # To make the ABC check honest we dispatch to a subclass based on whether
-    # the wrapped value really is iterable. ``_TaggedScalar`` shadows
-    # ``__iter__`` with ``None``; Python's ``_check_methods`` treats that as
-    # "this method is intentionally unset", so the subclass hook returns
-    # ``NotImplemented`` and ``isinstance`` falls back to False — which is the
-    # right answer for a wrapped float / int / bool.
+    # ObjectProxy always exposes __iter__ at the C level, so isinstance(
+    # TaggedValue(1.5), Iterable) would wrongly be True. Dispatch to a subclass
+    # that shadows __iter__ when the wrapped value isn't iterable.
     def __new__(cls, wrapped, socket=None):
         if cls is TaggedValue:
             from collections.abc import Iterable as _Iterable
@@ -519,16 +509,14 @@ class TaggedValue(wrapt.ObjectProxy):
 
 
 class _TaggedScalar(TaggedValue):
-    """Wrapper for non-iterable values. Shadows ``__iter__`` so the
-    ``collections.abc.Iterable`` subclass hook returns NotImplemented and
-    ``isinstance(..., Iterable)`` correctly reports False."""
+    """TaggedValue wrapping a non-iterable. Setting ``__iter__ = None`` makes
+    the ``Iterable`` ABC subclass hook return False for this proxy."""
 
     __iter__ = None
 
 
 class _TaggedIterable(TaggedValue):
-    """Wrapper for iterable values. Inherits ObjectProxy's delegating
-    ``__iter__`` so iteration forwards to the wrapped object."""
+    """TaggedValue wrapping an iterable; iteration is forwarded by ObjectProxy."""
 
 
 class BaseSocket:

@@ -135,18 +135,9 @@ def _assign_graph_outputs(outputs: Any, graph: Graph) -> None:
 
 
 def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
-    """Walk a socket namespace and values dict in parallel, deserializing leaves.
-
-    For each leaf socket in ``namespace``, applies
-    ``adapter.deserialize(value, socket)`` to the corresponding value. Nested
-    namespaces recurse. This is the symmetric counterpart to the
-    serialize-on-write path: a ``@task.graph`` body whose signature declares
-    a primitive type should receive a primitive, even if the stored value
-    round-tripped through an AiiDA ``BaseType`` node for provenance.
-
-    Graphs without a serialization adapter (plain ``node_graph``) get a
-    no-op; the base ``SerializationAdapter.deserialize`` is identity.
-    """
+    """Recursively apply ``adapter.deserialize`` to leaves of ``values`` so a
+    ``@task.graph`` body receives the primitive its signature declares, even
+    when the stored value was wrapped by the engine for provenance."""
     from node_graph.socket import TaskSocketNamespace
 
     if adapter is None or not hasattr(adapter, "deserialize"):
