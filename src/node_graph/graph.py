@@ -671,14 +671,70 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         """Updates the task graph from the database."""
         raise NotImplementedError("The 'update' method is not implemented.")
 
+    @staticmethod
+    def _resolve_or_create_input_socket(task, socket_path: str, source) -> Any:
+        """Resolve ``task.inputs[socket_path]``, materialising dynamic children as needed.
+
+        Walks the dotted ``socket_path`` on ``task.inputs``. If a segment is
+        missing under a *dynamic* namespace, it's materialised via
+        ``_append_dynamic_child``. Raises if a missing segment sits under a
+        non-dynamic namespace (genuine wiring bug). The leaf is created as an
+        empty namespace when ``source`` is itself a namespace; otherwise a
+        single-value socket. Used by both ``links_from_dict`` and the engine's
+        Map-zone clone path (``_patch_cloned_tasks``).
+        """
+        from node_graph.socket import TaskSocketNamespace
+
+        if socket_path == INPUT_SOCKET_NAME:
+            return task.inputs
+        if socket_path in task.inputs:
+            return task.inputs[socket_path]
+        parts = socket_path.split(".")
+        parent: Any = task.inputs
+        for part in parts[:-1]:
+            if part in parent:
+                parent = parent[part]
+                if not isinstance(parent, TaskSocketNamespace):
+                    raise ValueError(
+                        f"Cannot create nested socket '{socket_path}' under leaf "
+                        f"{parent._full_name_with_task}."
+                    )
+                continue
+            if (
+                not isinstance(parent, TaskSocketNamespace)
+                or not parent._metadata.dynamic
+            ):
+                raise ValueError(
+                    f"Missing socket '{socket_path}' in {task.name}.inputs and "
+                    "parent namespace is not dynamic."
+                )
+            parent._append_dynamic_child(part, {})
+            parent = parent[part]
+        if not isinstance(parent, TaskSocketNamespace):
+            raise ValueError(
+                f"Cannot create socket '{socket_path}' under leaf "
+                f"{parent._full_name_with_task}."
+            )
+        if not parent._metadata.dynamic:
+            raise ValueError(
+                f"Missing socket '{socket_path}' in {task.name}.inputs and "
+                "parent namespace is not dynamic."
+            )
+        if (
+            isinstance(source, TaskSocketNamespace)
+            or getattr(source, "_scoped_name", None) == OUTPUT_SOCKET_NAME
+        ):
+            parent._append_dynamic_child(parts[-1], {})
+        else:
+            parent._append_dynamic_child(parts[-1], None)
+        return parent[parts[-1]]
+
     def links_from_dict(self, links: list) -> None:
         """Adds links to the task graph from a dictionary.
 
         Args:
             links (List[Dict[str, Any]]): The links data.
         """
-        from node_graph.socket import TaskSocketNamespace
-
         for link in links:
             from_task = self.tasks[link["from_task"]]
             from_socket = link["from_socket"]
@@ -688,52 +744,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                 source = from_task.outputs[from_socket]
             task = self.tasks[link["to_task"]]
             socket_path = link["to_socket"]
-            if socket_path == INPUT_SOCKET_NAME:
-                target = task.inputs
-                self.add_link(source, target, allow_skip_linked=True)
-                continue
-            if socket_path in task.inputs:
-                target = task.inputs[socket_path]
-            else:
-                parts = socket_path.split(".")
-                parent: TaskSocketNamespace | object = task.inputs
-                for part in parts[:-1]:
-                    if part in parent:
-                        parent = parent[part]
-                        if not isinstance(parent, TaskSocketNamespace):
-                            raise ValueError(
-                                f"Cannot create nested socket '{socket_path}' under leaf "
-                                f"{parent._full_name_with_task}."
-                            )
-                        continue
-                    if (
-                        not isinstance(parent, TaskSocketNamespace)
-                        or not parent._metadata.dynamic
-                    ):
-                        raise ValueError(
-                            f"Missing socket '{socket_path}' in {task.name}.inputs and "
-                            "parent namespace is not dynamic."
-                        )
-                    parent._append_dynamic_child(part, {})
-                    parent = parent[part]
-                if not isinstance(parent, TaskSocketNamespace):
-                    raise ValueError(
-                        f"Cannot create socket '{socket_path}' under leaf "
-                        f"{parent._full_name_with_task}."
-                    )
-                if not parent._metadata.dynamic:
-                    raise ValueError(
-                        f"Missing socket '{socket_path}' in {task.name}.inputs and "
-                        "parent namespace is not dynamic."
-                    )
-                if (
-                    isinstance(source, TaskSocketNamespace)
-                    or getattr(source, "_scoped_name", None) == OUTPUT_SOCKET_NAME
-                ):
-                    parent._append_dynamic_child(parts[-1], {})
-                else:
-                    parent._append_dynamic_child(parts[-1], None)
-                target = parent[parts[-1]]
+            target = self._resolve_or_create_input_socket(task, socket_path, source)
             self.add_link(source, target, allow_skip_linked=True)
 
     @classmethod
