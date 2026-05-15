@@ -144,6 +144,8 @@ def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
         return values
     if not isinstance(values, dict):
         return values
+    from node_graph.utils.struct_utils import is_structured_instance
+
     out = dict(values)
     for name, item in namespace._sockets.items():
         if name not in out:
@@ -152,6 +154,16 @@ def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
         if isinstance(item, TaskSocketNamespace):
             if isinstance(value, dict):
                 out[name] = _deserialize_inputs(item, value, adapter)
+            elif is_structured_instance(value):
+                # The namespace was already materialised into a dataclass /
+                # Pydantic instance by ``coerce_inputs_from_spec`` (which
+                # runs before ``_deserialize_inputs`` in ``materialize_graph``).
+                # Without this branch, the adapter never sees the structured
+                # value, so a serialiser that auto-promotes primitive fields
+                # to engine-typed wrappers (e.g. ``aiida-workgraph``'s
+                # ``orm.Int`` / ``orm.Float``) leaves them wrapped inside
+                # the dataclass and downstream ``int``-typed code breaks.
+                out[name] = adapter.deserialize(value, item)
         else:
             out[name] = adapter.deserialize(value, item)
     return out
