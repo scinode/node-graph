@@ -144,12 +144,21 @@ def materialize_graph(
     args: tuple,
     kwargs: dict,
     var_kwargs: Optional[dict] = None,
+    value_adapter: Optional[Callable[[Any], Any]] = None,
 ) -> Graph:
     """
     Run func(*args, **kwargs, **(var_kwargs or {})) inside a Graph,
     assign its outputs and return the Graph.
+
+    ``value_adapter``, if given, transforms the wrapped value of each body-facing
+    input (e.g. unwrapping data nodes to their raw Python value) while leaving the
+    socket's stored value untouched, so provenance is preserved.
     """
-    from node_graph.utils import tag_socket_value, clean_socket_reference
+    from node_graph.utils import (
+        tag_socket_value,
+        clean_socket_reference,
+        adapt_tagged_values,
+    )
     from node_graph.utils.struct_utils import coerce_inputs_from_spec
     from node_graph.utils.function import (
         prepare_function_inputs,
@@ -172,6 +181,8 @@ def materialize_graph(
         graph.graph_inputs.set_inputs(inputs)
         tag_socket_value(graph.inputs)
         inputs = graph.inputs._collect_values(unwrap=False)
+        if value_adapter is not None:
+            inputs = adapt_tagged_values(inputs, value_adapter)
         inputs = coerce_inputs_from_spec(inputs, in_spec)
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)

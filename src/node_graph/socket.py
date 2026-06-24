@@ -446,11 +446,11 @@ _RUNTIME_EXTRA_KEYS = {
 
 
 class TaggedValue(wrapt.ObjectProxy):
-    def __init__(self, wrapped, socket=None):
+    def __init__(self, wrapped, socket=None, uuid=None):
         super().__init__(wrapped)
 
         self._self_socket = socket
-        self._self_uuid = str(uuid4())
+        self._self_uuid = uuid or str(uuid4())
 
     # Provide clean access via `proxy._socket` instead of `proxy._self_socket`
     @property
