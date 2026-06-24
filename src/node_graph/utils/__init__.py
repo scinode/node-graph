@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, Union, List
+from typing import Callable, Dict, Any, Union, List
 
 
 def gaph_to_short_json(
@@ -102,6 +102,32 @@ def resolve_tagged_values(inputs: Any) -> Any:
                 inputs[key] = value.__wrapped__
             else:
                 resolve_tagged_values(value)
+    return inputs
+
+
+def adapt_tagged_values(inputs: Any, adapter: Callable[[Any], Any]) -> Any:
+    """Recursively transform the wrapped value of each TaggedValue via ``adapter``.
+
+    Unlike :func:`resolve_tagged_values`, the TaggedValue proxy is preserved, so a
+    downstream link can still be created from its ``_socket``; only the wrapped
+    value is replaced, with the socket reference and uuid carried over. This is
+    used to present body-facing input values (for example, unwrapping data nodes
+    to their raw Python value) without disturbing the socket's stored value.
+    """
+    from node_graph.socket import TaggedValue
+
+    if isinstance(inputs, TaggedValue):
+        return TaggedValue(
+            adapter(inputs.__wrapped__), socket=inputs._socket, uuid=inputs._uuid
+        )
+    if isinstance(inputs, dict):
+        return {
+            key: adapt_tagged_values(value, adapter) for key, value in inputs.items()
+        }
+    if isinstance(inputs, list):
+        return [adapt_tagged_values(value, adapter) for value in inputs]
+    if isinstance(inputs, tuple):
+        return tuple(adapt_tagged_values(value, adapter) for value in inputs)
     return inputs
 
 
