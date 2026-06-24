@@ -1,5 +1,6 @@
 from node_graph import Graph, task
 from node_graph.socket_spec import namespace, dynamic
+from node_graph.utils.graph import materialize_graph
 from typing import Any
 import pytest
 from pydantic import BaseModel
@@ -27,6 +28,36 @@ def test_build(decorated_myadd_group):
     assert len(ng.inputs) == 2
     assert len(ng.outputs) == 1
     assert len(ng.links) == 5
+
+
+def test_build_value_adapter():
+    """``value_adapter`` transforms the body-facing input value while leaving the
+    socket's stored value and its provenance identity (uuid) intact."""
+    seen = {}
+
+    @task.graph()
+    def body(x):
+        seen["value"] = int(x)  # the body observes the wrapped value
+        seen["uuid"] = x._uuid
+        return x
+
+    # ``.build()`` does not forward ``value_adapter``, so drive ``materialize_graph``
+    # directly, the same entry point a host (e.g. aiida-workgraph) uses.
+    graph = materialize_graph(
+        body._callable,
+        body._spec.inputs,
+        body._spec.outputs,
+        body._spec.identifier,
+        None,
+        args=(),
+        kwargs={"x": 5},
+        value_adapter=lambda value: value + 100,
+    )
+
+    stored = graph.inputs.x.property.value
+    assert seen["value"] == 105  # body saw the adapted value
+    assert stored.__wrapped__ == 5  # socket's stored value untouched
+    assert stored._uuid == seen["uuid"]  # identity preserved -> links/provenance intact
 
 
 def test_run_as_a_task(decorated_myadd_group):
