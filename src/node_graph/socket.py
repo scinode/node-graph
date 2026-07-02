@@ -57,6 +57,10 @@ def op_floordiv(x, y):
     return x // y
 
 
+def op_getitem(x, y):
+    return x[y]
+
+
 # comparison operations
 def op_lt(x, y):
     return x < y
@@ -305,8 +309,8 @@ class OperatorSocketMixin:
     def __contains__(self, _):
         _raise_illegal(self, "membership test (x in socket)", _tip_iter())
 
-    def __getitem__(self, _):
-        _raise_illegal(self, "subscript access (socket[idx])", _tip_indexing())
+    def __getitem__(self, key):
+        return self._create_operator_task(op_getitem, self, key)
 
     def __setitem__(self, *_):
         _raise_illegal(self, "item assignment (socket[idx] = ...)", _tip_indexing())

@@ -64,7 +64,6 @@ def test_numeric_casts_and_hash_forbidden(future_socket, op):
         lambda s: iter(s),
         lambda s: reversed(s),
         lambda s: (1 in s),  # membership
-        lambda s: s[0],  # __getitem__
         _setitem,  # __setitem__
         _delitem,  # __delitem__
     ],
@@ -506,6 +505,36 @@ def test_operation_comparison(op, name, ref_result, decorated_myadd):
         return {"result_1": result_1, "result_2": result_2, "result_3": result_3}
 
     test_op.build()
+
+
+def test_operation_getitem():
+    """Subscripting a future socket builds a deferred op_getitem task (issue #156)."""
+    from typing import Any, Annotated
+
+    from node_graph import task, namespace
+    from node_graph.engine.local import LocalEngine
+
+    @task()
+    def make_item() -> dict:
+        return {"k": 21, "seq": [1, 2, 3]}
+
+    @task.graph()
+    def subscript() -> Annotated[dict, namespace(by_key=Any, by_index=Any)]:
+        item = make_item().result
+        by_key = item["k"]
+        assert isinstance(by_key, BaseSocket)
+        assert "op_getitem" in by_key._task.name
+        assert by_key._task.get_executor().module_path == "node_graph.socket"
+        assert by_key._task.get_executor().callable_name == "op_getitem"
+        # chained subscripts
+        by_index = item["seq"][1]
+        assert isinstance(by_index, BaseSocket)
+        return {"by_key": by_key, "by_index": by_index}
+
+    ng = subscript.build()
+    results = LocalEngine().run(ng)
+    assert results["by_key"] == 21
+    assert results["by_index"] == 2
 
 
 def test_invalid_input(decorated_myadd):
