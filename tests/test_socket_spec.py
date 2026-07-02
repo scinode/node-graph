@@ -720,6 +720,39 @@ def test_typeddict_model_namespace():
     assert set(spec.fields["y"].fields.keys()) == {"sum", "product"}
 
 
+def test_dynamic_field_in_structured_models():
+    """A dynamic(...) field of a structured model expands into the same
+    dynamic namespace as the explicit namespace(...) form (issue #154)."""
+    ref = ss.namespace(out=ss.dynamic(int)).fields["out"]
+    assert ref.identifier == "node_graph.namespace"
+    assert ref.dynamic is True
+    assert ref.item.identifier == "node_graph.int"
+
+    class BundleTD(TypedDict):
+        out: Annotated[dict, ss.dynamic(int)]
+
+    @dataclass
+    class BundleDC:
+        out: Annotated[dict, ss.dynamic(int)]
+
+    class BundlePD(BaseModel):
+        out: Annotated[dict, ss.dynamic(int)]
+
+    for model in (BundleTD, BundleDC, BundlePD):
+        got = ss.from_model(model).fields["out"]
+        assert got.identifier == ref.identifier
+        assert got.dynamic is True
+        assert got.item == ref.item
+
+    # nested explicit namespace(...) expands too
+    class NestedTD(TypedDict):
+        sub: Annotated[dict, ss.namespace(a=int, b=str)]
+
+    got = ss.from_model(NestedTD).fields["sub"]
+    assert got.is_namespace()
+    assert set(got.fields.keys()) == {"a", "b"}
+
+
 def test_typeddict_optional_keys():
     class PartialTD(TypedDict, total=False):
         a: int
