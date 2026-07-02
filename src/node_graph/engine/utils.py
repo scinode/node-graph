@@ -225,10 +225,18 @@ def _build_task_link_kwargs(
             lk = active_links[0]
             from_name = lk.from_task.name
             from_sock = lk.from_socket._scoped_name
-            if from_sock == "_outputs":
-                kwargs[to_sock] = resolve_whole(from_name, source_map)
+            if from_sock == "_outputs" or lk.from_socket._parent is None:
+                # from-side root namespace: the entire upstream payload
+                value = resolve_whole(from_name, source_map)
             else:
-                kwargs[to_sock] = resolve_socket(from_name, from_sock, source_map)
+                value = resolve_socket(from_name, from_sock, source_map)
+            if lk.to_socket._parent is None and isinstance(value, dict):
+                # to-side root namespace (e.g. `graph.outputs = <dynamic ns>`):
+                # the payload belongs at the top level, not under a child named
+                # after the root socket.
+                kwargs.update(value)
+            else:
+                kwargs[to_sock] = value
             continue
 
         bundle_payload: Dict[str, Any] = {}
