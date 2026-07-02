@@ -136,6 +136,38 @@ def test_local_engine_handles_nested_and_dynamic_outputs():
     assert dynamic_labels == {f"create:square_{i}" for i in range(5)}
 
 
+def test_local_engine_reexposes_dynamic_namespace_output():
+    """A graph that returns a task's dynamic-namespace output directly, or
+    routes it through a nested graph task, resolves at the top level instead
+    of nesting the payload under a child named after the root socket."""
+
+    @task()
+    def source() -> Annotated[dict, ns(data=dynamic(int))]:
+        return {"data": {"k1": 1, "k2": 2}}
+
+    @task()
+    def record(v) -> int:
+        return int(v) * 10
+
+    @task.graph()
+    def expose() -> Annotated[dict, dynamic(int)]:
+        return source().data
+
+    assert LocalEngine().run(expose.build()) == {"k1": 1, "k2": 2}
+
+    @task.graph()
+    def rescatter(
+        data: Annotated[dict, dynamic(int)]
+    ) -> Annotated[dict, dynamic(int)]:
+        return {k: record(v=v).result for k, v in data.items()}
+
+    @task.graph()
+    def top() -> Annotated[dict, dynamic(int)]:
+        return rescatter(data=source().data)
+
+    assert LocalEngine().run(top.build()) == {"k1": 10, "k2": 20}
+
+
 def test_local_engine_records_call_edges():
     ng = Graph(name="call-graph")
     chain_node = ng.add_task(double_chain, "chain", x=2)
