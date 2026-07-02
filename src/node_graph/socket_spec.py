@@ -120,6 +120,16 @@ def _unwrap_annotated(tp: Any) -> tuple[Any, Optional["SocketMeta"]]:
     return base, spec_meta
 
 
+def _pydantic_field_annotation(model_field: Any) -> Any:
+    """Reassemble the field's original annotation: Pydantic moves Annotated
+    metadata (e.g. dynamic(...)/namespace(...) specs) into FieldInfo.metadata."""
+    ann = model_field.annotation if model_field.annotation is not None else Any
+    metadata = getattr(model_field, "metadata", None) or []
+    if metadata:
+        return Annotated[tuple([ann, *metadata])]
+    return ann
+
+
 def _extract_spec_from_annotated(tp: Any) -> Optional["SocketSpec"]:
     """
     Return a SocketSpec from Annotated metadata (preferring SocketView.to_spec()).
@@ -684,7 +694,9 @@ class SocketSpecAPI:
                     meta=SocketMeta(dynamic=True),
                 )
                 for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
-                    child = cls._child_spec_from_type(model_field.annotation or Any)
+                    child = cls._child_spec_from_type(
+                        _pydantic_field_annotation(model_field)
+                    )
                     if (
                         getattr(model_field, "default", PydanticUndefined)
                         is not PydanticUndefined
@@ -701,7 +713,9 @@ class SocketSpecAPI:
             # regular Pydantic (non-dynamic)
             ns = SocketSpec(identifier=cls._ns_identifier(), fields={})
             for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
-                child = cls._child_spec_from_type(model_field.annotation or Any)
+                child = cls._child_spec_from_type(
+                    _pydantic_field_annotation(model_field)
+                )
                 if (
                     getattr(model_field, "default", PydanticUndefined)
                     is not PydanticUndefined
@@ -830,35 +844,39 @@ class SocketSpecAPI:
 
     @classmethod
     def _child_spec_from_type(cls, ann: Any) -> SocketSpec:
-        # Leaf[...] override
-        leaf_target = _annot_is_leaf_marker(ann)
-        if leaf_target is not None:
-            return cls._leaf_from_type(leaf_target)
+        # explicit spec in Annotated metadata, e.g. Annotated[dict, dynamic(int)]
+        child = _extract_spec_from_annotated(ann)
+        if child is None:
+            # Leaf[...] override
+            leaf_target = _annot_is_leaf_marker(ann)
+            if leaf_target is not None:
+                child = cls._leaf_from_type(leaf_target)
+            else:
+                base_T, _ = _unwrap_annotated(ann)
+                base_T = _strip_optional(base_T)
+                origin = get_origin(base_T)
 
-        base_T, _ = _unwrap_annotated(ann)
-        base_T = _strip_optional(base_T)
+                # embedded SocketSpec/SocketView
+                if isinstance(base_T, SocketSpec):
+                    child = base_T
+                elif isinstance(base_T, SocketView):
+                    child = base_T.to_spec()
+                # Pydantic model types
+                elif _is_struct_model_type(base_T):
+                    child = cls.from_model(base_T)
+                # sequences -> map to list identifier (leaf)
+                elif origin in (list, tuple, set):
+                    child = cls._leaf_from_type(list)
+                # dict/Mapping -> leaf dict (no implicit dynamic unless user chose pydantic dynamic)
+                elif origin in (dict,):
+                    child = cls._leaf_from_type(dict)
+                # primitives / anything else -> leaf
+                else:
+                    child = cls._leaf_from_type(base_T)
 
-        # embedded SocketSpec/SocketView
-        if isinstance(base_T, SocketSpec):
-            return base_T
-        if isinstance(base_T, SocketView):
-            return base_T.to_spec()
-
-        # Pydantic model types
-        if _is_struct_model_type(base_T):
-            return cls.from_model(base_T)
-
-        # sequences -> map to list identifier (leaf)
-        origin = get_origin(base_T)
-        if origin in (list, tuple, set):
-            return cls._leaf_from_type(list)
-
-        # dict/Mapping -> leaf dict (no implicit dynamic unless user chose pydantic dynamic)
-        if origin in (dict,):
-            return cls._leaf_from_type(dict)
-
-        # primitives / anything else -> leaf
-        return cls._leaf_from_type(base_T)
+        # overlay meta and selection transforms from Annotated (parity with namespace())
+        child = replace(child, meta=_merge_all_meta_from_annotation(ann, child.meta))
+        return _apply_select_from_annotation(ann, child)
 
     @staticmethod
     def _safe_type_hints(func):
