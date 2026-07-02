@@ -962,11 +962,14 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
             return self._sockets[name]
         except KeyError:
             if name in ("items", "keys", "values", "get"):
-                _raise_illegal(
-                    self,
-                    f"dict-style access (socket.{name}())",
-                    _tip_dynamic_iter(),
-                )
+                from node_graph.manager import peek_current_graph
+
+                if peek_current_graph() is not None:
+                    _raise_illegal(
+                        self,
+                        f"dict-style access (socket.{name}())",
+                        _tip_dynamic_iter(),
+                    )
             avail = ", ".join(self._sockets.keys()) or "<none>"
             raise AttributeError(
                 f"{self.__class__.__name__}: '{self._full_name_with_task}' has no sub-socket '{name}'.\n"
@@ -1620,13 +1623,18 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
 
     def __iter__(self) -> object:
         # A dynamic namespace with no concrete children only gets its keys at
-        # runtime; iterating it at build time would silently yield nothing.
+        # runtime; iterating it while composing a graph would silently yield
+        # nothing. Engine/tooling code runs with no active graph and may walk
+        # (possibly empty) namespaces freely.
         if self._metadata.dynamic and not self._sockets:
-            _raise_illegal(
-                self,
-                "iteration over a dynamic namespace with no concrete children",
-                _tip_dynamic_iter(),
-            )
+            from node_graph.manager import peek_current_graph
+
+            if peek_current_graph() is not None:
+                _raise_illegal(
+                    self,
+                    "iteration over a dynamic namespace with no concrete children",
+                    _tip_dynamic_iter(),
+                )
         # Iterate over items in insertion order
         return iter(self._sockets.values())
 

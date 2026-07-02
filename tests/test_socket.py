@@ -154,6 +154,32 @@ def test_dynamic_namespace_iteration_errors():
         use_iter.build()
 
 
+def test_dynamic_namespace_iteration_outside_graph_context():
+    """The guards only fire while a graph is being composed; engine/tooling
+    code with no active graph may walk (possibly empty) namespaces freely."""
+    from typing import Annotated
+
+    from node_graph import Graph, task, namespace
+    from node_graph.manager import peek_current_graph, set_current_graph
+    from node_graph.socket_spec import dynamic
+
+    @task()
+    def source() -> Annotated[dict, namespace(data=dynamic(int))]:
+        return {"data": {"k1": 1, "k2": 2}}
+
+    ng = Graph(name="no-context")
+    node = ng.add_task(source, "source")
+    # other tests may leave an auto-created current graph behind
+    set_current_graph(None)
+    assert peek_current_graph() is None
+
+    # empty dynamic namespace iterates as empty, no error
+    assert list(node.outputs.data) == []
+    # dict-style access falls back to a plain AttributeError
+    with pytest.raises(AttributeError, match="has no sub-socket 'items'"):
+        node.outputs.data.items()
+
+
 def test_fixed_namespace_iteration_still_works():
     """Iterating a namespace with concrete children keeps yielding sockets."""
     from node_graph import task, namespace
