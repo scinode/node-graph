@@ -76,7 +76,7 @@ def _assign_graph_outputs(outputs: Any, graph: Graph) -> None:
         if outputs._metadata.dynamic:
             graph.outputs = outputs
 
-        for socket in outputs:
+        for socket in outputs._sockets.values():
             if (
                 socket._name not in graph.outputs
                 and not graph.outputs._metadata.dynamic

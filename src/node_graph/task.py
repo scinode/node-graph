@@ -247,7 +247,7 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         }
         for prop in self.properties:
             get_arg_type(prop.name, args_data, prop.arg_type)
-        for input in self.inputs:
+        for input in self.inputs._sockets.values():
             get_arg_type(
                 input._name,
                 args_data,

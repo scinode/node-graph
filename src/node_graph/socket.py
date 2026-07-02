@@ -149,6 +149,15 @@ def _tip_indexing():
     ]
 
 
+def _tip_dynamic_iter():
+    return [
+        "The keys of a dynamic namespace only exist at runtime, so it cannot",
+        "be iterated while building the graph.",
+        "Pass the namespace into a nested @task.graph with a dynamic input and",
+        "iterate there, where the values are concrete.",
+    ]
+
+
 class OperatorSocketMixin:
     @property
     def _decorator(self):
@@ -952,6 +961,12 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         try:
             return self._sockets[name]
         except KeyError:
+            if name in ("items", "keys", "values", "get"):
+                _raise_illegal(
+                    self,
+                    f"dict-style access (socket.{name}())",
+                    _tip_dynamic_iter(),
+                )
             avail = ", ".join(self._sockets.keys()) or "<none>"
             raise AttributeError(
                 f"{self.__class__.__name__}: '{self._full_name_with_task}' has no sub-socket '{name}'.\n"
@@ -1604,6 +1619,14 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         return ns_copy
 
     def __iter__(self) -> object:
+        # A dynamic namespace with no concrete children only gets its keys at
+        # runtime; iterating it at build time would silently yield nothing.
+        if self._metadata.dynamic and not self._sockets:
+            _raise_illegal(
+                self,
+                "iteration over a dynamic namespace with no concrete children",
+                _tip_dynamic_iter(),
+            )
         # Iterate over items in insertion order
         return iter(self._sockets.values())
 
