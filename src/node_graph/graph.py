@@ -680,8 +680,9 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         ``_append_dynamic_child``. Raises if a missing segment sits under a
         non-dynamic namespace (genuine wiring bug). The leaf is created as an
         empty namespace when ``source`` is itself a namespace; otherwise a
-        single-value socket. Used by both ``links_from_dict`` and the engine's
-        Map-zone clone path (``_patch_cloned_tasks``).
+        single-value socket. Called by ``links_from_dict``; extracted as a
+        standalone helper so downstream consumers (e.g. ``aiida-workgraph``'s
+        Map-zone task cloning) can reuse the same socket-resolution logic.
         """
         from node_graph.socket import TaskSocketNamespace
 
