@@ -62,10 +62,11 @@ def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
     """Rebuild a structured instance from a flat value when spec says so."""
     if info is None:
         return value
-    cls = import_structured_type(info["path"])
     kind = info.get("kind")
-    # Enum check goes before the dict gate: its serialized form is a bare value.
+    # Enum check goes before the dict gate: its serialized form is a bare value,
+    # so an already-materialized-instance/dict short-circuit would never fire.
     if kind == "enum":
+        cls = import_structured_type(info["path"])
         if isinstance(value, cls):
             return value
         return cls(value)
@@ -73,6 +74,10 @@ def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
         return value
     if not isinstance(value, dict):
         return value
+    # Only import the target class once we know we must rebuild from a dict.
+    # Imports of already-materialized instances (e.g. locally-defined types
+    # whose qualname is not importable) must not reach here.
+    cls = import_structured_type(info["path"])
     if kind == "pydantic":
         if contains_tagged_value(value):
             if hasattr(cls, "model_construct"):
