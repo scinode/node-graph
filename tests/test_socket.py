@@ -122,6 +122,163 @@ def test_numpy_interop_forbidden(future_socket):
         pass
 
 
+def test_dynamic_namespace_iteration_errors():
+    """Build-time iteration of a runtime-keyed dynamic namespace raises a
+    helpful error instead of AttributeError / silently yielding nothing."""
+    from typing import Annotated
+
+    from node_graph import task, namespace
+    from node_graph.socket_spec import dynamic
+
+    @task()
+    def source() -> Annotated[dict, namespace(data=dynamic(int))]:
+        return {"data": {"k1": 1, "k2": 2}}
+
+    @task.graph()
+    def use_items():
+        for _k, _v in source().data.items():
+            pass
+
+    with pytest.raises(GraphDeferredIllegalOperationError, match="dict-style access"):
+        use_items.build()
+
+    @task.graph()
+    def use_iter():
+        for _v in source().data:
+            pass
+
+    with pytest.raises(
+        GraphDeferredIllegalOperationError,
+        match="dynamic namespace with no concrete children",
+    ):
+        use_iter.build()
+
+
+def test_dynamic_namespace_iteration_outside_graph_context():
+    """The guards only fire while a graph is being composed; engine/tooling
+    code with no active graph may walk (possibly empty) namespaces freely."""
+    from typing import Annotated
+
+    from node_graph import Graph, task, namespace
+    from node_graph.manager import peek_current_graph, set_current_graph
+    from node_graph.socket_spec import dynamic
+
+    @task()
+    def source() -> Annotated[dict, namespace(data=dynamic(int))]:
+        return {"data": {"k1": 1, "k2": 2}}
+
+    ng = Graph(name="no-context")
+    node = ng.add_task(source, "source")
+    # other tests may leave an auto-created current graph behind
+    set_current_graph(None)
+    assert peek_current_graph() is None
+
+    # empty dynamic namespace iterates as empty, no error
+    assert list(node.outputs.data) == []
+    # dict-style access falls back to a plain AttributeError
+    with pytest.raises(AttributeError, match="has no sub-socket 'items'"):
+        node.outputs.data.items()
+
+
+def test_fixed_namespace_iteration_still_works():
+    """Iterating a namespace with concrete children keeps yielding sockets."""
+    from node_graph import task, namespace
+
+    @task()
+    def pair() -> namespace(a=int, b=int):
+        return {"a": 1, "b": 2}
+
+    @task.graph()
+    def fixed() -> int:
+        outs = pair()
+        names = [s._name for s in outs]
+        assert "a" in names and "b" in names
+        return outs.a
+
+    fixed.build()
+
+
+def test_fixed_namespace_dict_access_preserves_duck_typing():
+    """A fixed namespace has known keys at build time, so the dynamic-namespace
+    guard must not fire on it. During composition, mapping-detection must keep
+    working: hasattr(ns, 'items') is False (the guard raised a TypeError from
+    __getattr__, which hasattr does not swallow), and dict-style attribute
+    access falls back to a plain AttributeError with the correct message (not
+    the misleading "dynamic namespace" tip)."""
+    from typing import Annotated
+
+    from node_graph import Graph, task, namespace
+    from node_graph.manager import active_graph
+    from node_graph.socket_spec import dynamic
+
+    @task()
+    def fixed_source() -> namespace(a=int, b=int):
+        return {"a": 1, "b": 2}
+
+    @task()
+    def dyn_source() -> Annotated[dict, namespace(data=dynamic(int))]:
+        return {"data": {"k1": 1}}
+
+    ng = Graph(name="fixed-dict-access")
+    fixed_ns = ng.add_task(fixed_source, "f").outputs
+    # a dynamic namespace that already has concrete children is not deferred
+    materialized_ns = ng.add_task(dyn_source, "d").outputs.data
+    materialized_ns._new("node_graph.any", "k1")
+
+    def serialize(obj):
+        # standard mapping-detection pattern used by serializers/pydantic
+        return dict(obj) if hasattr(obj, "keys") else "not-a-mapping"
+
+    with active_graph(ng):
+        # duck-typing: a fixed namespace is not a mapping, so hasattr is False
+        # (and, critically, does not raise) and detection falls back cleanly.
+        assert hasattr(fixed_ns, "items") is False
+        assert serialize(fixed_ns) == "not-a-mapping"
+        # A dynamic namespace with materialized children is likewise not
+        # treated as deferred.
+        assert hasattr(materialized_ns, "items") is False
+
+        # .keys() on a fixed namespace: plain AttributeError, correct message,
+        # NOT the "dynamic namespace" guard error.
+        with pytest.raises(AttributeError, match="has no sub-socket 'keys'"):
+            fixed_ns.keys()
+
+
+def test_dynamic_empty_namespace_dict_access_defers():
+    """A genuinely dynamic + empty namespace under an active graph keeps
+    duck-typing intact on *lookup* (hasattr succeeds, so serializers can probe
+    it) but raises the clear error when a dict-style method is actually called
+    or when it is materialized as a mapping (dict()), instead of silently
+    yielding nothing."""
+    from typing import Annotated
+
+    from node_graph import Graph, task, namespace
+    from node_graph.manager import active_graph
+    from node_graph.socket_spec import dynamic
+
+    @task()
+    def dyn_source() -> Annotated[dict, namespace(data=dynamic(int))]:
+        return {"data": {"k1": 1}}
+
+    ng = Graph(name="dynamic-dict-access")
+    dyn_ns = ng.add_task(dyn_source, "d").outputs.data
+
+    with active_graph(ng):
+        # lookup does not raise (option-b callable) so hasattr stays truthful
+        assert hasattr(dyn_ns, "items") is True
+        # ...but calling it surfaces the clear error
+        with pytest.raises(
+            GraphDeferredIllegalOperationError, match="dict-style access"
+        ):
+            dyn_ns.items()
+        # dict() routes through keys() and likewise raises, rather than
+        # silently returning {}
+        with pytest.raises(
+            GraphDeferredIllegalOperationError, match="dict-style access"
+        ):
+            dict(dyn_ns)
+
+
 def test_check_identifier():
     n = Task()
     identifier = "node_graph.inta"

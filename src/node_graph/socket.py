@@ -149,6 +149,15 @@ def _tip_indexing():
     ]
 
 
+def _tip_dynamic_iter():
+    return [
+        "The keys of a dynamic namespace only exist at runtime, so it cannot",
+        "be iterated while building the graph.",
+        "Pass the namespace into a nested @task.graph with a dynamic input and",
+        "iterate there, where the values are concrete.",
+    ]
+
+
 class OperatorSocketMixin:
     @property
     def _decorator(self):
@@ -952,6 +961,33 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         try:
             return self._sockets[name]
         except KeyError:
+            # A dynamic namespace with no concrete children only gets its keys
+            # at runtime, so its dict-style methods cannot be evaluated while
+            # composing a graph. Mirror the __iter__ guard's scope (dynamic +
+            # empty + active graph) so that fixed or already-materialized
+            # namespaces keep their normal AttributeError fallback: hasattr()
+            # stays False and mapping-detection (serializers, dict(), pydantic)
+            # works. Return a callable that raises only when it is *called*, so
+            # attribute lookup / hasattr() still succeed and duck-typing is
+            # preserved; the clear error surfaces when the deferred keys are
+            # actually evaluated.
+            if (
+                name in ("items", "keys", "values", "get")
+                and self._metadata.dynamic
+                and not self._sockets
+            ):
+                from node_graph.manager import peek_current_graph
+
+                if peek_current_graph() is not None:
+
+                    def _deferred_dict_access(*args, _name=name, **kwargs):
+                        _raise_illegal(
+                            self,
+                            f"dict-style access (socket.{_name}())",
+                            _tip_dynamic_iter(),
+                        )
+
+                    return _deferred_dict_access
             avail = ", ".join(self._sockets.keys()) or "<none>"
             raise AttributeError(
                 f"{self.__class__.__name__}: '{self._full_name_with_task}' has no sub-socket '{name}'.\n"
@@ -1604,6 +1640,19 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         return ns_copy
 
     def __iter__(self) -> object:
+        # A dynamic namespace with no concrete children only gets its keys at
+        # runtime; iterating it while composing a graph would silently yield
+        # nothing. Engine/tooling code runs with no active graph and may walk
+        # (possibly empty) namespaces freely.
+        if self._metadata.dynamic and not self._sockets:
+            from node_graph.manager import peek_current_graph
+
+            if peek_current_graph() is not None:
+                _raise_illegal(
+                    self,
+                    "iteration over a dynamic namespace with no concrete children",
+                    _tip_dynamic_iter(),
+                )
         # Iterate over items in insertion order
         return iter(self._sockets.values())
 
