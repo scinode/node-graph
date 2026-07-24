@@ -456,9 +456,36 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
     def _namespace_structures_match(
         self, source: "TaskSocketNamespace", target: "TaskSocketNamespace"
     ) -> bool:
+        """Check whether two namespaces are compatible for a namespace link.
+
+        Every source child must exist in the target, and every target child
+        must exist in the source unless its spec marks it as not required
+        (e.g. a ``NotRequired`` TypedDict key), in which case it may be
+        absent and is simply left unlinked.
+        """
+        from node_graph.socket import TaskSocketNamespace
+
         if source._metadata.dynamic or target._metadata.dynamic:
             return True
-        return source._relative_keys() == target._relative_keys()
+        source_children = dict(source._iter_children(include_builtins=False))
+        target_children = dict(target._iter_children(include_builtins=False))
+        if set(source_children) - set(target_children):
+            return False
+        for name, target_child in target_children.items():
+            if name not in source_children:
+                if target_child._metadata.required is False:
+                    continue
+                return False
+            source_child = source_children[name]
+            source_is_namespace = isinstance(source_child, TaskSocketNamespace)
+            target_is_namespace = isinstance(target_child, TaskSocketNamespace)
+            if source_is_namespace != target_is_namespace:
+                return False
+            if source_is_namespace and not self._namespace_structures_match(
+                source_child, target_child
+            ):
+                return False
+        return True
 
     def _has_incoming_links(self, item: TaskSocket | "TaskSocketNamespace") -> bool:
         """Return True if the target socket already has incoming links."""
@@ -488,6 +515,10 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
         for name, target_child in target._iter_children(include_builtins=False):
             if name not in source._sockets:
+                if target_child._metadata.required is False:
+                    # An optional target child may be absent from the source;
+                    # leave it unlinked so it simply carries no value.
+                    continue
                 src = source._full_name_with_task
                 dst = target._full_name_with_task
                 raise ValueError(
