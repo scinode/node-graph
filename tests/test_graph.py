@@ -110,6 +110,40 @@ def test_from_dict_per_key_links_into_typed_dynamic_entry():
     )
 
 
+def test_resolve_or_create_input_socket_errors():
+    """The dotted-path resolver rejects genuine wiring bugs with named errors."""
+
+    @task()
+    def add_pair(x: int, y: int) -> namespace(sum=int, product=int):
+        return {"sum": x + y, "product": x * y}
+
+    @task()
+    def collect(items: dynamic(int)) -> int:
+        return sum(items.values())
+
+    ng = Graph()
+    ng.add_task(add_pair, "add_pair", x=1, y=2)
+    ng.add_task(collect, "collect")
+    static_task = ng.tasks.add_pair
+    dynamic_task = ng.tasks.collect
+
+    # A missing leaf under a non-dynamic namespace is a wiring bug.
+    with pytest.raises(ValueError, match="parent namespace is not dynamic"):
+        Graph._resolve_or_create_input_socket(static_task, "nope", None)
+
+    # A missing segment under a non-dynamic namespace, mid-walk.
+    with pytest.raises(ValueError, match="parent namespace is not dynamic"):
+        Graph._resolve_or_create_input_socket(static_task, "nope.deeper", None)
+
+    # A path that descends through an existing leaf socket.
+    with pytest.raises(ValueError, match="under leaf"):
+        Graph._resolve_or_create_input_socket(static_task, "x.deeper", None)
+
+    # Dynamic namespaces materialise missing children instead of raising.
+    created = Graph._resolve_or_create_input_socket(dynamic_task, "items.a", None)
+    assert created is dynamic_task.inputs.items.a
+
+
 def test_new_node(ng):
     """Test new task."""
     ng = Graph(name="test_graph")
