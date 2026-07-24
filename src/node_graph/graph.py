@@ -715,6 +715,10 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                 f"Cannot create socket '{socket_path}' under leaf "
                 f"{parent._full_name_with_task}."
             )
+        if parts[-1] in parent:
+            # The leaf already exists, e.g. materialised together with a typed
+            # dynamic entry namespace while walking the path above.
+            return parent[parts[-1]]
         if not parent._metadata.dynamic:
             raise ValueError(
                 f"Missing socket '{socket_path}' in {task.name}.inputs and "

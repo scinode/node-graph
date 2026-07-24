@@ -1,4 +1,4 @@
-from node_graph import Graph, task, namespace
+from node_graph import Graph, task, namespace, dynamic
 from node_graph.config import INPUT_SOCKET_NAME, OUTPUT_SOCKET_NAME
 import pytest
 from typing import Any
@@ -76,6 +76,37 @@ def test_from_dict_namespace_links():
     assert any(
         link.from_socket is restored.tasks.make_pair.outputs.nested.y
         for link in restored.tasks.consume.inputs.nested.y._links
+    )
+
+
+def test_from_dict_per_key_links_into_typed_dynamic_entry():
+    """Per-leaf links into a typed dynamic entry namespace must survive
+    ``from_dict``: the entry namespace only exists at build time and has to be
+    re-materialized from the parent's item spec during reconstruction."""
+
+    @task()
+    def add_pair(x: int, y: int) -> namespace(sum=int, product=int):
+        return {"sum": x + y, "product": x * y}
+
+    ng = Graph(outputs=dynamic(namespace(sum=int, product=int)))
+    ng.add_task(add_pair, "add_pair", x=1, y=2)
+    ng.outputs.entry1 = {
+        "sum": ng.tasks.add_pair.outputs.sum,
+        "product": ng.tasks.add_pair.outputs.product,
+    }
+
+    payload = ng.to_dict()
+    restored = Graph.from_dict(payload)
+
+    assert len(restored.links) == len(ng.links)
+    entry = restored.tasks.graph_outputs.inputs.entry1
+    assert any(
+        link.from_socket is restored.tasks.add_pair.outputs.sum
+        for link in entry.sum._links
+    )
+    assert any(
+        link.from_socket is restored.tasks.add_pair.outputs.product
+        for link in entry.product._links
     )
 
 
