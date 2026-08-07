@@ -408,7 +408,7 @@ class SocketView:
             raise AttributeError("'.item' only valid on dynamic namespace specs")
         if spec.fields and name in spec.fields:
             return SocketView(spec.fields[name])
-        raise AttributeError(f"'{name}' not found in namespace spec")
+        raise AttributeError(f"namespace spec has no field '{name}'")
 
     def __getitem__(self, name: str) -> "SocketView":
         return self.__getattr__(name)
