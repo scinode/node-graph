@@ -453,7 +453,9 @@ class TaggedValue(wrapt.ObjectProxy):
         if cls is TaggedValue:
             from collections.abc import Iterable as _Iterable
 
-            target = _TaggedIterable if isinstance(wrapped, _Iterable) else _TaggedScalar
+            target = (
+                _TaggedIterable if isinstance(wrapped, _Iterable) else _TaggedScalar
+            )
             return super().__new__(target)
         return super().__new__(cls)
 
