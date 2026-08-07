@@ -1052,10 +1052,16 @@ class SocketSpecAPI:
                 # coerce_inputs_from_spec can rebuild the member after serialization.
                 info = structured_type_info(base_T)
                 if info is not None and "structured_type" not in spec.meta.extras:
+                    # ``required=None`` so this overlay says nothing about
+                    # requiredness: ``SocketMeta.required`` defaults to ``True``
+                    # and ``merge_meta`` prefers any non-``None`` overlay value,
+                    # so a bare ``SocketMeta`` would republish ``required=True``
+                    # over the value computed from the parameter's default.
                     spec = replace(
                         spec,
                         meta=merge_meta(
-                            spec.meta, SocketMeta(extras={"structured_type": info})
+                            spec.meta,
+                            SocketMeta(required=None, extras={"structured_type": info}),
                         ),
                     )
 
