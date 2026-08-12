@@ -1,6 +1,10 @@
-"""Socket references for namespace members in eager graph bodies."""
+"""Socket references for namespace members in eager graph bodies.
 
-from __future__ import annotations
+No ``from __future__ import annotations`` here: the graph signatures below
+use ``ns(...)`` specs in annotation position, which postponed evaluation
+turns into strings that Python 3.10's forward-reference evaluation rejects
+(a spec instance is not a type).
+"""
 
 from typing import Any, TypedDict
 
