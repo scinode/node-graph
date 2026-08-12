@@ -378,6 +378,44 @@ def test_explicitly_empty_namespace_still_reaches_the_body():
     assert sink_of(graph)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.pw"
 
 
+# --------------------------------------------- concrete NotRequired members
+# node-graph#165 fixed a NotRequired[<concrete type>] TypedDict member: the
+# qualifier used to survive get_type_hints and leak into the child spec as
+# an opaque "annotated" leaf (identifier node_graph.annotated, required=True)
+# instead of being stripped down to the wrapped type. Every other case in
+# this file uses NotRequired[Any], which the pre-#165 code path already
+# handled correctly and so doesn't exercise the fix.
+
+
+class TypedCodes(TypedDict):
+    pw: str
+    ph: NotRequired[str]
+
+
+@task()
+def run_str(code: str) -> str:
+    return f"ran {code}"
+
+
+def test_reference_wires_a_concrete_typed_notrequired_member():
+    """A NotRequired member with a concrete type links through `reference()`
+    exactly as an `Any`-typed one does: present, it links; absent, it leaves
+    the sink unresolved rather than being mis-specified as an opaque,
+    always-required leaf."""
+
+    @task.graph()
+    def ByReference(codes: TypedCodes):
+        run_str(code=codes.reference("ph"))
+
+    provided = ByReference.build(codes={"pw": "PW", "ph": "PH"})
+    assert link_sources(sink_of(provided, "run_str")) == ["graph_inputs.codes.ph"]
+
+    absent = ByReference.build(codes={"pw": "PW"})
+    sink = sink_of(absent, "run_str")
+    assert sink._links == []
+    assert sink._metadata.extras["unresolved_ref"] == "graph_inputs.codes.ph"
+
+
 @task.graph()
 def NestedConfig(config: ns(codes=ns(pw=Any))):
     # Graph bodies run against a re-imported function object; only a
