@@ -572,6 +572,29 @@ class TaggedNamespace(dict):
         return f"TaggedNamespace({dict.__repr__(self)}, socket={self._socket!r})"
 
 
+def _find_nested_socket_reference(value: Any) -> Optional["SocketReference"]:
+    """Return the first ``SocketReference`` nested inside a dict/list/tuple/set
+    container, or ``None`` if there isn't one.
+
+    A reference assigned directly to a socket is linked by ``_set_socket_reference``.
+    One buried inside a container bound for a leaf socket is not decomposed by
+    anything, so it would otherwise be stored as a plain, un-linked value.
+    """
+    if isinstance(value, SocketReference):
+        return value
+    if isinstance(value, dict):
+        values = value.values()
+    elif isinstance(value, (list, tuple, set)):
+        values = value
+    else:
+        return None
+    for item in values:
+        found = _find_nested_socket_reference(item)
+        if found is not None:
+            return found
+    return None
+
+
 class BaseSocket:
     """Socket object for input and output sockets of a Task.
 
@@ -776,6 +799,18 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             self._update_updatable_meta({"value_source": "link"})
             self._task.graph.add_link(value._socket, self)
         elif self.property:
+            nested_ref = _find_nested_socket_reference(value)
+            if nested_ref is not None:
+                raise TypeError(
+                    f"Socket '{socket_path(self)}' would store a SocketReference "
+                    f"from '{socket_path(nested_ref.socket)}' as a plain value "
+                    "instead of linking it.\n"
+                    "A reference nested inside a container (dict/list/tuple/set) "
+                    "bound for a leaf socket is not wired automatically.\n"
+                    "Fix: declare the container as a namespace so each member is "
+                    "wired individually, or check `.is_provided()` on the "
+                    "reference and pass a plain value into the container yourself."
+                )
             is_input = self._full_name.split(".")[0] == "inputs"
             has_link = any(
                 [

@@ -269,3 +269,95 @@ def test_explicitly_empty_namespace_still_reaches_the_body():
     graph = WithCodes.build(codes={})
     assert sink_of(graph)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.pw"
 
+
+# ------------------------------------------------- stored-reference errors
+# A SocketReference is only ever meant to be assigned directly to a socket
+# (leaf or namespace), where `_set_socket_reference` decides whether to link
+# it. Buried inside a plain dict/list bound for a leaf socket, nothing
+# decomposes the container, so the reference would otherwise be stored as a
+# bare, dead object instead of being linked or reported as unresolved.
+
+
+@task()
+def show(opts: Any) -> str:
+    return f"opts={opts!r}"
+
+
+def test_ref_nested_in_a_dict_bound_for_a_leaf_raises():
+    @task.graph()
+    def RefInDict(codes: Codes):
+        show(opts={"a": codes.ref("ph")})
+
+    with pytest.raises(TypeError, match="would store a SocketReference"):
+        RefInDict.build(codes={"pw": "PW", "ph": "PH"})
+
+
+def test_ref_nested_in_a_dict_bound_for_a_leaf_raises_even_when_absent():
+    """The container itself can't be linked either way, so absence doesn't help."""
+
+    @task.graph()
+    def RefInDict(codes: Codes):
+        show(opts={"a": codes.ref("ph")})
+
+    with pytest.raises(TypeError, match="would store a SocketReference"):
+        RefInDict.build(codes={"pw": "PW"})
+
+
+def test_ref_nested_in_a_list_bound_for_a_leaf_raises():
+    @task.graph()
+    def RefInList(codes: Codes):
+        show(opts=["a", codes.ref("ph")])
+
+    with pytest.raises(TypeError, match="would store a SocketReference"):
+        RefInList.build(codes={"pw": "PW", "ph": "PH"})
+
+
+def test_ref_error_names_the_target_and_source_sockets():
+    @task.graph()
+    def RefInDict(codes: Codes):
+        show(opts={"a": codes.ref("ph")})
+
+    with pytest.raises(TypeError) as exc:
+        RefInDict.build(codes={"pw": "PW", "ph": "PH"})
+    assert "show.opts" in str(exc.value)
+    assert "graph_inputs.codes.ph" in str(exc.value)
+
+
+def test_ref_in_a_dict_bound_for_a_leaf_negative_control(monkeypatch):
+    """Disabling the check reproduces the pre-fix silent-garbage behaviour.
+
+    This is the discriminating half of the fix: without the guard, the same
+    graph builds and stores the bare SocketReference as an inert value.
+    """
+    import node_graph.socket as socket_module
+
+    monkeypatch.setattr(socket_module, "_find_nested_socket_reference", lambda value: None)
+
+    @task.graph()
+    def RefInDict(codes: Codes):
+        show(opts={"a": codes.ref("ph")})
+
+    graph = RefInDict.build(codes={"pw": "PW", "ph": "PH"})
+    sink = graph.tasks["show"].inputs.opts
+    assert sink._links == []
+    assert isinstance(sink._value["a"], SocketReference)
+
+
+def test_raw_socket_nested_in_a_leaf_dict_is_unaffected():
+    """Control: a plain (non-reference) socket nested in a container still
+    stores as a value today; the new check targets SocketReference only."""
+
+    @task()
+    def produce() -> str:
+        return "PRODUCED"
+
+    @task.graph()
+    def NestedSocket():
+        p = produce()
+        show(opts={"a": p.result})
+
+    graph = NestedSocket.build()
+    sink = graph.tasks["show"].inputs.opts
+    assert sink._links == []
+    assert "a" in sink._value
+
