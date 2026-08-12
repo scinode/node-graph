@@ -541,7 +541,7 @@ class TaggedNamespace(dict):
     """The values of a namespace socket, keeping a handle on the socket itself.
 
     Subscription returns values, so an absent member raises ``KeyError``. Use
-    ``ref(name)`` to obtain a :class:`SocketReference` instead, which is wireable
+    ``reference(name)`` to obtain a :class:`SocketReference` instead, which is wireable
     even when the member was not provided.
 
     ``copy.deepcopy`` and ``pickle`` yield a plain ``dict``, dropping the socket
@@ -554,7 +554,7 @@ class TaggedNamespace(dict):
         super().__init__(values or {})
         self._socket = socket
 
-    def ref(self, name: str) -> SocketReference:
+    def reference(self, name: str) -> SocketReference:
         """Return a reference to the member socket ``name``."""
         if self._socket is None:
             raise ValueError(
@@ -587,7 +587,7 @@ class TaggedNamespace(dict):
         return f"TaggedNamespace({dict.__repr__(self)}, socket={self._socket!r})"
 
 
-def ref(namespace: Mapping[str, object], name: str) -> SocketReference:
+def reference(namespace: Mapping[str, object], name: str) -> SocketReference:
     """Return a wireable reference to ``name`` inside ``namespace``.
 
     ``namespace`` must be a namespace the framework delivered to a graph
@@ -601,11 +601,11 @@ def ref(namespace: Mapping[str, object], name: str) -> SocketReference:
         TypeError: When ``namespace`` carries no socket identity — a plain
             dict built by hand, or a namespace that left the graph context.
     """
-    method = getattr(namespace, "ref", None)
+    method = getattr(namespace, "reference", None)
     if method is None:
         raise TypeError(
-            f"{type(namespace).__name__} carries no socket identity; ref() works "
-            "only on a namespace received as a graph input inside a graph body."
+            f"{type(namespace).__name__} carries no socket identity; reference() "
+            "works only on a namespace received as a graph input inside a graph body."
         )
     return method(name)
 

@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - Python < 3.11
 
 import pytest
 
-from node_graph import Graph, ref, task
+from node_graph import Graph, reference, task
 from node_graph.engine.local import LocalEngine
 from node_graph.socket import SocketReference, TaggedNamespace
 from node_graph.socket_spec import namespace as ns
@@ -62,7 +62,7 @@ SEEN: dict[str, Any] = {}
 @task.graph()
 def Inspect(codes: Codes):
     SEEN["codes"] = codes
-    SEEN["ref"] = codes.ref("ph")
+    SEEN["reference"] = codes.reference("ph")
     SEEN["subscript_error"] = None
     try:
         codes["ph"]
@@ -78,42 +78,42 @@ def test_body_receives_tagged_namespace():
     assert SEEN["codes"]._socket._name == "codes"
 
 
-def test_ref_does_not_raise_for_an_absent_member():
-    """``ref`` returns a reference where subscription raises ``KeyError``."""
+def test_reference_does_not_raise_for_an_absent_member():
+    """``reference`` returns a reference where subscription raises ``KeyError``."""
     Inspect.build(codes={"pw": "PW"})
-    assert isinstance(SEEN["ref"], SocketReference)
-    assert SEEN["ref"].is_provided() is False
+    assert isinstance(SEEN["reference"], SocketReference)
+    assert SEEN["reference"].is_provided() is False
     assert isinstance(SEEN["subscript_error"], KeyError)
 
 
-def test_ref_links_a_provided_member():
+def test_reference_links_a_provided_member():
     """A provided member links exactly as subscription does, and its value flows."""
 
     @task.graph()
-    def ByRef(codes: Codes):
-        run_code(code=codes.ref("ph"))
+    def ByReference(codes: Codes):
+        run_code(code=codes.reference("ph"))
 
     @task.graph()
     def BySubscript(codes: Codes):
         run_code(code=codes["ph"])
 
-    by_ref = ByRef.build(codes={"pw": "PW", "ph": "PH"})
+    by_reference = ByReference.build(codes={"pw": "PW", "ph": "PH"})
     by_subscript = BySubscript.build(codes={"pw": "PW", "ph": "PH"})
 
-    assert link_sources(sink_of(by_ref)) == ["graph_inputs.codes.ph"]
-    assert link_sources(sink_of(by_ref)) == link_sources(sink_of(by_subscript))
-    assert "unresolved_ref" not in sink_of(by_ref)._metadata.extras
+    assert link_sources(sink_of(by_reference)) == ["graph_inputs.codes.ph"]
+    assert link_sources(sink_of(by_reference)) == link_sources(sink_of(by_subscript))
+    assert "unresolved_ref" not in sink_of(by_reference)._metadata.extras
 
 
-def test_ref_value_flows_at_run_time():
+def test_reference_value_flows_at_run_time():
     """The referenced value reaches the task that consumes it."""
 
     @task.graph(outputs=ns(out=Any))
-    def ByRef(codes: Codes):
-        out = run_code(code=codes.ref("ph"))
+    def ByReference(codes: Codes):
+        out = run_code(code=codes.reference("ph"))
         return {"out": out.result}
 
-    graph = ByRef.build(codes={"pw": "PW", "ph": "PH"})
+    graph = ByReference.build(codes={"pw": "PW", "ph": "PH"})
     assert LocalEngine().run(graph)["out"] == "ran PH"
 
 
@@ -121,10 +121,10 @@ def test_absent_member_leaves_a_required_socket_unfilled():
     """An absent member leaves the consuming socket unfilled, so a checker can see it."""
 
     @task.graph()
-    def ByRef(codes: Codes):
-        run_code(code=codes.ref("ph"))
+    def ByReference(codes: Codes):
+        run_code(code=codes.reference("ph"))
 
-    graph = ByRef.build(codes={"pw": "PW"})
+    graph = ByReference.build(codes={"pw": "PW"})
     sink = sink_of(graph)
     assert sink._links == []
     assert sink.value is None
@@ -136,10 +136,10 @@ def test_absent_member_leaves_an_optional_socket_unset():
     """An absent member wired into an optional socket is not an error."""
 
     @task.graph()
-    def ByRef(codes: Codes):
-        maybe_run_code(code=codes.ref("ph"))
+    def ByReference(codes: Codes):
+        maybe_run_code(code=codes.reference("ph"))
 
-    graph = ByRef.build(codes={"pw": "PW"})
+    graph = ByReference.build(codes={"pw": "PW"})
     sink = sink_of(graph, "maybe_run_code")
     assert sink._links == []
     assert sink._metadata.required is False
@@ -150,31 +150,31 @@ def test_required_namespace_reaches_the_body_when_empty():
     """A required namespace is passed to the body even with no member provided."""
 
     @task.graph()
-    def ByRef(codes: Codes):
-        run_code(code=codes.ref("pw"))
+    def ByReference(codes: Codes):
+        run_code(code=codes.reference("pw"))
 
-    graph = ByRef.build(codes={})
+    graph = ByReference.build(codes={})
     assert sink_of(graph)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.pw"
 
 
-def test_ref_reaches_a_nested_member():
+def test_reference_reaches_a_nested_member():
     """Dotted names reference members of nested namespaces."""
 
     @task.graph()
-    def ByRef(config: ns(codes=ns(pw=Any))):
-        run_code(code=config.ref("codes.pw"))
+    def ByReference(config: ns(codes=ns(pw=Any))):
+        run_code(code=config.reference("codes.pw"))
 
-    provided = ByRef.build(config={"codes": {"pw": "PW"}})
+    provided = ByReference.build(config={"codes": {"pw": "PW"}})
     assert link_sources(sink_of(provided)) == ["graph_inputs.config.codes.pw"]
 
-    absent = ByRef.build(config={"codes": {}})
+    absent = ByReference.build(config={"codes": {}})
     assert (
         sink_of(absent)._metadata.extras["unresolved_ref"]
         == "graph_inputs.config.codes.pw"
     )
 
 
-def test_ref_inside_a_namespace_assignment():
+def test_reference_inside_a_namespace_assignment():
     """A reference can be handed over as one member of a namespace input."""
 
     @task()
@@ -182,25 +182,25 @@ def test_ref_inside_a_namespace_assignment():
         return data["x"] + data["y"]
 
     @task.graph()
-    def ByRef(numbers: ns(x=int, y=NotRequired[int])):
-        add(data={"x": numbers.ref("x"), "y": numbers.ref("y")})
+    def ByReference(numbers: ns(x=int, y=NotRequired[int])):
+        add(data={"x": numbers.reference("x"), "y": numbers.reference("y")})
 
-    graph = ByRef.build(numbers={"x": 1})
+    graph = ByReference.build(numbers={"x": 1})
     sink = graph.tasks["add"].inputs.data
     assert link_sources(sink.x) == ["graph_inputs.numbers.x"]
     assert sink.y._links == []
     assert sink.y._metadata.extras["unresolved_ref"] == "graph_inputs.numbers.y"
 
 
-def test_ref_to_an_undeclared_member_raises():
+def test_reference_to_an_undeclared_member_raises():
     """Referencing a member the namespace does not declare fails at build."""
 
     @task.graph()
-    def ByRef(codes: Codes):
-        run_code(code=codes.ref("nope"))
+    def ByReference(codes: Codes):
+        run_code(code=codes.reference("nope"))
 
     with pytest.raises(ValueError, match="not a member of namespace"):
-        ByRef.build(codes={"pw": "PW"})
+        ByReference.build(codes={"pw": "PW"})
 
 
 def test_subscription_is_unchanged():
@@ -218,32 +218,37 @@ def test_graph_round_trips_with_a_reference():
     """to_dict/from_dict preserves both a resolved link and an unresolved reference."""
 
     @task.graph()
-    def ByRef(codes: Codes):
-        run_code(code=codes.ref("ph"))
+    def ByReference(codes: Codes):
+        run_code(code=codes.reference("ph"))
 
-    provided = Graph.from_dict(ByRef.build(codes={"pw": "PW", "ph": "PH"}).to_dict())
+    provided = Graph.from_dict(
+        ByReference.build(codes={"pw": "PW", "ph": "PH"}).to_dict()
+    )
     assert link_sources(sink_of(provided)) == ["graph_inputs.codes.ph"]
 
-    absent = Graph.from_dict(ByRef.build(codes={"pw": "PW"}).to_dict())
+    absent = Graph.from_dict(ByReference.build(codes={"pw": "PW"}).to_dict())
     assert sink_of(absent)._links == []
     assert sink_of(absent)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.ph"
 
 
 # ------------------------------------------------------- free-function form
-# ``ref(namespace, name)`` is the typed sibling of the ``namespace.ref(name)``
-# method: a plain function, so a body typed on a TypedDict (a Mapping, with
-# no ``.ref`` method in its type) can call it without widening the parameter
-# type or adding a cast. The two forms share behaviour; parametrize the
-# scenarios that already cover the method rather than duplicating them.
+# ``reference(namespace, name)`` is the typed sibling of the
+# ``namespace.reference(name)`` method: a plain function, so a body typed on
+# a TypedDict (a Mapping, with no ``.reference`` method in its type) can call
+# it without widening the parameter type or adding a cast. The two forms
+# share behaviour; parametrize the scenarios that already cover the method
+# rather than duplicating them.
 
-REF_ACCESSORS = {
-    "method": lambda namespace, name: namespace.ref(name),
-    "function": lambda namespace, name: ref(namespace, name),
+REFERENCE_ACCESSORS = {
+    "method": lambda namespace, name: namespace.reference(name),
+    "function": lambda namespace, name: reference(namespace, name),
 }
 
 
-@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
-def test_ref_accessor_links_a_provided_member(accessor):
+@pytest.mark.parametrize(
+    "accessor", REFERENCE_ACCESSORS.values(), ids=REFERENCE_ACCESSORS.keys()
+)
+def test_reference_accessor_links_a_provided_member(accessor):
     """Both forms link a provided member exactly the same way."""
 
     @task.graph()
@@ -254,8 +259,10 @@ def test_ref_accessor_links_a_provided_member(accessor):
     assert link_sources(sink_of(graph)) == ["graph_inputs.codes.ph"]
 
 
-@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
-def test_ref_accessor_does_not_raise_for_an_absent_member(accessor):
+@pytest.mark.parametrize(
+    "accessor", REFERENCE_ACCESSORS.values(), ids=REFERENCE_ACCESSORS.keys()
+)
+def test_reference_accessor_does_not_raise_for_an_absent_member(accessor):
     """Both forms return a reference where subscription raises ``KeyError``."""
 
     @task.graph()
@@ -268,8 +275,10 @@ def test_ref_accessor_does_not_raise_for_an_absent_member(accessor):
     assert sink._metadata.extras["unresolved_ref"] == "graph_inputs.codes.ph"
 
 
-@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
-def test_ref_accessor_reaches_a_nested_member(accessor):
+@pytest.mark.parametrize(
+    "accessor", REFERENCE_ACCESSORS.values(), ids=REFERENCE_ACCESSORS.keys()
+)
+def test_reference_accessor_reaches_a_nested_member(accessor):
     """Both forms accept a dotted name to reach a nested namespace's member."""
 
     @task.graph()
@@ -280,8 +289,10 @@ def test_ref_accessor_reaches_a_nested_member(accessor):
     assert link_sources(sink_of(provided)) == ["graph_inputs.config.codes.pw"]
 
 
-@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
-def test_ref_accessor_to_an_undeclared_member_raises(accessor):
+@pytest.mark.parametrize(
+    "accessor", REFERENCE_ACCESSORS.values(), ids=REFERENCE_ACCESSORS.keys()
+)
+def test_reference_accessor_to_an_undeclared_member_raises(accessor):
     """Both forms fail at build when the name isn't in the namespace's schema."""
 
     @task.graph()
@@ -292,16 +303,16 @@ def test_ref_accessor_to_an_undeclared_member_raises(accessor):
         ByAccessor.build(codes={"pw": "PW"})
 
 
-def test_ref_function_on_a_plain_dict_raises_typeerror():
-    """A plain dict built by hand carries no socket identity, so ``ref()``
+def test_reference_function_on_a_plain_dict_raises_typeerror():
+    """A plain dict built by hand carries no socket identity, so ``reference()``
     names the type it received instead of failing with an unrelated
     ``AttributeError``."""
     with pytest.raises(TypeError, match=r"dict carries no socket identity"):
-        ref({"pw": "PW"}, "pw")
+        reference({"pw": "PW"}, "pw")
 
 
-def test_ref_typing_snippet_has_no_ignore_comments():
-    """``tests/typing_check_ref.py`` is the reason ``ref()`` exists: a
+def test_reference_typing_snippet_has_no_ignore_comments():
+    """``tests/typing_check_reference.py`` is the reason ``reference()`` exists: a
     TypedDict-typed call site checked clean under mypy strict mode, with no
     escape hatch needed (verified out of band; see the PR body for the
     invocation and result — the repo has no mypy step to hook a subprocess
@@ -309,7 +320,7 @@ def test_ref_typing_snippet_has_no_ignore_comments():
     """
     import pathlib
 
-    snippet = pathlib.Path(__file__).parent / "typing_check_ref.py"
+    snippet = pathlib.Path(__file__).parent / "typing_check_reference.py"
     assert "type: ignore" not in snippet.read_text()
 
 
@@ -326,7 +337,7 @@ def test_omitted_namespace_raises_typeerror_mixed_shape():
 
     @task.graph()
     def WithCodes(codes: Codes):
-        run_code(code=codes.ref("pw"))
+        run_code(code=codes.reference("pw"))
 
     with pytest.raises(
         TypeError, match=r"missing 1 required positional argument: 'codes'"
@@ -343,7 +354,7 @@ def test_omitted_namespace_raises_typeerror_all_optional_shape():
 
     @task.graph()
     def WithOptions(options: Options):
-        run_code(code=options.ref("ph"))
+        run_code(code=options.reference("ph"))
 
     with pytest.raises(
         TypeError, match=r"missing 1 required positional argument: 'options'"
@@ -361,7 +372,7 @@ def test_explicitly_empty_namespace_still_reaches_the_body():
 
     @task.graph()
     def WithCodes(codes: Codes):
-        run_code(code=codes.ref("pw"))
+        run_code(code=codes.reference("pw"))
 
     graph = WithCodes.build(codes={})
     assert sink_of(graph)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.pw"
@@ -371,7 +382,7 @@ def test_explicitly_empty_namespace_still_reaches_the_body():
 def NestedConfig(config: ns(codes=ns(pw=Any))):
     # Graph bodies run against a re-imported function object; only a
     # module-level body reliably shares SEEN with the test that built it
-    # (a locally-nested body does not, see test_ref_inside_a_namespace_assignment
+    # (a locally-nested body does not, see test_reference_inside_a_namespace_assignment
     # and friends, which read the built graph's structure instead).
     SEEN["contains_codes"] = "codes" in config
     SEEN["config"] = dict(config)
@@ -407,47 +418,47 @@ def show(opts: Any) -> str:
     return f"opts={opts!r}"
 
 
-def test_ref_nested_in_a_dict_bound_for_a_leaf_raises():
+def test_reference_nested_in_a_dict_bound_for_a_leaf_raises():
     @task.graph()
-    def RefInDict(codes: Codes):
-        show(opts={"a": codes.ref("ph")})
+    def ReferenceInDict(codes: Codes):
+        show(opts={"a": codes.reference("ph")})
 
     with pytest.raises(TypeError, match="would store a SocketReference"):
-        RefInDict.build(codes={"pw": "PW", "ph": "PH"})
+        ReferenceInDict.build(codes={"pw": "PW", "ph": "PH"})
 
 
-def test_ref_nested_in_a_dict_bound_for_a_leaf_raises_even_when_absent():
+def test_reference_nested_in_a_dict_bound_for_a_leaf_raises_even_when_absent():
     """The container itself can't be linked either way, so absence doesn't help."""
 
     @task.graph()
-    def RefInDict(codes: Codes):
-        show(opts={"a": codes.ref("ph")})
+    def ReferenceInDict(codes: Codes):
+        show(opts={"a": codes.reference("ph")})
 
     with pytest.raises(TypeError, match="would store a SocketReference"):
-        RefInDict.build(codes={"pw": "PW"})
+        ReferenceInDict.build(codes={"pw": "PW"})
 
 
-def test_ref_nested_in_a_list_bound_for_a_leaf_raises():
+def test_reference_nested_in_a_list_bound_for_a_leaf_raises():
     @task.graph()
-    def RefInList(codes: Codes):
-        show(opts=["a", codes.ref("ph")])
+    def ReferenceInList(codes: Codes):
+        show(opts=["a", codes.reference("ph")])
 
     with pytest.raises(TypeError, match="would store a SocketReference"):
-        RefInList.build(codes={"pw": "PW", "ph": "PH"})
+        ReferenceInList.build(codes={"pw": "PW", "ph": "PH"})
 
 
-def test_ref_error_names_the_target_and_source_sockets():
+def test_reference_error_names_the_target_and_source_sockets():
     @task.graph()
-    def RefInDict(codes: Codes):
-        show(opts={"a": codes.ref("ph")})
+    def ReferenceInDict(codes: Codes):
+        show(opts={"a": codes.reference("ph")})
 
     with pytest.raises(TypeError) as exc:
-        RefInDict.build(codes={"pw": "PW", "ph": "PH"})
+        ReferenceInDict.build(codes={"pw": "PW", "ph": "PH"})
     assert "show.opts" in str(exc.value)
     assert "graph_inputs.codes.ph" in str(exc.value)
 
 
-def test_ref_in_a_dict_bound_for_a_leaf_negative_control(monkeypatch):
+def test_reference_in_a_dict_bound_for_a_leaf_negative_control(monkeypatch):
     """Disabling the check reproduces the pre-fix silent-garbage behaviour.
 
     This is the discriminating half of the fix: without the guard, the same
@@ -460,10 +471,10 @@ def test_ref_in_a_dict_bound_for_a_leaf_negative_control(monkeypatch):
     )
 
     @task.graph()
-    def RefInDict(codes: Codes):
-        show(opts={"a": codes.ref("ph")})
+    def ReferenceInDict(codes: Codes):
+        show(opts={"a": codes.reference("ph")})
 
-    graph = RefInDict.build(codes={"pw": "PW", "ph": "PH"})
+    graph = ReferenceInDict.build(codes={"pw": "PW", "ph": "PH"})
     sink = graph.tasks["show"].inputs.opts
     assert sink._links == []
     assert isinstance(sink._value["a"], SocketReference)
