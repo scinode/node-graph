@@ -1,4 +1,5 @@
 from __future__ import annotations
+import copy
 from uuid import uuid4
 from node_graph.collection import DependencyCollection
 from node_graph.property import TaskProperty
@@ -567,6 +568,15 @@ class TaggedNamespace(dict):
 
     def copy(self) -> "TaggedNamespace":
         return TaggedNamespace(self, socket=self._socket)
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> Dict[str, Any]:
+        """Deep-copy to a plain ``dict``; the socket handle is a live graph object
+        and does not survive a copy."""
+        return copy.deepcopy(dict(self), memo)
+
+    def __reduce__(self):
+        """Pickle as a plain ``dict``; the socket handle is not picklable."""
+        return (dict, (dict(self),))
 
     def __repr__(self) -> str:
         return f"TaggedNamespace({dict.__repr__(self)}, socket={self._socket!r})"

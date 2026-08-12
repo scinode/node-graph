@@ -361,3 +361,45 @@ def test_raw_socket_nested_in_a_leaf_dict_is_unaffected():
     assert sink._links == []
     assert "a" in sink._value
 
+
+# --------------------------------------------- TaggedNamespace copy/pickle
+# TaggedNamespace carries a live socket handle, which is neither deep-copyable
+# nor picklable. copy/deepcopy/pickle fall back to a plain dict, matching
+# what a caller gets from `dict(codes)`.
+
+
+def test_tagged_namespace_deepcopy_yields_a_plain_dict():
+    import copy
+
+    tn = TaggedNamespace({"pw": "PW"}, socket=object())
+    copied = copy.deepcopy(tn)
+    assert type(copied) is dict
+    assert copied == {"pw": "PW"}
+
+
+def test_tagged_namespace_pickle_yields_a_plain_dict():
+    import pickle
+
+    tn = TaggedNamespace({"pw": "PW"}, socket=object())
+    restored = pickle.loads(pickle.dumps(tn))
+    assert type(restored) is dict
+    assert restored == {"pw": "PW"}
+
+
+def test_tagged_namespace_copy_module_yields_a_plain_dict():
+    import copy
+
+    tn = TaggedNamespace({"pw": "PW"}, socket=object())
+    shallow = copy.copy(tn)
+    assert type(shallow) is dict
+    assert shallow == {"pw": "PW"}
+
+
+def test_tagged_namespace_copy_method_keeps_the_socket():
+    """The dict-style `.copy()` method is unaffected: it is how the framework
+    itself clones a namespace value while keeping its socket handle."""
+    marker = object()
+    tn = TaggedNamespace({"pw": "PW"}, socket=marker)
+    copied = tn.copy()
+    assert type(copied) is TaggedNamespace
+    assert copied._socket is marker
