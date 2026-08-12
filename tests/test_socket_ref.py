@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, NotRequired, TypedDict
+from typing import Any, TypedDict
+
+try:
+    from typing import NotRequired
+except ImportError:  # pragma: no cover - Python < 3.11
+    from typing_extensions import NotRequired
 
 import pytest
 
@@ -319,7 +324,9 @@ def test_omitted_namespace_raises_typeerror_mixed_shape():
     def WithCodes(codes: Codes):
         run_code(code=codes.ref("pw"))
 
-    with pytest.raises(TypeError, match=r"missing 1 required positional argument: 'codes'"):
+    with pytest.raises(
+        TypeError, match=r"missing 1 required positional argument: 'codes'"
+    ):
         WithCodes.build()
 
 
@@ -334,7 +341,9 @@ def test_omitted_namespace_raises_typeerror_all_optional_shape():
     def WithOptions(options: Options):
         run_code(code=options.ref("ph"))
 
-    with pytest.raises(TypeError, match=r"missing 1 required positional argument: 'options'"):
+    with pytest.raises(
+        TypeError, match=r"missing 1 required positional argument: 'options'"
+    ):
         WithOptions.build()
 
 
@@ -442,7 +451,9 @@ def test_ref_in_a_dict_bound_for_a_leaf_negative_control(monkeypatch):
     """
     import node_graph.socket as socket_module
 
-    monkeypatch.setattr(socket_module, "_find_nested_socket_reference", lambda value: None)
+    monkeypatch.setattr(
+        socket_module, "_find_nested_socket_reference", lambda value: None
+    )
 
     @task.graph()
     def RefInDict(codes: Codes):
