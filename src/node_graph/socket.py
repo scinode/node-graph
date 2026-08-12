@@ -3,7 +3,7 @@ import copy
 from uuid import uuid4
 from node_graph.collection import DependencyCollection
 from node_graph.property import TaskProperty
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Union
 from node_graph.collection import get_item_class
 from dataclasses import MISSING, replace
 from node_graph.orm.mapping import type_mapping
@@ -585,6 +585,29 @@ class TaggedNamespace(dict):
 
     def __repr__(self) -> str:
         return f"TaggedNamespace({dict.__repr__(self)}, socket={self._socket!r})"
+
+
+def ref(namespace: Mapping[str, object], name: str) -> SocketReference:
+    """Return a wireable reference to ``name`` inside ``namespace``.
+
+    ``namespace`` must be a namespace the framework delivered to a graph
+    body; ``name`` may be dotted to reach nested namespaces. The reference
+    never raises for an absent member: wired into a downstream socket it
+    links the value when the member was provided and leaves the socket
+    unfilled when it was not. A name the namespace's schema does not
+    declare raises ``ValueError``.
+
+    Raises:
+        TypeError: When ``namespace`` carries no socket identity — a plain
+            dict built by hand, or a namespace that left the graph context.
+    """
+    method = getattr(namespace, "ref", None)
+    if method is None:
+        raise TypeError(
+            f"{type(namespace).__name__} carries no socket identity; ref() works "
+            "only on a namespace received as a graph input inside a graph body."
+        )
+    return method(name)
 
 
 def _find_nested_socket_reference(value: Any) -> Optional["SocketReference"]:

@@ -6,7 +6,7 @@ from typing import Any, NotRequired, TypedDict
 
 import pytest
 
-from node_graph import Graph, task
+from node_graph import Graph, ref, task
 from node_graph.engine.local import LocalEngine
 from node_graph.socket import SocketReference, TaggedNamespace
 from node_graph.socket_spec import namespace as ns
@@ -218,6 +218,90 @@ def test_graph_round_trips_with_a_reference():
     absent = Graph.from_dict(ByRef.build(codes={"pw": "PW"}).to_dict())
     assert sink_of(absent)._links == []
     assert sink_of(absent)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.ph"
+
+
+# ------------------------------------------------------- free-function form
+# ``ref(namespace, name)`` is the typed sibling of the ``namespace.ref(name)``
+# method: a plain function, so a body typed on a TypedDict (a Mapping, with
+# no ``.ref`` method in its type) can call it without widening the parameter
+# type or adding a cast. The two forms share behaviour; parametrize the
+# scenarios that already cover the method rather than duplicating them.
+
+REF_ACCESSORS = {
+    "method": lambda namespace, name: namespace.ref(name),
+    "function": lambda namespace, name: ref(namespace, name),
+}
+
+
+@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
+def test_ref_accessor_links_a_provided_member(accessor):
+    """Both forms link a provided member exactly the same way."""
+
+    @task.graph()
+    def ByAccessor(codes: Codes):
+        run_code(code=accessor(codes, "ph"))
+
+    graph = ByAccessor.build(codes={"pw": "PW", "ph": "PH"})
+    assert link_sources(sink_of(graph)) == ["graph_inputs.codes.ph"]
+
+
+@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
+def test_ref_accessor_does_not_raise_for_an_absent_member(accessor):
+    """Both forms return a reference where subscription raises ``KeyError``."""
+
+    @task.graph()
+    def ByAccessor(codes: Codes):
+        run_code(code=accessor(codes, "ph"))
+
+    graph = ByAccessor.build(codes={"pw": "PW"})
+    sink = sink_of(graph)
+    assert sink._links == []
+    assert sink._metadata.extras["unresolved_ref"] == "graph_inputs.codes.ph"
+
+
+@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
+def test_ref_accessor_reaches_a_nested_member(accessor):
+    """Both forms accept a dotted name to reach a nested namespace's member."""
+
+    @task.graph()
+    def ByAccessor(config: ns(codes=ns(pw=Any))):
+        run_code(code=accessor(config, "codes.pw"))
+
+    provided = ByAccessor.build(config={"codes": {"pw": "PW"}})
+    assert link_sources(sink_of(provided)) == ["graph_inputs.config.codes.pw"]
+
+
+@pytest.mark.parametrize("accessor", REF_ACCESSORS.values(), ids=REF_ACCESSORS.keys())
+def test_ref_accessor_to_an_undeclared_member_raises(accessor):
+    """Both forms fail at build when the name isn't in the namespace's schema."""
+
+    @task.graph()
+    def ByAccessor(codes: Codes):
+        run_code(code=accessor(codes, "nope"))
+
+    with pytest.raises(ValueError, match="not a member of namespace"):
+        ByAccessor.build(codes={"pw": "PW"})
+
+
+def test_ref_function_on_a_plain_dict_raises_typeerror():
+    """A plain dict built by hand carries no socket identity, so ``ref()``
+    names the type it received instead of failing with an unrelated
+    ``AttributeError``."""
+    with pytest.raises(TypeError, match=r"dict carries no socket identity"):
+        ref({"pw": "PW"}, "pw")
+
+
+def test_ref_typing_snippet_has_no_ignore_comments():
+    """``tests/typing_check_ref.py`` is the reason ``ref()`` exists: a
+    TypedDict-typed call site checked clean under mypy strict mode, with no
+    escape hatch needed (verified out of band; see the PR body for the
+    invocation and result — the repo has no mypy step to hook a subprocess
+    check into). This test only guards the snippet against regaining one.
+    """
+    import pathlib
+
+    snippet = pathlib.Path(__file__).parent / "typing_check_ref.py"
+    assert "type: ignore" not in snippet.read_text()
 
 
 # ------------------------------------------------ omitted-argument contract
