@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Mapping, Optional
 
-UPDATABLE_SOCKET_META_FIELDS = {"value_source"}
+UPDATABLE_SOCKET_META_FIELDS = {"value_source", "unresolved_ref"}
 
 
 class CallRole(str, Enum):

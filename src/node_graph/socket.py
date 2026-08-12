@@ -497,6 +497,81 @@ class TaggedValue(wrapt.ObjectProxy):
         return f"TaggedValue({self.__wrapped__!r}, socket={self._socket!r}, uuid={self._uuid})"
 
 
+def socket_is_provided(socket: "BaseSocket") -> bool:
+    """Return True if the socket carries a value or a link, anywhere in its subtree."""
+    if socket._links:
+        return True
+    if isinstance(socket, TaskSocketNamespace):
+        return any(socket_is_provided(child) for _, child in socket._iter_children())
+    return socket._value is not None
+
+
+def socket_path(socket: "BaseSocket") -> str:
+    """Return the socket's path as ``<task>.<scoped name>``."""
+    task = getattr(socket, "_task", None)
+    task_name = getattr(task, "name", None) or "<unknown-task>"
+    return f"{task_name}.{socket._scoped_name}"
+
+
+class SocketReference:
+    """A reference to a socket, wireable whether or not that socket holds a value.
+
+    Assigning a reference to an input socket links the two sockets when the
+    referenced socket is provided, and leaves the input unset when it is not.
+    """
+
+    def __init__(self, socket: "BaseSocket") -> None:
+        self._socket = socket
+
+    @property
+    def socket(self) -> "BaseSocket":
+        return self._socket
+
+    def is_provided(self) -> bool:
+        """Return True if the referenced socket carries a value or a link."""
+        return socket_is_provided(self._socket)
+
+    def __repr__(self) -> str:
+        state = "provided" if self.is_provided() else "not provided"
+        return f"SocketReference({socket_path(self._socket)}, {state})"
+
+
+class TaggedNamespace(dict):
+    """The values of a namespace socket, keeping a handle on the socket itself.
+
+    Subscription returns values, so an absent member raises ``KeyError``. Use
+    ``ref(name)`` to obtain a :class:`SocketReference` instead, which is wireable
+    even when the member was not provided.
+    """
+
+    def __init__(self, values: Optional[Dict[str, Any]] = None, socket=None) -> None:
+        super().__init__(values or {})
+        self._socket = socket
+
+    def ref(self, name: str) -> SocketReference:
+        """Return a reference to the member socket ``name``."""
+        if self._socket is None:
+            raise ValueError(
+                f"Cannot reference '{name}': this namespace has no socket attached."
+            )
+        if name not in self._socket:
+            available = ", ".join(self._socket._get_keys()) or "<none>"
+            raise ValueError(
+                f"'{name}' is not a member of namespace "
+                f"'{socket_path(self._socket)}'.\n"
+                f"Available: {available}\n"
+                "Tip: declare the member in the namespace spec; a dynamic namespace "
+                "can only reference members that were provided."
+            )
+        return SocketReference(self._socket[name])
+
+    def copy(self) -> "TaggedNamespace":
+        return TaggedNamespace(self, socket=self._socket)
+
+    def __repr__(self) -> str:
+        return f"TaggedNamespace({dict.__repr__(self)}, socket={self._socket!r})"
+
+
 class BaseSocket:
     """Socket object for input and output sockets of a Task.
 
@@ -587,6 +662,18 @@ class BaseSocket:
 
         return data
 
+    def _set_socket_reference(self, reference: "SocketReference") -> None:
+        """Link the referenced socket, leaving this socket unset if it is not provided."""
+        if not reference.is_provided():
+            self._metadata.extras["unresolved_ref"] = socket_path(reference.socket)
+            return
+        self._metadata.extras.pop("unresolved_ref", None)
+        if isinstance(self, TaskSocketNamespace):
+            self._link_namespace_socket(reference.socket)
+        else:
+            self._update_updatable_meta({"value_source": "link"})
+            self._task.graph.add_link(reference.socket, self)
+
     def _update_updatable_meta(self, payload: Dict[str, Any]) -> None:
         """Update whitelisted metadata extras on the socket."""
         extras = self._metadata.extras
@@ -674,7 +761,9 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
         self._set_socket_value(value)
 
     def _set_socket_value(self, value: Any, *, value_source: str = "link") -> None:
-        if isinstance(value, BaseSocket):
+        if isinstance(value, SocketReference):
+            self._set_socket_reference(value)
+        elif isinstance(value, BaseSocket):
             if (
                 isinstance(value, TaskSocketNamespace)
                 and value._parent is None
@@ -1055,15 +1144,33 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         return self._collect_values()
 
     def _collect_values(
-        self, unwrap: bool = True, resolve: bool = False, serialize: bool = False
+        self,
+        unwrap: bool = True,
+        resolve: bool = False,
+        serialize: bool = False,
+        tag_namespaces: bool = False,
     ) -> Dict[str, Any]:
-        data = {}
+        """Collect the values held by this namespace's sockets.
+
+        With ``tag_namespaces``, each namespace becomes a ``TaggedNamespace`` that
+        keeps a handle on its socket, and a required namespace is reported even
+        when none of its members were provided.
+        """
+        data = TaggedNamespace(socket=self) if tag_namespaces else {}
         for name, item in self._sockets.items():
             if isinstance(item, TaskSocketNamespace):
                 value = item._collect_values(
-                    unwrap=unwrap, resolve=resolve, serialize=serialize
+                    unwrap=unwrap,
+                    resolve=resolve,
+                    serialize=serialize,
+                    tag_namespaces=tag_namespaces,
                 )
-                if value:
+                keep_empty = (
+                    tag_namespaces
+                    and item._metadata.required
+                    and not item._metadata.extras.get("builtin_socket")
+                )
+                if value or keep_empty:
                     data[name] = value
             else:
                 value = item.value if resolve else item._value
@@ -1276,6 +1383,9 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
             return
 
         target = self._get_or_create_child(key, val)
+        if isinstance(val, SocketReference):
+            target._set_socket_reference(val)
+            return
         if isinstance(target, TaskSocketNamespace):
             if is_structured_instance(val):
                 val = structured_to_dict(val)
@@ -1327,6 +1437,9 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
         - Intermediate dotted segments are created as namespaces (dynamic=True) when needed.
         """
         if value is None:
+            return
+        if isinstance(value, SocketReference):
+            self._set_socket_reference(value)
             return
         if is_structured_instance(value):
             value = structured_to_dict(value)
