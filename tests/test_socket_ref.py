@@ -17,6 +17,13 @@ class Codes(TypedDict):
     ph: NotRequired[Any]
 
 
+class Options(TypedDict, total=False):
+    """A required namespace whose every member is optional."""
+
+    ph: Any
+    projwfc: Any
+
+
 @task()
 def run_code(code: Any) -> str:
     return f"ran {code}"
@@ -211,3 +218,54 @@ def test_graph_round_trips_with_a_reference():
     absent = Graph.from_dict(ByRef.build(codes={"pw": "PW"}).to_dict())
     assert sink_of(absent)._links == []
     assert sink_of(absent)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.ph"
+
+
+# ------------------------------------------------ omitted-argument contract
+# A required namespace that ``build()`` never received at all (as opposed to
+# one explicitly assigned ``{}``) must still fail the way a plain Python call
+# with a missing required argument does: `func(**inputs)` never sees it, so
+# the caller gets ``TypeError``, not a graph whose body silently ran with an
+# empty namespace.
+
+
+def test_omitted_namespace_raises_typeerror_mixed_shape():
+    """A namespace mixing a required and an optional member, entirely omitted."""
+
+    @task.graph()
+    def WithCodes(codes: Codes):
+        run_code(code=codes.ref("pw"))
+
+    with pytest.raises(TypeError, match=r"missing 1 required positional argument: 'codes'"):
+        WithCodes.build()
+
+
+def test_omitted_namespace_raises_typeerror_all_optional_shape():
+    """A required namespace whose every member is optional, entirely omitted.
+
+    The namespace itself is still a required argument even though nothing
+    inside it is.
+    """
+
+    @task.graph()
+    def WithOptions(options: Options):
+        run_code(code=options.ref("ph"))
+
+    with pytest.raises(TypeError, match=r"missing 1 required positional argument: 'options'"):
+        WithOptions.build()
+
+
+def test_explicitly_empty_namespace_still_reaches_the_body():
+    """Control: `codes={}` (as opposed to omitting `codes`) still builds.
+
+    This is the case `test_required_namespace_reaches_the_body_when_empty`
+    already covers end to end; repeated here next to the omitted-argument
+    tests so the two contracts are read together.
+    """
+
+    @task.graph()
+    def WithCodes(codes: Codes):
+        run_code(code=codes.ref("pw"))
+
+    graph = WithCodes.build(codes={})
+    assert sink_of(graph)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.pw"
+
