@@ -270,6 +270,33 @@ def test_explicitly_empty_namespace_still_reaches_the_body():
     assert sink_of(graph)._metadata.extras["unresolved_ref"] == "graph_inputs.codes.pw"
 
 
+@task.graph()
+def NestedConfig(config: ns(codes=ns(pw=Any))):
+    # Graph bodies run against a re-imported function object; only a
+    # module-level body reliably shares SEEN with the test that built it
+    # (a locally-nested body does not, see test_ref_inside_a_namespace_assignment
+    # and friends, which read the built graph's structure instead).
+    SEEN["contains_codes"] = "codes" in config
+    SEEN["config"] = dict(config)
+
+
+def test_nested_namespace_not_kept_when_never_assigned():
+    """A nested required namespace that was never itself assigned does not
+    survive collection just because its parent was explicitly assigned `{}`.
+
+    This is the same keep_empty duplication in a different shape: a
+    required-based keep_empty rule (rather than one keyed on whether the
+    namespace was itself explicitly assigned) would keep the nested
+    namespace alive as an empty TaggedNamespace, silently flipping
+    `"codes" in config` from False to True with no assignment to `codes`
+    anywhere.
+    """
+    SEEN.clear()
+    NestedConfig.build(config={})
+    assert SEEN["contains_codes"] is False
+    assert SEEN["config"] == {}
+
+
 # ------------------------------------------------- stored-reference errors
 # A SocketReference is only ever meant to be assigned directly to a socket
 # (leaf or namespace), where `_set_socket_reference` decides whether to link
