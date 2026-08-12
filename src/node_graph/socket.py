@@ -543,6 +543,11 @@ class TaggedNamespace(dict):
     Subscription returns values, so an absent member raises ``KeyError``. Use
     ``ref(name)`` to obtain a :class:`SocketReference` instead, which is wireable
     even when the member was not provided.
+
+    ``copy.deepcopy`` and ``pickle`` yield a plain ``dict``, dropping the socket
+    handle: those are data-boundary operations, and a copy that keeps a live
+    graph handle is a surprise, not a convenience. Use ``.copy()`` to retain the
+    socket handle instead.
     """
 
     def __init__(self, values: Optional[Dict[str, Any]] = None, socket=None) -> None:
