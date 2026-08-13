@@ -17,7 +17,7 @@ import pytest
 
 from node_graph import Graph, reference, task
 from node_graph.engine.local import LocalEngine
-from node_graph.socket import SocketReference, TaggedNamespace
+from node_graph.socket import SocketReference, TaggedNamespace, socket_is_provided
 from node_graph.socket_spec import namespace as ns
 
 
@@ -535,6 +535,52 @@ def test_raw_socket_nested_in_a_leaf_dict_is_unaffected():
     sink = graph.tasks["show"].inputs.opts
     assert sink._links == []
     assert "a" in sink._value
+
+
+# ------------------------------------------- unconditional socket assignment
+# A reference is a distinct type because the conditional link cannot be read
+# off the socket it points at. The two tests below hold the counter-examples:
+# each assigns a socket that is not provided and must still link.
+
+
+@task()
+def produce_code() -> str:
+    return "PRODUCED"
+
+
+def test_a_graph_input_socket_assigned_directly_always_links():
+    """``ng.inputs.<name>`` wired into a task links before it holds a value.
+
+    This is the context-manager paradigm: inputs are declared in the spec,
+    wired into tasks while empty, and supplied at run time. The socket's
+    owning task is ``graph_inputs`` and it is not provided, so neither task
+    identity nor provided-ness can select the conditional branch.
+    """
+    ng = Graph(name="context-manager-style", inputs=ns(code=Any))
+    assert socket_is_provided(ng.inputs.code) is False
+    assert ng.inputs.code._task.identifier == "graph_inputs"
+
+    consumer = ng.add_task(run_code, name="run_code", code=ng.inputs.code)
+
+    assert link_sources(consumer.inputs.code) == ["graph_inputs.code"]
+    assert "unresolved_ref" not in consumer.inputs.code._metadata.extras
+
+
+def test_a_task_output_socket_links_before_its_task_runs():
+    """A producer's output wired into a consumer links while still empty.
+
+    An output socket holds neither value nor link until something consumes
+    it, so a branch keyed on provided-ness would turn ordinary deferred
+    wiring into a silent no-op.
+    """
+    ng = Graph(name="deferred-wiring")
+    producer = ng.add_task(produce_code, name="produce_code")
+    assert socket_is_provided(producer.outputs.result) is False
+
+    consumer = ng.add_task(run_code, name="run_code", code=producer.outputs.result)
+
+    assert link_sources(consumer.inputs.code) == ["produce_code.result"]
+    assert "unresolved_ref" not in consumer.inputs.code._metadata.extras
 
 
 # --------------------------------------------- TaggedNamespace copy/pickle
