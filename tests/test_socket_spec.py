@@ -666,14 +666,54 @@ def test_dynamic_dataclass_model():
     assert result.item.identifier == "node_graph.int"
 
 
-def test_dataclass_field_default_is_optional():
-    @dataclass
-    class BaseDC:
-        nelec: int
-        tot_magnetization: Optional[int] = None
-        ecut: float = 40.0
+@dataclass
+class _DefaultsDC:
+    nelec: int
+    tot_magnetization: Optional[int] = None
+    ecut: float = 40.0
 
-    spec = ss.from_model(BaseDC)
+
+class _DefaultsModel(BaseModel):
+    nelec: int
+    tot_magnetization: Optional[int] = None
+    ecut: float = 40.0
+
+
+@dataclass
+class _DynamicDefaultsDC:
+    model_config = {"extra": "allow"}
+    nelec: int
+    total: int = 0
+
+
+class _DynamicDefaultsModel(BaseModel):
+    model_config = {"extra": "allow"}
+    nelec: int
+    total: int = 0
+
+
+def _factory_dataclass(make_items):
+    @dataclass
+    class FactoryDC:
+        nelec: int
+        items: list = dc_field(default_factory=make_items)
+
+    return FactoryDC
+
+
+def _factory_pydantic(make_items):
+    class FactoryModel(BaseModel):
+        nelec: int
+        items: list = Field(default_factory=make_items)
+
+    return FactoryModel
+
+
+@pytest.mark.parametrize(
+    "model_cls", [_DefaultsDC, _DefaultsModel], ids=["dataclass", "pydantic"]
+)
+def test_model_field_default_is_optional(model_cls):
+    spec = ss.from_model(model_cls)
     assert spec.fields["nelec"].meta.required is True
     assert spec.fields["tot_magnetization"].meta.required is False
     assert spec.fields["ecut"].meta.required is False
@@ -686,66 +726,33 @@ def test_dataclass_field_default_is_optional():
     assert spec2.fields["tot_magnetization"].meta.required is False
 
 
-def test_pydantic_field_default_is_optional():
-    class BaseModelWithDefaults(BaseModel):
-        nelec: int
-        tot_magnetization: Optional[int] = None
-        ecut: float = 40.0
-
-    spec = ss.from_model(BaseModelWithDefaults)
-    assert spec.fields["nelec"].meta.required is True
-    assert spec.fields["tot_magnetization"].meta.required is False
-    assert spec.fields["ecut"].meta.required is False
-    assert spec.fields["ecut"].default == 40.0
-
-
-def test_dynamic_model_field_default_is_optional():
-    @dataclass
-    class DynDC:
-        model_config = {"extra": "allow"}
-        nelec: int
-        total: int = 0
-
-    spec = ss.from_model(DynDC)
-    assert spec.dynamic is True
-    assert spec.fields["nelec"].meta.required is True
-    assert spec.fields["total"].meta.required is False
-
-    class DynModel(BaseModel):
-        model_config = {"extra": "allow"}
-        nelec: int
-        total: int = 0
-
-    spec = ss.from_model(DynModel)
+@pytest.mark.parametrize(
+    "model_cls",
+    [_DynamicDefaultsDC, _DynamicDefaultsModel],
+    ids=["dataclass", "pydantic"],
+)
+def test_dynamic_model_field_default_is_optional(model_cls):
+    spec = ss.from_model(model_cls)
     assert spec.dynamic is True
     assert spec.fields["nelec"].meta.required is True
     assert spec.fields["total"].meta.required is False
 
 
-def test_default_factory_field_is_optional_and_uncalled():
+@pytest.mark.parametrize(
+    "build_model",
+    [_factory_dataclass, _factory_pydantic],
+    ids=["dataclass", "pydantic"],
+)
+def test_default_factory_field_is_optional_and_uncalled(build_model):
     calls = []
 
     def make_items():
         calls.append(1)
         return []
 
-    @dataclass
-    class FactoryDC:
-        nelec: int
-        items: list = dc_field(default_factory=make_items)
-
-    spec = ss.from_model(FactoryDC)
+    spec = ss.from_model(build_model(make_items))
     assert spec.fields["items"].meta.required is False
     assert isinstance(spec.fields["items"].default, type(MISSING))
-
-    class FactoryModel(BaseModel):
-        nelec: int
-        items: list = Field(default_factory=make_items)
-
-    spec = ss.from_model(FactoryModel)
-    assert spec.fields["items"].meta.required is False
-    assert isinstance(spec.fields["items"].default, type(MISSING))
-
     assert calls == []
 
 
