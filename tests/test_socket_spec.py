@@ -775,6 +775,67 @@ def test_namespace_field_default_is_optional():
     assert spec.fields["c"].fields["d"].meta.required is True
 
 
+def test_namespace_tuple_default_is_optional():
+    spec = ss.namespace(a=int, b=(int, 5), c=(Optional[int], None))
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["b"].meta.required is False
+    assert spec.fields["b"].default == 5
+    # a default of None is the case a caller cannot express by any other means
+    assert spec.fields["c"].meta.required is False
+    assert spec.fields["c"].default is None
+
+    spec2 = ss.SocketSpec.from_dict(copy.deepcopy(spec.to_dict()))
+    assert spec2.fields["a"].meta.required is True
+    assert spec2.fields["b"].meta.required is False
+
+    # the same tuple form feeds a dynamic namespace's fixed fields
+    dyn = ss.dynamic(int, a=int, b=(int, 5))
+    assert dyn.fields["a"].meta.required is True
+    assert dyn.fields["b"].meta.required is False
+
+
+def test_set_default_makes_leaf_optional():
+    ns = ss.namespace(a=int, c=ss.namespace(d=str))
+
+    ns1 = ss.set_default(ns, "a", 10)
+    assert ns1.fields["a"].meta.required is False
+    ns2 = ss.set_default(ns1, "c.d", "x")
+    assert ns2.fields["c"].fields["d"].meta.required is False
+    # the namespace on the way keeps its own requiredness
+    assert ns2.fields["c"].meta.required is True
+
+    # dropping the default is the inverse
+    assert ss.unset_default(ns2, "a").fields["a"].meta.required is True
+
+    # a leaf that was optional without a default stays optional when unset,
+    # since its optionality was never the default's doing
+    opt = ss.namespace(a=ss.socket(int, required=False))
+    assert ss.unset_default(opt, "a").fields["a"].meta.required is False
+
+
+def test_structured_default_makes_leaf_optional():
+    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = {"y": 2}):
+        return a
+
+    ns = ss.SocketSpecAPI.build_inputs_from_signature(add)
+    assert ns.fields["b"].fields["x"].meta.required is True
+    assert ns.fields["b"].fields["y"].meta.required is False
+
+    def add2(
+        a,
+        b: Annotated[dict, ss.namespace(x=int, y=ss.namespace(z=int, w=int))] = {
+            "y": {"z": None},
+        },
+    ):
+        return a
+
+    ns = ss.SocketSpecAPI.build_inputs_from_signature(add2)
+    assert ns.fields["b"].fields["y"].fields["z"].meta.required is False
+    assert ns.fields["b"].fields["y"].fields["w"].meta.required is True
+    # the mapping need not name every field below 'y', so 'y' stays required
+    assert ns.fields["b"].fields["y"].meta.required is True
+
+
 def test_mixed_annotation_and_dataclass():
     @dataclass
     class RowDC:
