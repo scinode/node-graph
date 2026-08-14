@@ -9,8 +9,8 @@ try:
 except ImportError:  # pragma: no cover - Python < 3.11
     from typing_extensions import Unpack
 from node_graph import task
-from dataclasses import dataclass, MISSING
-from pydantic import BaseModel
+from dataclasses import dataclass, field as dc_field, MISSING
+from pydantic import BaseModel, Field
 from node_graph.materialize import runtime_meta_from_spec
 
 
@@ -664,6 +664,108 @@ def test_dynamic_dataclass_model():
     assert result.dynamic is True
     assert "total" in result.fields
     assert result.item.identifier == "node_graph.int"
+
+
+def test_dataclass_field_default_is_optional():
+    @dataclass
+    class BaseDC:
+        nelec: int
+        tot_magnetization: Optional[int] = None
+        ecut: float = 40.0
+
+    spec = ss.from_model(BaseDC)
+    assert spec.fields["nelec"].meta.required is True
+    assert spec.fields["tot_magnetization"].meta.required is False
+    assert spec.fields["ecut"].meta.required is False
+    assert spec.fields["ecut"].default == 40.0
+
+    # `required=False` survives serialization; `required=None` would not, since
+    # SocketMeta.to_dict drops it and SocketMeta() restores the True default.
+    spec2 = ss.SocketSpec.from_dict(copy.deepcopy(spec.to_dict()))
+    assert spec2.fields["nelec"].meta.required is True
+    assert spec2.fields["tot_magnetization"].meta.required is False
+
+
+def test_pydantic_field_default_is_optional():
+    class BaseModelWithDefaults(BaseModel):
+        nelec: int
+        tot_magnetization: Optional[int] = None
+        ecut: float = 40.0
+
+    spec = ss.from_model(BaseModelWithDefaults)
+    assert spec.fields["nelec"].meta.required is True
+    assert spec.fields["tot_magnetization"].meta.required is False
+    assert spec.fields["ecut"].meta.required is False
+    assert spec.fields["ecut"].default == 40.0
+
+
+def test_dynamic_model_field_default_is_optional():
+    @dataclass
+    class DynDC:
+        model_config = {"extra": "allow"}
+        nelec: int
+        total: int = 0
+
+    spec = ss.from_model(DynDC)
+    assert spec.dynamic is True
+    assert spec.fields["nelec"].meta.required is True
+    assert spec.fields["total"].meta.required is False
+
+    class DynModel(BaseModel):
+        model_config = {"extra": "allow"}
+        nelec: int
+        total: int = 0
+
+    spec = ss.from_model(DynModel)
+    assert spec.dynamic is True
+    assert spec.fields["nelec"].meta.required is True
+    assert spec.fields["total"].meta.required is False
+
+
+def test_default_factory_field_is_optional_and_uncalled():
+    calls = []
+
+    def make_items():
+        calls.append(1)
+        return []
+
+    @dataclass
+    class FactoryDC:
+        nelec: int
+        items: list = dc_field(default_factory=make_items)
+
+    spec = ss.from_model(FactoryDC)
+    assert spec.fields["items"].meta.required is False
+    assert isinstance(spec.fields["items"].default, type(MISSING))
+
+    class FactoryModel(BaseModel):
+        nelec: int
+        items: list = Field(default_factory=make_items)
+
+    spec = ss.from_model(FactoryModel)
+    assert spec.fields["items"].meta.required is False
+    assert isinstance(spec.fields["items"].default, type(MISSING))
+
+    assert calls == []
+
+
+def test_namespace_field_default_is_optional():
+    @dataclass
+    class InnerDC:
+        d: str
+
+    @dataclass
+    class OuterDC:
+        a: int
+        c: Optional[InnerDC] = None
+
+    spec = ss.from_model(OuterDC)
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["c"].is_namespace()
+    assert spec.fields["c"].meta.required is False
+    # a namespace still carries no default value
+    assert isinstance(spec.fields["c"].default, type(MISSING))
+    assert spec.fields["c"].fields["d"].meta.required is True
 
 
 def test_mixed_annotation_and_dataclass():
