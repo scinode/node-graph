@@ -9,8 +9,8 @@ try:
 except ImportError:  # pragma: no cover - Python < 3.11
     from typing_extensions import Unpack
 from node_graph import task
-from dataclasses import dataclass, MISSING
-from pydantic import BaseModel
+from dataclasses import dataclass, field as dc_field, MISSING
+from pydantic import BaseModel, Field
 from node_graph.materialize import runtime_meta_from_spec
 
 
@@ -664,6 +664,176 @@ def test_dynamic_dataclass_model():
     assert result.dynamic is True
     assert "total" in result.fields
     assert result.item.identifier == "node_graph.int"
+
+
+@dataclass
+class _DefaultsDC:
+    nelec: int
+    tot_magnetization: Optional[int] = None
+    ecut: float = 40.0
+
+
+class _DefaultsModel(BaseModel):
+    nelec: int
+    tot_magnetization: Optional[int] = None
+    ecut: float = 40.0
+
+
+@dataclass
+class _DynamicDefaultsDC:
+    model_config = {"extra": "allow"}
+    nelec: int
+    total: int = 0
+
+
+class _DynamicDefaultsModel(BaseModel):
+    model_config = {"extra": "allow"}
+    nelec: int
+    total: int = 0
+
+
+def _factory_dataclass(make_items):
+    @dataclass
+    class FactoryDC:
+        nelec: int
+        items: list = dc_field(default_factory=make_items)
+
+    return FactoryDC
+
+
+def _factory_pydantic(make_items):
+    class FactoryModel(BaseModel):
+        nelec: int
+        items: list = Field(default_factory=make_items)
+
+    return FactoryModel
+
+
+@pytest.mark.parametrize(
+    "model_cls", [_DefaultsDC, _DefaultsModel], ids=["dataclass", "pydantic"]
+)
+def test_model_field_default_is_optional(model_cls):
+    spec = ss.from_model(model_cls)
+    assert spec.fields["nelec"].meta.required is True
+    assert spec.fields["tot_magnetization"].meta.required is False
+    assert spec.fields["ecut"].meta.required is False
+    assert spec.fields["ecut"].default == 40.0
+
+    # `required=False` survives serialization; `required=None` would not, since
+    # SocketMeta.to_dict drops it and SocketMeta() restores the True default.
+    spec2 = ss.SocketSpec.from_dict(copy.deepcopy(spec.to_dict()))
+    assert spec2.fields["nelec"].meta.required is True
+    assert spec2.fields["tot_magnetization"].meta.required is False
+
+
+@pytest.mark.parametrize(
+    "model_cls",
+    [_DynamicDefaultsDC, _DynamicDefaultsModel],
+    ids=["dataclass", "pydantic"],
+)
+def test_dynamic_model_field_default_is_optional(model_cls):
+    spec = ss.from_model(model_cls)
+    assert spec.dynamic is True
+    assert spec.fields["nelec"].meta.required is True
+    assert spec.fields["total"].meta.required is False
+
+
+@pytest.mark.parametrize(
+    "build_model",
+    [_factory_dataclass, _factory_pydantic],
+    ids=["dataclass", "pydantic"],
+)
+def test_default_factory_field_is_optional_and_uncalled(build_model):
+    calls = []
+
+    def make_items():
+        calls.append(1)
+        return []
+
+    spec = ss.from_model(build_model(make_items))
+    assert spec.fields["items"].meta.required is False
+    assert isinstance(spec.fields["items"].default, type(MISSING))
+    assert calls == []
+
+
+def test_namespace_field_default_is_optional():
+    @dataclass
+    class InnerDC:
+        d: str
+
+    @dataclass
+    class OuterDC:
+        a: int
+        c: Optional[InnerDC] = None
+
+    spec = ss.from_model(OuterDC)
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["c"].is_namespace()
+    assert spec.fields["c"].meta.required is False
+    # a namespace still carries no default value
+    assert isinstance(spec.fields["c"].default, type(MISSING))
+    assert spec.fields["c"].fields["d"].meta.required is True
+
+
+def test_namespace_tuple_default_is_optional():
+    spec = ss.namespace(a=int, b=(int, 5), c=(Optional[int], None))
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["b"].meta.required is False
+    assert spec.fields["b"].default == 5
+    # a default of None is the case a caller cannot express by any other means
+    assert spec.fields["c"].meta.required is False
+    assert spec.fields["c"].default is None
+
+    spec2 = ss.SocketSpec.from_dict(copy.deepcopy(spec.to_dict()))
+    assert spec2.fields["a"].meta.required is True
+    assert spec2.fields["b"].meta.required is False
+
+    # the same tuple form feeds a dynamic namespace's fixed fields
+    dyn = ss.dynamic(int, a=int, b=(int, 5))
+    assert dyn.fields["a"].meta.required is True
+    assert dyn.fields["b"].meta.required is False
+
+
+def test_set_default_makes_leaf_optional():
+    ns = ss.namespace(a=int, c=ss.namespace(d=str))
+
+    ns1 = ss.set_default(ns, "a", 10)
+    assert ns1.fields["a"].meta.required is False
+    ns2 = ss.set_default(ns1, "c.d", "x")
+    assert ns2.fields["c"].fields["d"].meta.required is False
+    # the namespace on the way keeps its own requiredness
+    assert ns2.fields["c"].meta.required is True
+
+    # dropping the default is the inverse
+    assert ss.unset_default(ns2, "a").fields["a"].meta.required is True
+
+    # a leaf that was optional without a default stays optional when unset,
+    # since its optionality was never the default's doing
+    opt = ss.namespace(a=ss.socket(int, required=False))
+    assert ss.unset_default(opt, "a").fields["a"].meta.required is False
+
+
+def test_structured_default_makes_leaf_optional():
+    def add(a, b: Annotated[dict, ss.namespace(x=int, y=int)] = {"y": 2}):
+        return a
+
+    ns = ss.SocketSpecAPI.build_inputs_from_signature(add)
+    assert ns.fields["b"].fields["x"].meta.required is True
+    assert ns.fields["b"].fields["y"].meta.required is False
+
+    def add2(
+        a,
+        b: Annotated[dict, ss.namespace(x=int, y=ss.namespace(z=int, w=int))] = {
+            "y": {"z": None},
+        },
+    ):
+        return a
+
+    ns = ss.SocketSpecAPI.build_inputs_from_signature(add2)
+    assert ns.fields["b"].fields["y"].fields["z"].meta.required is False
+    assert ns.fields["b"].fields["y"].fields["w"].meta.required is True
+    # the mapping need not name every field below 'y', so 'y' stays required
+    assert ns.fields["b"].fields["y"].meta.required is True
 
 
 def test_mixed_annotation_and_dataclass():
