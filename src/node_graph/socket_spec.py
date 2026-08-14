@@ -458,6 +458,23 @@ def _is_struct_model_type(tp: Any) -> bool:
     )
 
 
+def _pydantic_field_is_required(model_field: Any) -> bool:
+    """True if a Pydantic field has neither a default nor a default factory."""
+    if getattr(model_field, "default", PydanticUndefined) is not PydanticUndefined:
+        return False
+    return getattr(model_field, "default_factory", None) is None
+
+
+def _dataclass_field_is_required(f: Any) -> bool:
+    """True if a dataclass field has neither a default nor a default factory."""
+    return f.default is _DC_MISSING and f.default_factory is _DC_MISSING
+
+
+def _as_optional(spec: SocketSpec) -> SocketSpec:
+    """Mark a spec as a socket the caller may leave unset."""
+    return replace(spec, meta=replace(spec.meta, required=False))
+
+
 def _struct_cfg(model_cls: type[Any]) -> dict:
     return getattr(model_cls, "model_config", {}) or {}
 
@@ -685,6 +702,8 @@ class SocketSpecAPI:
                 )
                 for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
                     child = cls._child_spec_from_type(model_field.annotation or Any)
+                    if not _pydantic_field_is_required(model_field):
+                        child = _as_optional(child)
                     if (
                         getattr(model_field, "default", PydanticUndefined)
                         is not PydanticUndefined
@@ -702,6 +721,8 @@ class SocketSpecAPI:
             ns = SocketSpec(identifier=cls._ns_identifier(), fields={})
             for name, model_field in model_cls.model_fields.items():  # type: ignore[attr-defined]
                 child = cls._child_spec_from_type(model_field.annotation or Any)
+                if not _pydantic_field_is_required(model_field):
+                    child = _as_optional(child)
                 if (
                     getattr(model_field, "default", PydanticUndefined)
                     is not PydanticUndefined
@@ -726,6 +747,9 @@ class SocketSpecAPI:
                     ann = hints.get(f.name, f.type)
                     child = cls._child_spec_from_type(ann)
 
+                    if not _dataclass_field_is_required(f):
+                        child = _as_optional(child)
+
                     # Apply scalar defaults (ignore default_factory to avoid unintended calls)
                     if f.default is not _DC_MISSING and not child.is_namespace():
                         child = replace(child, default=f.default)
@@ -743,6 +767,9 @@ class SocketSpecAPI:
             for f in _dc_fields(model_cls):
                 ann = hints.get(f.name, f.type)
                 child = cls._child_spec_from_type(ann)
+                if not _dataclass_field_is_required(f):
+                    child = _as_optional(child)
+                # Apply scalar defaults (ignore default_factory to avoid unintended calls)
                 if f.default is not _DC_MISSING and not child.is_namespace():
                     child = replace(child, default=f.default)
                 ns.fields[f.name] = child
