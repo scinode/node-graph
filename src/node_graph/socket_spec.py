@@ -792,11 +792,12 @@ class SocketSpecAPI:
     def _leaf_from_literal(cls, T: Any) -> SocketSpec:
         """Build the leaf spec for ``Literal[...]``.
 
-        The socket keeps the permitted values in the ``allowed_values`` extra;
+        The socket keeps the permitted values in the ``allowed_values`` extra.
         ``structured_type`` is added when every argument is a member of one
-        ``Enum``, so the member is rebuilt after serialization. Arguments that
-        no spec round trip can carry (``bytes``, mixed enums) leave the socket
-        unconstrained, as an unrecognized annotation always has.
+        ``Enum``, so the member is rebuilt after serialization; arguments drawn
+        from two enums keep their values alone. An argument no spec round trip
+        can carry (``bytes``) leaves the socket unconstrained, as an
+        unrecognized annotation always has.
         """
         args = list(get_args(T))
         py_type = cls._py_type_name(T)
