@@ -131,12 +131,14 @@ def canonical_enum_member(
         try:
             member = cls(literal_value(value))
         except (ValueError, KeyError, TypeError):
+            example = next(iter(cls.__members__), None)
+            named = f" ({cls.__name__}.{example})" if example else ""
             raise _invalid_value_error(
                 value,
                 permitted,
                 where,
-                f"{structured_type_path(cls)} members are accepted by member "
-                f"({cls.__name__}.{next(iter(cls.__members__))}) or by value.",
+                f"{structured_type_path(cls)} members are accepted by "
+                f"member{named} or by value.",
             ) from None
     if not value_is_allowed(member.value, permitted):
         raise _invalid_value_error(
