@@ -157,11 +157,15 @@ class TaskLink:
         is only known at run time.
         """
         from node_graph.socket import TaggedValue
+
         from node_graph.utils.struct_utils import canonical_socket_value
 
         extras = self._socket_extras(self.to_socket)
         structured_type = extras.get("structured_type") or {}
         if "allowed_values" not in extras and structured_type.get("kind") != "enum":
+            return
+        if self._is_namespace(self.from_socket):
+            # A namespace carries a mapping; the shape check below reports it.
             return
         if any(link.to_socket is self.from_socket for link in self.from_socket._links):
             # Fed by an upstream task: the value only exists at run time.

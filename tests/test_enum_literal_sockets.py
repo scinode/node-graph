@@ -1,7 +1,7 @@
 """An enum or Literal socket accepts what names one of its members, nothing else."""
 
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
 import pytest
 
@@ -120,6 +120,18 @@ def test_body_receives_a_member_rebuilt_from_the_stored_value():
     results = LocalEngine().run(ng)
 
     assert results["result"] == "collinear"
+
+
+def test_an_enum_parameter_keeps_the_requiredness_of_its_default():
+    def signature(a: Spin, b: Spin = Spin.NONE, c: Optional[Spin] = None):
+        ...
+
+    fields = api.build_inputs_from_signature(signature).fields
+
+    assert fields["a"].meta.required is True
+    assert fields["b"].meta.required is False
+    assert fields["b"].default is Spin.NONE
+    assert fields["c"].meta.required is False
 
 
 def test_optional_enum_socket_still_takes_none():
