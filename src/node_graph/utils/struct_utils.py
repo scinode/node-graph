@@ -100,8 +100,8 @@ def value_is_allowed(value: Any, allowed: Any) -> bool:
 
     Two numbers match only when their types agree, which is typing's rule that
     ``True`` is not ``1`` and ``1`` is not ``1.0``. Anything else matches on
-    equality alone, so a value that arrives wrapped -- a storage node holding
-    ``'none'``, say -- still names the value it equals.
+    equality alone, so a value that arrives wrapped, such as a storage node
+    holding ``'none'``, still names the value it equals.
     """
     return any(_values_match(item, value) for item in allowed)
 
@@ -128,9 +128,9 @@ def format_allowed_values(allowed: Any) -> str:
     return f"{', '.join(rendered[:-1])} or {rendered[-1]}"
 
 
-def socket_subject(name: str | None) -> str:
+def socket_subject(name: str) -> str:
     """Render the phrase an error uses to point at the socket ``name``."""
-    return f"socket '{name}'" if name else "this input"
+    return f"socket '{name}'"
 
 
 def _invalid_value_error(
@@ -240,9 +240,8 @@ def coerce_structured_value(
     # Assignment already decided membership, so this only rebuilds the member.
     if kind == "enum":
         cls = import_structured_type(info["path"])
-        return retagged(
-            canonical_enum_member(value, cls, subject=socket_subject(name)), value
-        )
+        subject = socket_subject(name) if name else None
+        return retagged(canonical_enum_member(value, cls, subject=subject), value)
     if is_structured_instance(value):
         return value
     if not isinstance(value, dict):
