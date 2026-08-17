@@ -64,7 +64,9 @@ REJECTED = [
 def test_entry_graph_accepts_anything_naming_a_member(value):
     ng = narrow_graph.build(spin=value)
 
-    assert ng.inputs.spin.value == Narrow.NONE
+    # Storage keeps the member's value, the form that survives a process
+    # boundary; the task body is handed the member back.
+    assert ng.inputs.spin.value == Narrow.NONE.value
 
 
 @pytest.mark.parametrize("value", REJECTED)
@@ -81,7 +83,7 @@ def test_deferred_subgraph_accepts_anything_naming_a_member(value):
 
     ng = outer.build()
 
-    assert ng.tasks.narrow_graph.inputs.spin.value == Narrow.NONE
+    assert ng.tasks.narrow_graph.inputs.spin.value == Narrow.NONE.value
 
 
 @pytest.mark.parametrize("value", REJECTED)
@@ -196,8 +198,8 @@ def test_literal_socket_takes_a_member_of_its_subset_by_value():
     def only_none(spin: Literal[Spin.NONE]) -> str:
         return consume_narrow(spin=Narrow.NONE).result
 
-    assert only_none.build(spin="none").inputs.spin.value == Spin.NONE
-    assert only_none.build(spin=Narrow.NONE).inputs.spin.value == Spin.NONE
+    assert only_none.build(spin="none").inputs.spin.value == Spin.NONE.value
+    assert only_none.build(spin=Narrow.NONE).inputs.spin.value == Spin.NONE.value
     with pytest.raises(ValueError, match="Input should be 'none'"):
         only_none.build(spin=Spin.COLLINEAR)
 

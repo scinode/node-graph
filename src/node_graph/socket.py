@@ -752,12 +752,19 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
         """Return the value this socket accepts, raising when it accepts none.
 
         Input sockets built from an ``Enum`` or a ``Literal`` carry the members
-        they admit; every other socket returns ``value`` unchanged. A
-        ``TaggedValue`` keeps its tag whenever the value inside it is already
-        canonical. ``None`` passes through, so an optional socket can still be
-        cleared. Output sockets are left alone: a task reports what it computed.
+        they admit; every other socket returns ``value`` unchanged. What is
+        stored for an ``Enum`` is the member's value, the one form that also
+        comes back out of storage, so a socket reads the same whichever side of
+        a process boundary filled it; ``coerce_inputs_from_spec`` rebuilds the
+        member for the task body. ``None`` passes through, so an optional socket
+        can still be cleared. Output sockets are left alone: a task reports what
+        it computed.
         """
-        from node_graph.utils.struct_utils import canonical_socket_value
+        from node_graph.utils.struct_utils import (
+            canonical_socket_value,
+            literal_value,
+            retagged,
+        )
 
         if self._full_name.split(".")[0] != "inputs":
             return value
@@ -772,15 +779,17 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             return value
 
         raw = value.__wrapped__ if isinstance(value, TaggedValue) else value
-        canonical = canonical_socket_value(
-            raw,
-            structured_type=structured_type,
-            allowed=allowed,
-            where=self._full_name_with_task,
+        canonical = literal_value(
+            canonical_socket_value(
+                raw,
+                structured_type=structured_type,
+                allowed=allowed,
+                where=self._full_name_with_task,
+            )
         )
         if canonical is raw:
             return value
-        return canonical
+        return retagged(canonical, value)
 
     def _serialize_value(self, store: bool = False) -> Any:
         """Serialize the socket value unless it's metadata (stored as raw)."""

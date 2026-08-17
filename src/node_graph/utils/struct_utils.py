@@ -74,6 +74,22 @@ def untagged(value: Any) -> Any:
     return value.__wrapped__ if isinstance(value, TaggedValue) else value
 
 
+def retagged(value: Any, original: Any) -> Any:
+    """Return ``value`` carrying ``original``'s tag, when it had one.
+
+    Rebuilding a value loses the ``TaggedValue`` a socket wrapped it in, and
+    with it the socket the graph body needs to raise a link instead of a
+    literal. The uuid is carried over so provenance still points at one value.
+    """
+    from node_graph.socket import TaggedValue
+
+    if not isinstance(original, TaggedValue):
+        return value
+    tagged = TaggedValue(value, socket=original._socket)
+    tagged._self_uuid = original._uuid
+    return tagged
+
+
 def literal_value(value: Any) -> Any:
     """Return the bare value an ``Enum`` member stands for, else ``value``."""
     return value.value if isinstance(value, Enum) else value
@@ -198,7 +214,7 @@ def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
     # Assignment already decided membership, so this only rebuilds the member.
     if kind == "enum":
         cls = import_structured_type(info["path"])
-        return canonical_enum_member(value, cls)
+        return retagged(canonical_enum_member(value, cls), value)
     if is_structured_instance(value):
         return value
     if not isinstance(value, dict):
