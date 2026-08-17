@@ -1,6 +1,6 @@
 """An enum or Literal socket accepts what names one of its members, nothing else."""
 
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Literal, Optional
 
 import pytest
@@ -27,6 +27,13 @@ class NameOnly(Enum):
     """Shares a member NAME with ``Narrow``, but not its value."""
 
     NONE = "something_else"
+
+
+class Priority(IntEnum):
+    """An enum whose members carry bare ints."""
+
+    LOW = 1
+    HIGH = 2
 
 
 @task()
@@ -142,8 +149,60 @@ def test_an_enum_parameter_keeps_the_requiredness_of_its_default():
 
     assert fields["a"].meta.required is True
     assert fields["b"].meta.required is False
-    assert fields["b"].default is Spin.NONE
+    assert fields["b"].default == Spin.NONE.value
     assert fields["c"].meta.required is False
+
+
+# --- defaults --------------------------------------------------------------
+
+
+@task()
+def consume_defaulted(spin: Narrow = Narrow.COLLINEAR) -> str:
+    assert isinstance(spin, Narrow), f"expected Narrow, got {type(spin).__name__}"
+    return spin.value
+
+
+def test_a_default_is_stored_as_the_value_an_assignment_would_store():
+    ng = Graph(name="defaults")
+    defaulted = ng.add_task(consume_defaulted, "defaulted")
+    assigned = ng.add_task(consume_defaulted, "assigned", spin=Narrow.COLLINEAR)
+
+    assert defaulted.inputs.spin.value == assigned.inputs.spin.value
+    assert defaulted.inputs.spin._serialize_value() == Narrow.COLLINEAR.value
+
+
+def test_a_defaulted_socket_reads_the_same_after_a_graph_round_trip():
+    ng = Graph(name="defaults-round-trip")
+    ng.add_task(consume_defaulted, "defaulted")
+
+    restored = Graph.from_dict(ng.to_dict())
+
+    assert restored.tasks.defaulted.inputs.spin.value == Narrow.COLLINEAR.value
+
+
+def test_a_defaulted_socket_still_hands_the_body_a_member():
+    ng = Graph(name="defaults-body")
+    node = ng.add_task(consume_defaulted, "defaulted")
+    ng.outputs.result = node.outputs.result
+
+    assert LocalEngine().run(ng)["result"] == "collinear"
+
+
+def test_a_default_naming_no_member_is_rejected_where_the_spec_is_built():
+    with pytest.raises(ValueError, match="Input should be 'none' or 'collinear'"):
+
+        @task()
+        def bad_default(spin: Narrow = Spin.SPIN_ORBIT) -> str:
+            return "unreachable"
+
+
+def test_a_literal_default_outside_the_allowed_set_is_rejected():
+    """The value a build rejects is rejected as a default too."""
+    with pytest.raises(ValueError, match="Input should be 'none' or 'collinear'"):
+
+        @task.graph()
+        def bad_literal_default(spin: Literal["none", "collinear"] = "banana") -> str:
+            return consume_narrow(spin=Narrow.NONE).result
 
 
 def test_optional_enum_socket_still_takes_none():
@@ -198,9 +257,46 @@ def test_a_literal_socket_survives_a_spec_round_trip():
     assert restored.meta.extras == spec.meta.extras
 
 
+def test_literal_naming_one_enum_by_value_still_carries_the_enum():
+    """``Spin.NONE`` and ``'collinear'`` name members of the same enum."""
+    spec = api._leaf_from_type(Literal[Spin.NONE, "collinear"])
+
+    assert spec.meta.extras["allowed_values"] == ["none", "collinear"]
+    assert spec.meta.extras["structured_type"]["path"].endswith(".Spin")
+
+
+def test_literal_naming_a_value_no_member_carries_keeps_the_values_alone():
+    spec = api._leaf_from_type(Literal[Spin.NONE, "banana"])
+
+    assert spec.meta.extras["allowed_values"] == ["none", "banana"]
+    assert "structured_type" not in spec.meta.extras
+
+
 def test_py_type_name_distinguishes_two_literals():
     assert api._py_type_name(Literal[1, 2]) != api._py_type_name(Literal["a", "b"])
     assert api._py_type_name(Literal["a", "b"]) == "typing.Literal['a', 'b']"
+
+
+def test_py_type_name_distinguishes_same_named_enums_from_two_modules():
+    here = Enum("Duplicate", {"NONE": "none"}, module="package_a")
+    there = Enum("Duplicate", {"NONE": "none"}, module="package_b")
+
+    assert api._py_type_name(Literal[here.NONE]) != api._py_type_name(
+        Literal[there.NONE]
+    )
+
+
+def test_an_intenum_socket_and_a_literal_of_its_values_agree_on_true():
+    """``True`` is not ``1`` on either path."""
+    from node_graph.utils.struct_utils import canonical_socket_value
+
+    info = api._leaf_from_type(Priority).meta.extras["structured_type"]
+    assert canonical_socket_value(1, structured_type=info) is Priority.LOW
+    for rejected in (True, 1.0):
+        with pytest.raises(ValueError, match="Input should be 1 or 2"):
+            canonical_socket_value(rejected, structured_type=info)
+        with pytest.raises(ValueError, match="Input should be 1 or 2"):
+            canonical_socket_value(rejected, allowed=[1, 2])
 
 
 def test_literal_socket_takes_a_member_of_its_subset_by_value():
@@ -296,6 +392,55 @@ def test_a_string_literal_widens_into_its_base_type():
     link(emit_one_string, take_str)
 
 
-def test_an_unrestricted_source_does_not_flow_into_a_literal():
+def test_a_literal_of_enum_members_does_not_widen_into_the_value_type():
+    """An enum output carries the member, which a ``str`` socket cannot take."""
+    with pytest.raises(TypeError, match="Socket type mismatch"):
+        link(emit_subset, take_str)
+
+
+def test_a_typed_source_of_the_same_base_does_not_flow_into_a_literal():
+    """``str`` is not restricted to the two strings the target admits."""
     with pytest.raises(TypeError, match="Socket value range mismatch"):
         link(take_str, take_strings)
+
+
+def test_an_untyped_source_flows_into_a_literal_and_is_read_at_run():
+    """An untyped hop is how a parent passes a value on, so the link stands."""
+
+    @task()
+    def emit_untyped():
+        return "banana"
+
+    link(emit_untyped, take_strings)
+
+
+def test_a_value_two_untyped_hops_out_is_rejected_when_the_hop_expands():
+    """The restricted socket appears only as the inner graph expands, at run."""
+
+    @task.graph()
+    def one_hop(spin) -> str:
+        return narrow_graph(spin=spin)
+
+    @task.graph()
+    def two_hops(spin) -> str:
+        return one_hop(spin=spin)
+
+    with pytest.raises(ValueError, match="Input should be 'none' or 'collinear'"):
+        LocalEngine().run(two_hops.build(spin=Spin.SPIN_ORBIT))
+
+    assert LocalEngine().run(two_hops.build(spin=Narrow.NONE))["result"] == "none"
+
+
+def test_the_run_time_message_names_the_socket_that_refused_the_value():
+    """An untyped output is read at run, where the name is the socket's own."""
+
+    @task()
+    def emit_foreign():
+        return Spin.SPIN_ORBIT
+
+    @task.graph()
+    def from_task() -> str:
+        return narrow_graph(spin=emit_foreign().result)
+
+    with pytest.raises(ValueError, match="socket 'spin'"):
+        LocalEngine().run(from_task.build())

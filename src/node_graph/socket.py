@@ -764,6 +764,7 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             canonical_socket_value,
             literal_value,
             retagged,
+            socket_subject,
         )
 
         if self._full_name.split(".")[0] != "inputs":
@@ -784,7 +785,7 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
                 raw,
                 structured_type=structured_type,
                 allowed=allowed,
-                where=self._full_name_with_task,
+                subject=socket_subject(self._full_name_with_task),
             )
         )
         if canonical is raw:

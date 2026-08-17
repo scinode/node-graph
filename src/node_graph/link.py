@@ -117,7 +117,10 @@ class TaskLink:
 
         Returns True to accept the link, None to leave the decision to the
         remaining checks, and raises when the source can carry a value the
-        target forbids.
+        target forbids. Reached only for a source whose type is known: an
+        ``Any`` source is accepted earlier on type alone, which is what lets an
+        untyped parent pass a value on, and ``check_static_source_value`` reads
+        whatever value it already holds.
         """
         from node_graph.utils.struct_utils import value_is_allowed
 
@@ -151,14 +154,19 @@ class TaskLink:
     def check_static_source_value(self) -> None:
         """Reject a link whose source already holds a value the target forbids.
 
-        A source socket declared ``Any`` passes every type check, so a graph
-        input assigned at build is the last place its value can be read before
-        the run. Sockets fed by a link of their own are left alone: their value
-        is only known at run time.
+        A source socket declared ``Any`` passes every type check, so a value
+        already sitting on it is read here, the last point before the run.
+        Everything else is decided at run time, when the value exists: a source
+        fed by an upstream task, a source assigned after this link was made,
+        and a value bound for a sub-graph one hop further out, whose restricted
+        socket only appears as that sub-graph expands.
         """
         from node_graph.socket import TaggedValue
 
-        from node_graph.utils.struct_utils import canonical_socket_value
+        from node_graph.utils.struct_utils import (
+            canonical_socket_value,
+            socket_subject,
+        )
 
         extras = self._socket_extras(self.to_socket)
         structured_type = extras.get("structured_type") or {}
@@ -183,7 +191,7 @@ class TaskLink:
             value,
             structured_type=structured_type or None,
             allowed=extras.get("allowed_values"),
-            where=self.to_socket._full_name_with_task,
+            subject=socket_subject(self.to_socket._full_name_with_task),
         )
 
     def _raise_allowed_values_mismatch(

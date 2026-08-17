@@ -114,12 +114,16 @@ def format_allowed_values(allowed: Any) -> str:
     return f"{', '.join(rendered[:-1])} or {rendered[-1]}"
 
 
+def socket_subject(name: str | None) -> str:
+    """Render the phrase an error uses to point at the socket ``name``."""
+    return f"socket '{name}'" if name else "this input"
+
+
 def _invalid_value_error(
-    value: Any, allowed: Any, where: str | None, hint: str
+    value: Any, allowed: Any, subject: str | None, hint: str
 ) -> ValueError:
-    subject = f"socket '{where}'" if where else "this input"
     return ValueError(
-        f"Invalid value for {subject}.\n"
+        f"Invalid value for {subject or 'this input'}.\n"
         f"  Input should be {format_allowed_values(allowed)}. Got {value!r}.\n"
         f"  {hint}"
     )
@@ -130,37 +134,43 @@ def canonical_enum_member(
     cls: type,
     *,
     allowed: Any = None,
-    where: str | None = None,
+    subject: str | None = None,
 ) -> Any:
     """Return the ``cls`` member ``value`` names, raising if it names none.
 
     A member of ``cls``, a member of any other ``Enum`` carrying the same
     value, and a bare member value all name the same member: membership is
-    decided by value, because serialization keeps only the value. ``allowed``,
-    when given, restricts the result to that subset of member values.
+    decided by ``value_is_allowed`` over the members' values, because
+    serialization keeps only the value. That is the rule a ``Literal`` socket
+    applies too, so an ``IntEnum`` whose members are ``1`` and ``2`` rejects
+    ``True`` exactly as ``Literal[1, 2]`` does. ``allowed``, when given,
+    restricts the result to that subset of member values.
     """
     permitted = [member.value for member in cls] if allowed is None else list(allowed)
     value = untagged(value)
     if isinstance(value, cls):
         member = value
     else:
-        try:
-            member = cls(literal_value(value))
-        except (ValueError, KeyError, TypeError):
+        candidate = literal_value(value)
+        member = next(
+            (item for item in cls if value_is_allowed(item.value, [candidate])),
+            None,
+        )
+        if member is None:
             example = next(iter(cls.__members__), None)
             named = f" ({cls.__name__}.{example})" if example else ""
             raise _invalid_value_error(
                 value,
                 permitted,
-                where,
+                subject,
                 f"{structured_type_path(cls)} members are accepted by "
                 f"member{named} or by value.",
-            ) from None
+            )
     if not value_is_allowed(member.value, permitted):
         raise _invalid_value_error(
             value,
             permitted,
-            where,
+            subject,
             f"The socket admits only part of {structured_type_path(cls)}.",
         )
     return member
@@ -170,7 +180,7 @@ def canonical_literal_value(
     value: Any,
     allowed: Any,
     *,
-    where: str | None = None,
+    subject: str | None = None,
 ) -> Any:
     """Return ``value`` when it is one of ``allowed``, raising otherwise.
 
@@ -181,7 +191,7 @@ def canonical_literal_value(
     if value_is_allowed(candidate, allowed):
         return candidate
     raise _invalid_value_error(
-        value, allowed, where, "Only the values listed above are accepted here."
+        value, allowed, subject, "Only the values listed above are accepted here."
     )
 
 
@@ -190,7 +200,7 @@ def canonical_socket_value(
     *,
     structured_type: Dict[str, str] | None = None,
     allowed: Any = None,
-    where: str | None = None,
+    subject: str | None = None,
 ) -> Any:
     """Return the value a socket may store, raising when the socket forbids it.
 
@@ -198,13 +208,15 @@ def canonical_socket_value(
     """
     if structured_type is not None and structured_type.get("kind") == "enum":
         cls = import_structured_type(structured_type["path"])
-        return canonical_enum_member(value, cls, allowed=allowed, where=where)
+        return canonical_enum_member(value, cls, allowed=allowed, subject=subject)
     if allowed is not None:
-        return canonical_literal_value(value, allowed, where=where)
+        return canonical_literal_value(value, allowed, subject=subject)
     return value
 
 
-def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
+def coerce_structured_value(
+    value: Any, info: Dict[str, str] | None, name: str | None = None
+) -> Any:
     """Rebuild a structured instance from a flat value when spec says so."""
     if info is None:
         return value
@@ -214,7 +226,9 @@ def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
     # Assignment already decided membership, so this only rebuilds the member.
     if kind == "enum":
         cls = import_structured_type(info["path"])
-        return retagged(canonical_enum_member(value, cls), value)
+        return retagged(
+            canonical_enum_member(value, cls, subject=socket_subject(name)), value
+        )
     if is_structured_instance(value):
         return value
     if not isinstance(value, dict):
@@ -251,7 +265,7 @@ def coerce_inputs_from_spec(values: Any, spec: Any) -> Any:
             continue
         info = child.meta.extras.get("structured_type")
         if info:
-            out[name] = coerce_structured_value(out[name], info)
+            out[name] = coerce_structured_value(out[name], info, name)
             continue
         if child.is_namespace() and isinstance(out[name], dict):
             out[name] = coerce_inputs_from_spec(out[name], child)
