@@ -11,9 +11,18 @@ from typing import (
 )
 import inspect
 from copy import deepcopy
+from enum import Enum
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from node_graph.socket_meta import CallRole, SocketMeta, merge_meta
-from node_graph.utils.struct_utils import is_enum_type, structured_type_info
+from node_graph.utils.struct_utils import (
+    JSON_SAFE_LITERALS,
+    canonical_socket_value,
+    is_enum_type,
+    literal_value,
+    structured_type_info,
+    structured_type_path,
+    value_is_allowed,
+)
 from .socket import TaskSocketNamespace
 import ast
 import textwrap
@@ -24,7 +33,7 @@ from dataclasses import (
     MISSING as _DC_MISSING,
 )
 
-from typing import Annotated, get_args, get_origin, get_type_hints
+from typing import Annotated, Literal, get_args, get_origin, get_type_hints
 
 try:
     from typing import Unpack
@@ -66,6 +75,17 @@ __all__ = [
 def _is_union_origin(origin: Any) -> bool:
     """True if origin represents a Union across versions (typing.Union or X|Y)."""
     return (origin is Union) or (_UNION_TYPE is not None and origin is _UNION_TYPE)
+
+
+def _literal_arg_name(arg: Any) -> str:
+    """Render one ``Literal`` argument.
+
+    An ``Enum`` member is written out with its class's import path, so two
+    same-named enums from different modules do not render alike.
+    """
+    if isinstance(arg, Enum):
+        return f"{structured_type_path(type(arg))}.{arg.name}"
+    return repr(arg)
 
 
 def _is_annotated_type(tp: Any) -> bool:
@@ -334,6 +354,35 @@ class SocketSpec:
     fields: Dict[str, "SocketSpec"] = field(default_factory=dict)
     meta: SocketMeta = field(default_factory=SocketMeta)
 
+    def __post_init__(self) -> None:
+        """Hold the default a socket assignment would have accepted.
+
+        A default reaches ``TaskProperty.value`` without passing the socket's
+        own setter, so it is decided here instead: a default an ``Enum`` or
+        ``Literal`` socket forbids raises where the spec is built, and one it
+        admits is stored as the bare value the socket would have kept.
+        """
+        if isinstance(self.default, type(MISSING)) or self.default is None:
+            return
+        extras = self.meta.extras or {}
+        structured_type = extras.get("structured_type")
+        allowed = extras.get("allowed_values")
+        if allowed is None and (
+            structured_type is None or structured_type.get("kind") != "enum"
+        ):
+            return
+        canonical = literal_value(
+            canonical_socket_value(
+                self.default,
+                structured_type=structured_type,
+                allowed=allowed,
+                subject=f"the default of a socket annotated "
+                f"{extras.get('py_type', self.identifier)}",
+            )
+        )
+        if canonical is not self.default:
+            object.__setattr__(self, "default", canonical)
+
     @property
     def dynamic(self) -> bool:
         return bool(self.meta.dynamic)
@@ -551,6 +600,9 @@ class SocketSpecAPI:
 
     @staticmethod
     def _py_type_name(tp: Any) -> str:
+        if get_origin(tp) is Literal:
+            args = ", ".join(_literal_arg_name(arg) for arg in get_args(tp))
+            return f"typing.Literal[{args}]"
         module = getattr(tp, "__module__", None)
         qualname = getattr(tp, "__qualname__", None) or getattr(tp, "__name__", None)
         if module and qualname:
@@ -773,6 +825,56 @@ class SocketSpecAPI:
             )
 
     @classmethod
+    def _leaf_from_literal(cls, T: Any) -> SocketSpec:
+        """Build the leaf spec for ``Literal[...]``.
+
+        The socket keeps the permitted values in the ``allowed_values`` extra.
+        ``structured_type`` is added when one ``Enum`` supplies every argument,
+        whether the argument was written as a member or as that member's value,
+        so the member is rebuilt after serialization; arguments spanning two
+        enums, or naming a value no member of the one enum carries, keep their
+        values alone. ``literal_base`` records the type such a socket widens
+        into; an enum socket records none, because its output side carries the
+        member rather than the bare value. An argument no spec round trip can
+        carry (``bytes``) leaves the socket unconstrained, as an unrecognized
+        annotation always has.
+        """
+        args = list(get_args(T))
+        py_type = cls._py_type_name(T)
+        if not args:
+            return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
+
+        enum_classes = {type(arg) for arg in args if isinstance(arg, Enum)}
+        values: list = []
+        for arg in args:
+            value = literal_value(arg)
+            if not value_is_allowed(value, values):
+                values.append(value)
+        if not all(isinstance(value, JSON_SAFE_LITERALS) for value in values):
+            return SocketSpec(
+                identifier=cls.ANNOTATED, meta=SocketMeta(extras={"py_type": py_type})
+            )
+
+        extras: Dict[str, Any] = {"py_type": py_type, "allowed_values": values}
+        enum_cls = next(iter(enum_classes)) if len(enum_classes) == 1 else None
+        member_values = [member.value for member in enum_cls] if enum_cls else []
+        if enum_cls is not None and all(
+            value_is_allowed(value, member_values) for value in values
+        ):
+            extras["structured_type"] = structured_type_info(enum_cls)
+        else:
+            base = cls._literal_base_type(values)
+            if base is not None:
+                extras["literal_base"] = cls._leaf_from_type(base).identifier
+        return SocketSpec(identifier=cls.ANNOTATED, meta=SocketMeta(extras=extras))
+
+    @staticmethod
+    def _literal_base_type(values: list) -> Any:
+        """Return the single type behind ``values``, or ``None`` if they differ."""
+        types_seen = {type(value) for value in values}
+        return next(iter(types_seen)) if len(types_seen) == 1 else None
+
+    @classmethod
     def _leaf_from_type(cls, T: Any) -> SocketSpec:
         if T is Any or T is inspect._empty or T is object:
             return SocketSpec(identifier=cls.DEFAULT, meta=SocketMeta())
@@ -780,7 +882,20 @@ class SocketSpecAPI:
         if _is_typeddict_type(T):
             return cls._leaf_from_type(dict)
 
+        if is_enum_type(T):
+            return SocketSpec(
+                identifier=cls.ANNOTATED,
+                meta=SocketMeta(
+                    extras={
+                        "py_type": cls._py_type_name(T),
+                        "structured_type": structured_type_info(T),
+                    }
+                ),
+            )
+
         origin = get_origin(T)
+        if origin is Literal:
+            return cls._leaf_from_literal(T)
         if _is_union_origin(origin):
             args = []
             for arg in get_args(T):
@@ -1047,9 +1162,7 @@ class SocketSpecAPI:
                 _is_struct_model_type(base_T)
                 and _annot_is_leaf_marker(T) is None
                 and not _struct_is_leaf(base_T)
-            ) or is_enum_type(base_T):
-                # Enums are leaves but still need structured_type extras so
-                # coerce_inputs_from_spec can rebuild the member after serialization.
+            ):
                 info = structured_type_info(base_T)
                 if info is not None and "structured_type" not in spec.meta.extras:
                     # ``required=None`` so this overlay says nothing about
