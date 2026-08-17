@@ -176,6 +176,16 @@ def test_literal_of_unrepresentable_arguments_constrains_nothing():
     assert "allowed_values" not in spec.meta.extras
 
 
+def test_a_literal_socket_survives_a_spec_round_trip():
+    from node_graph.socket_spec import SocketSpec
+
+    spec = api._leaf_from_type(Literal[Spin.NONE, Spin.COLLINEAR])
+
+    restored = SocketSpec.from_dict(spec.to_dict())
+
+    assert restored.meta.extras == spec.meta.extras
+
+
 def test_py_type_name_distinguishes_two_literals():
     assert api._py_type_name(Literal[1, 2]) != api._py_type_name(Literal["a", "b"])
     assert api._py_type_name(Literal["a", "b"]) == "typing.Literal['a', 'b']"
