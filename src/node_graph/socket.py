@@ -732,6 +732,8 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             elif is_input and value_source != "property":
                 self._update_updatable_meta({"value_source": "link"})
 
+            value = self._canonical_value(value)
+
             graph = getattr(self._task, "graph", None)
             if graph is not None:
                 policy = getattr(graph, "serialization_policy", "off")
@@ -745,6 +747,40 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             raise AttributeError(
                 f"Socket '{self._name}' has no property to set a value."
             )
+
+    def _canonical_value(self, value: Any) -> Any:
+        """Return the value this socket accepts, raising when it accepts none.
+
+        Input sockets built from an ``Enum`` or a ``Literal`` carry the members
+        they admit; every other socket returns ``value`` unchanged. A
+        ``TaggedValue`` keeps its tag whenever the value inside it is already
+        canonical. ``None`` passes through, so an optional socket can still be
+        cleared. Output sockets are left alone: a task reports what it computed.
+        """
+        from node_graph.utils.struct_utils import canonical_socket_value
+
+        if self._full_name.split(".")[0] != "inputs":
+            return value
+        extras = self._metadata.extras or {}
+        structured_type = extras.get("structured_type")
+        allowed = extras.get("allowed_values")
+        if allowed is None and (
+            structured_type is None or structured_type.get("kind") != "enum"
+        ):
+            return value
+        if value is None:
+            return value
+
+        raw = value.__wrapped__ if isinstance(value, TaggedValue) else value
+        canonical = canonical_socket_value(
+            raw,
+            structured_type=structured_type,
+            allowed=allowed,
+            where=self._full_name_with_task,
+        )
+        if canonical is raw:
+            return value
+        return canonical
 
     def _serialize_value(self, store: bool = False) -> Any:
         """Serialize the socket value unless it's metadata (stored as raw)."""
