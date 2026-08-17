@@ -444,3 +444,21 @@ def test_the_run_time_message_names_the_socket_that_refused_the_value():
 
     with pytest.raises(ValueError, match="socket 'spin'"):
         LocalEngine().run(from_task.build())
+
+
+def test_a_wrapped_value_read_back_from_storage_still_names_its_member():
+    """Storage hands back a node that equals the value but is not a ``str``."""
+    from node_graph.utils.struct_utils import canonical_socket_value
+
+    class StoredString:
+        def __init__(self, value):
+            self.value = value
+
+        def __eq__(self, other):
+            return self.value == other
+
+    info = api._leaf_from_type(Narrow).meta.extras["structured_type"]
+
+    assert canonical_socket_value(StoredString("none"), structured_type=info) is (
+        Narrow.NONE
+    )

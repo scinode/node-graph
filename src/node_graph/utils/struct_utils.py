@@ -98,10 +98,24 @@ def literal_value(value: Any) -> Any:
 def value_is_allowed(value: Any, allowed: Any) -> bool:
     """Return True when ``value`` is one of ``allowed``.
 
-    Follows typing's rule that ``True`` is not ``1``: a value matches only a
-    candidate of its own type.
+    Two numbers match only when their types agree, which is typing's rule that
+    ``True`` is not ``1`` and ``1`` is not ``1.0``. Anything else matches on
+    equality alone, so a value that arrives wrapped -- a storage node holding
+    ``'none'``, say -- still names the value it equals.
     """
-    return any(type(item) is type(value) and item == value for item in allowed)
+    return any(_values_match(item, value) for item in allowed)
+
+
+def _values_match(candidate: Any, value: Any) -> bool:
+    """Return True when ``value`` is the same value as ``candidate``."""
+    numbers = (bool, int, float, complex)
+    if isinstance(candidate, numbers) and isinstance(value, numbers):
+        return type(candidate) is type(value) and candidate == value
+    try:
+        return bool(candidate == value)
+    except (TypeError, ValueError):
+        # An equality that yields an array, or none at all, decides nothing.
+        return False
 
 
 def format_allowed_values(allowed: Any) -> str:
