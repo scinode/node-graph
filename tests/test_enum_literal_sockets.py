@@ -124,6 +124,16 @@ def test_body_receives_a_member_rebuilt_from_the_stored_value():
     assert results["result"] == "collinear"
 
 
+@pytest.mark.parametrize("value", ACCEPTED)
+def test_an_enum_graph_input_reaches_the_task_as_a_link(value):
+    """The rebuilt member keeps the socket, so the body wires rather than copies."""
+    ng = narrow_graph.build(spin=value)
+
+    sources = {link.from_task.name for link in ng.links}
+
+    assert "graph_inputs" in sources
+
+
 def test_an_enum_parameter_keeps_the_requiredness_of_its_default():
     def signature(a: Spin, b: Spin = Spin.NONE, c: Optional[Spin] = None):
         ...
