@@ -8,6 +8,10 @@ try:
     from typing import Unpack
 except ImportError:  # pragma: no cover - Python < 3.11
     from typing_extensions import Unpack
+try:
+    from typing import NotRequired, Required
+except ImportError:  # pragma: no cover - Python < 3.11
+    from typing_extensions import NotRequired, Required
 from node_graph import task
 from dataclasses import dataclass, MISSING
 from pydantic import BaseModel
@@ -729,6 +733,39 @@ def test_typeddict_optional_keys():
     assert spec.is_namespace()
     assert spec.fields["a"].meta.required is False
     assert spec.fields["b"].meta.required is False
+
+
+def test_typeddict_required_qualifiers():
+    class QualifiedTD(TypedDict):
+        a: int
+        b: NotRequired[int]
+
+    spec = ss.from_model(QualifiedTD)
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["b"].meta.required is False
+    # the qualifier is stripped before the child spec is derived
+    assert spec.fields["b"].identifier == type_mapping[int]
+
+    class QualifiedPartialTD(TypedDict, total=False):
+        a: Required[int]
+        b: int
+
+    spec = ss.from_model(QualifiedPartialTD)
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["a"].identifier == type_mapping[int]
+    assert spec.fields["b"].meta.required is False
+
+
+def test_typeddict_stringified_qualifiers():
+    """Qualifiers in stringified annotations (e.g. under ``from __future__
+    import annotations``) are invisible to ``__required_keys__``; the resolved
+    type hints are authoritative."""
+    StringTD = TypedDict("StringTD", {"a": int, "b": "NotRequired[int]"})
+
+    spec = ss.from_model(StringTD)
+    assert spec.fields["a"].meta.required is True
+    assert spec.fields["b"].meta.required is False
+    assert spec.fields["b"].identifier == type_mapping[int]
 
 
 def test_unpack_typeddict_kwargs():

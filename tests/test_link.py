@@ -188,6 +188,69 @@ def test_namespace_to_namespace_link_recurses():
     )
 
 
+def test_namespace_link_skips_absent_optional_child():
+    from node_graph.socket_spec import socket
+
+    @task()
+    def make_pair(x: int, y: int) -> namespace(a=int, b=int):
+        return {"a": x, "b": y}
+
+    @task()
+    def consume(pair: namespace(a=int, b=int, c=socket(int, required=False))) -> int:
+        return pair["a"] + pair["b"]
+
+    ng = Graph()
+    ng.add_task(make_pair, "make_pair")
+    ng.add_task(consume, "consume")
+
+    ng.add_link(ng.tasks.make_pair.outputs, ng.tasks.consume.inputs.pair)
+
+    assert any(
+        link.from_socket is ng.tasks.make_pair.outputs.a
+        for link in ng.tasks.consume.inputs.pair.a._links
+    )
+    assert any(
+        link.from_socket is ng.tasks.make_pair.outputs.b
+        for link in ng.tasks.consume.inputs.pair.b._links
+    )
+    # the optional child absent from the source is simply left unlinked
+    assert ng.tasks.consume.inputs.pair.c._links == []
+
+
+def test_namespace_link_missing_required_child_rejected():
+    @task()
+    def make_pair(x: int, y: int) -> namespace(a=int, b=int):
+        return {"a": x, "b": y}
+
+    @task()
+    def consume(pair: namespace(a=int, b=int, c=int)) -> int:
+        return pair["a"] + pair["b"] + pair["c"]
+
+    ng = Graph()
+    ng.add_task(make_pair, "make_pair")
+    ng.add_task(consume, "consume")
+
+    with pytest.raises(ValueError, match="Namespace structures do not match"):
+        ng.add_link(ng.tasks.make_pair.outputs, ng.tasks.consume.inputs.pair)
+
+
+def test_namespace_link_extra_source_child_rejected():
+    @task()
+    def make_triple(x: int, y: int) -> namespace(a=int, b=int, c=int):
+        return {"a": x, "b": y, "c": x + y}
+
+    @task()
+    def consume(pair: namespace(a=int, b=int)) -> int:
+        return pair["a"] + pair["b"]
+
+    ng = Graph()
+    ng.add_task(make_triple, "make_triple")
+    ng.add_task(consume, "consume")
+
+    with pytest.raises(ValueError, match="Namespace structures do not match"):
+        ng.add_link(ng.tasks.make_triple.outputs, ng.tasks.consume.inputs.pair)
+
+
 def test_dynamic_namespace_accepts_leaf_link():
     @task()
     def emit(x: int) -> int:

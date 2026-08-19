@@ -715,3 +715,25 @@ def test_tagged_value():
     # this will add link between the two sockets, instead of copying the value
     assert len(ng.links) == 4
     assert "test.a -> test1.a" in ng.links
+
+
+def test_assigned_empty_namespace_survives_collection():
+    """An explicitly-assigned empty namespace reaches the graph body as ``{}``.
+
+    Dropping it at collection turned a missing-member validation error into
+    ``TypeError: missing a required argument`` at the caller.
+    """
+    from typing import Annotated
+
+    from node_graph import Graph, namespace, task
+
+    @task.graph()
+    def graph_with_namespace(data: Annotated[dict, namespace(x=int)]) -> dict:
+        return {}
+
+    wg = graph_with_namespace.build(data={})
+    assert isinstance(wg, Graph)
+
+    # Control: a populated namespace still collects its members.
+    wg = graph_with_namespace.build(data={"x": 1})
+    assert wg.inputs.data._collect_values() == {"x": 1}

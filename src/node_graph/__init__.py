@@ -6,6 +6,7 @@ from .executor import SafeExecutor, RuntimeExecutor
 from .tasks import TaskPool
 from .collection import group
 from .socket_spec import namespace, dynamic
+from .socket import reference
 from .manager import get_current_graph, While, If
 
 __version__ = "0.6.5"
@@ -21,6 +22,7 @@ __all__ = [
     "group",
     "namespace",
     "dynamic",
+    "reference",
     "get_current_graph",
     "While",
     "If",

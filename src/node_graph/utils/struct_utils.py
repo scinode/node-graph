@@ -82,7 +82,7 @@ def coerce_inputs_from_spec(values: Any, spec: Any) -> Any:
     except Exception:
         return values
     spec_obj = spec if isinstance(spec, SocketSpec) else SocketSpec.from_dict(spec)
-    out = dict(values)
+    out = values.copy()
     for name, child in (spec_obj.fields or {}).items():
         if name not in out:
             continue
