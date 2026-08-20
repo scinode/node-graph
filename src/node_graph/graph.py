@@ -132,17 +132,12 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         metadata: Optional[Dict[str, Any]] = None,
         serialization: Optional[object] = None,
         serialization_policy: str = "off",
-        _skip_metadata_validation: bool = False,
     ) -> None:
         """Initializes a new instance of the Graph class.
 
         Args:
             name (str, optional): The name of the task graph. Defaults to "Graph".
             uuid (str, optional): The UUID of the task graph. Defaults to None.
-            _skip_metadata_validation (bool, optional): Internal — set by `from_dict()`
-                when reconstructing, so metadata keys written by an older version of
-                this class (or a subclass whose declared keys have since changed)
-                still load. Fresh, caller-driven construction always validates.
         """
 
         self.name = name
@@ -170,8 +165,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
         self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid, graph=self)
-        if not _skip_metadata_validation:
-            self._validate_metadata(metadata or {})
+        self._validate_metadata(metadata or {})
         self._metadata: Dict[str, Any] = dict(metadata or {})
 
         self.state = "CREATED"
@@ -783,7 +777,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             outputs=spec.outputs,
             ctx=spec.ctx,
             metadata=extra_meta,
-            _skip_metadata_validation=True,
         )
         ng.state = ngdata.get("state", "CREATED")
         ng.action = ngdata.get("action", "NONE")

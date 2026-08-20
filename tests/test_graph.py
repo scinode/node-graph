@@ -296,22 +296,20 @@ def test_metadata_key_validation_is_opt_in():
         StrictGraph(name="strict", metadata={"label": "not declared here"})
 
 
-def test_metadata_key_validation_skipped_on_from_dict_reconstruction():
-    """`from_dict()` restores metadata keys an older version wrote, even if a validating
-    subclass's declared set has since changed — fresh construction still validates."""
+def test_metadata_key_validation_enforced_on_from_dict_reconstruction():
+    """`from_dict()` validates exactly like fresh construction: a payload carrying a
+    key outside the declared set — e.g. written by an older version of a validating
+    subclass, or hand-edited — raises, naming the offending key, rather than loading
+    silently. Affected data must have the stray key removed before it can be loaded."""
 
     class StrictGraph(Graph):
         _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
         _validate_metadata_keys = True
 
-    with pytest.raises(ValueError, match="Unknown metadata key"):
-        StrictGraph(name="strict", metadata={"legacy_key": "from an old version"})
-
     payload = StrictGraph(name="strict", metadata={"pk": 1}).to_dict()
     payload["metadata"]["legacy_key"] = "from an old version"
-    restored = StrictGraph.from_dict(payload)
-    assert restored._metadata["legacy_key"] == "from an old version"
-    assert restored._metadata["pk"] == 1
+    with pytest.raises(ValueError, match=r"Unknown metadata key\(s\) \['legacy_key'\]"):
+        StrictGraph.from_dict(payload)
 
 
 def test_metadata_key_validation_default_is_permissive():
