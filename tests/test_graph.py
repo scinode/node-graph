@@ -273,6 +273,53 @@ def test_graph_metadata_roundtrip():
     assert restored._metadata["definition"]["package_version"] == "1.2.3"
 
 
+def test_declared_metadata_keys_extended_by_subclass():
+    """A subclass extends `_declared_metadata_keys` by union, not by override."""
+
+    class Subgraph(Graph):
+        _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
+
+    assert Subgraph._declared_metadata_keys == Graph._declared_metadata_keys | {"pk"}
+    assert "graph_class" in Subgraph._declared_metadata_keys
+    assert "definition" in Subgraph._declared_metadata_keys
+
+
+def test_metadata_key_validation_is_opt_in():
+    """A subclass that turns on `_validate_metadata_keys` rejects undeclared keys."""
+
+    class StrictGraph(Graph):
+        _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
+        _validate_metadata_keys = True
+
+    StrictGraph(name="strict", metadata={"pk": 1})  # declared keys pass
+    with pytest.raises(ValueError, match="Unknown metadata key"):
+        StrictGraph(name="strict", metadata={"label": "not declared here"})
+
+
+def test_metadata_key_validation_skipped_on_from_dict_reconstruction():
+    """`from_dict()` restores metadata keys an older version wrote, even if a validating
+    subclass's declared set has since changed — fresh construction still validates."""
+
+    class StrictGraph(Graph):
+        _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
+        _validate_metadata_keys = True
+
+    with pytest.raises(ValueError, match="Unknown metadata key"):
+        StrictGraph(name="strict", metadata={"legacy_key": "from an old version"})
+
+    payload = StrictGraph(name="strict", metadata={"pk": 1}).to_dict()
+    payload["metadata"]["legacy_key"] = "from an old version"
+    restored = StrictGraph.from_dict(payload)
+    assert restored._metadata["legacy_key"] == "from an old version"
+    assert restored._metadata["pk"] == 1
+
+
+def test_metadata_key_validation_default_is_permissive():
+    """Base `Graph` accepts any metadata key, unchanged from before this feature existed."""
+    ng = Graph(name="permissive", metadata={"anything": "goes", "another": 1})
+    assert ng._metadata == {"anything": "goes", "another": 1}
+
+
 def test_graph_definition_metadata_from_build():
     @task.graph(outputs=namespace(result=Any))
     def test_graph(x):

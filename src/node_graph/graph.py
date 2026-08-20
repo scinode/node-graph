@@ -94,6 +94,30 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     platform: str = "node_graph"
 
+    # Metadata keys this class reserves for its own serialization bookkeeping.
+    # Subclasses extend by union, never by override, so a subclass's reserved
+    # keys add to the base class's rather than replacing them:
+    # `_declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}`.
+    # `definition` is set by `utils/graph.py::graph._metadata.setdefault("definition", ...)`
+    # when a graph is built from a `@task.graph`-decorated function.
+    _declared_metadata_keys: frozenset = frozenset({"graph_class", "definition"})
+
+    # Opt-in: when True, a `metadata=` key outside `_declared_metadata_keys`
+    # raises at construction. Off by default so existing callers who stash
+    # arbitrary keys in `metadata` keep working unchanged.
+    _validate_metadata_keys: bool = False
+
+    @classmethod
+    def _validate_metadata(cls, metadata: Dict[str, Any]) -> None:
+        """Reject metadata keys outside `_declared_metadata_keys`, if validation is enabled."""
+        if not cls._validate_metadata_keys or not metadata:
+            return
+        unknown = set(metadata) - cls._declared_metadata_keys
+        if unknown:
+            raise ValueError(
+                f"Unknown metadata key(s) {sorted(unknown)}. Valid keys: {sorted(cls._declared_metadata_keys)}."
+            )
+
     def __init__(
         self,
         name: str = "Graph",
@@ -108,12 +132,17 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         metadata: Optional[Dict[str, Any]] = None,
         serialization: Optional[object] = None,
         serialization_policy: str = "off",
+        _skip_metadata_validation: bool = False,
     ) -> None:
         """Initializes a new instance of the Graph class.
 
         Args:
             name (str, optional): The name of the task graph. Defaults to "Graph".
             uuid (str, optional): The UUID of the task graph. Defaults to None.
+            _skip_metadata_validation (bool, optional): Internal — set by `from_dict()`
+                when reconstructing, so metadata keys written by an older version of
+                this class (or a subclass whose declared keys have since changed)
+                still load. Fresh, caller-driven construction always validates.
         """
 
         self.name = name
@@ -141,6 +170,8 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
         self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid, graph=self)
+        if not _skip_metadata_validation:
+            self._validate_metadata(metadata or {})
         self._metadata: Dict[str, Any] = dict(metadata or {})
 
         self.state = "CREATED"
@@ -752,6 +783,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             outputs=spec.outputs,
             ctx=spec.ctx,
             metadata=extra_meta,
+            _skip_metadata_validation=True,
         )
         ng.state = ngdata.get("state", "CREATED")
         ng.action = ngdata.get("action", "NONE")
