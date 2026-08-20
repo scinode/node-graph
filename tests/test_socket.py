@@ -715,3 +715,48 @@ def test_tagged_value():
     # this will add link between the two sockets, instead of copying the value
     assert len(ng.links) == 4
     assert "test.a -> test1.a" in ng.links
+
+
+class TestTaggedValueIterable:
+    """``wrapt.ObjectProxy`` always exposes ``__iter__`` at the C level, so a
+    naive ``TaggedValue`` proxy would report ``isinstance(_, Iterable) is True``
+    even when wrapping a scalar. ``TaggedValue.__new__`` dispatches to a scalar
+    subclass that shadows ``__iter__`` to keep the ABC hook honest."""
+
+    def test_scalar_is_not_iterable(self):
+        from collections.abc import Iterable
+
+        for scalar in (1.5, 7, 3 + 2j, None, True):
+            tv = TaggedValue(scalar)
+            assert not isinstance(tv, Iterable), scalar
+            with pytest.raises(TypeError):
+                iter(tv)
+
+    def test_scalar_still_proxies_arithmetic_and_equality(self):
+        tv = TaggedValue(2.5)
+        assert tv == 2.5
+        assert tv + 1 == 3.5
+        assert tv * 2 == 5.0
+        assert float(tv) == 2.5
+
+    @pytest.mark.parametrize(
+        "wrapped",
+        [[1, 2, 3], (1, 2, 3), {"a": 1}, "green", {1, 2}],
+    )
+    def test_iterable_is_iterable_and_iterates(self, wrapped):
+        from collections.abc import Iterable
+
+        tv = TaggedValue(wrapped)
+        assert isinstance(tv, Iterable)
+        assert list(tv) == list(wrapped)
+
+    def test_socket_kwarg_preserved_on_scalar_and_iterable(self):
+        from collections.abc import Iterable
+
+        scalar = TaggedValue(2.5, socket="sock-a")
+        assert scalar._socket == "sock-a"
+        assert not isinstance(scalar, Iterable)
+
+        iterable = TaggedValue([1, 2], socket="sock-b")
+        assert iterable._socket == "sock-b"
+        assert list(iterable) == [1, 2]
