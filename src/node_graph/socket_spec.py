@@ -13,7 +13,7 @@ import inspect
 from copy import deepcopy
 from node_graph.orm.mapping import type_mapping as DEFAULT_TM
 from node_graph.socket_meta import CallRole, SocketMeta, merge_meta
-from node_graph.utils.struct_utils import structured_type_info
+from node_graph.utils.struct_utils import is_enum_type, structured_type_info
 from .socket import TaskSocketNamespace
 import ast
 import textwrap
@@ -408,7 +408,7 @@ class SocketView:
             raise AttributeError("'.item' only valid on dynamic namespace specs")
         if spec.fields and name in spec.fields:
             return SocketView(spec.fields[name])
-        raise AttributeError(f"'{name}' not found in namespace spec")
+        raise AttributeError(f"namespace spec has no field '{name}'")
 
     def __getitem__(self, name: str) -> "SocketView":
         return self.__getattr__(name)
@@ -1047,13 +1047,21 @@ class SocketSpecAPI:
                 _is_struct_model_type(base_T)
                 and _annot_is_leaf_marker(T) is None
                 and not _struct_is_leaf(base_T)
-            ):
+            ) or is_enum_type(base_T):
+                # Enums are leaves but still need structured_type extras so
+                # coerce_inputs_from_spec can rebuild the member after serialization.
                 info = structured_type_info(base_T)
                 if info is not None and "structured_type" not in spec.meta.extras:
+                    # ``required=None`` so this overlay says nothing about
+                    # requiredness: ``SocketMeta.required`` defaults to ``True``
+                    # and ``merge_meta`` prefers any non-``None`` overlay value,
+                    # so a bare ``SocketMeta`` would republish ``required=True``
+                    # over the value computed from the parameter's default.
                     spec = replace(
                         spec,
                         meta=merge_meta(
-                            spec.meta, SocketMeta(extras={"structured_type": info})
+                            spec.meta,
+                            SocketMeta(required=None, extras={"structured_type": info}),
                         ),
                     )
 

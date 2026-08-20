@@ -134,6 +134,41 @@ def _assign_graph_outputs(outputs: Any, graph: Graph) -> None:
         )
 
 
+def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
+    """Recursively apply ``adapter.deserialize`` to leaves of ``values`` so a
+    ``@task.graph`` body receives the primitive its signature declares, even
+    when the stored value was wrapped by the engine for provenance."""
+    from node_graph.socket import TaskSocketNamespace
+
+    if adapter is None or not hasattr(adapter, "deserialize"):
+        return values
+    if not isinstance(values, dict):
+        return values
+    from node_graph.utils.struct_utils import is_structured_instance
+
+    out = dict(values)
+    for name, item in namespace._sockets.items():
+        if name not in out:
+            continue
+        value = out[name]
+        if isinstance(item, TaskSocketNamespace):
+            if isinstance(value, dict):
+                out[name] = _deserialize_inputs(item, value, adapter)
+            elif is_structured_instance(value):
+                # The namespace was already materialised into a dataclass /
+                # Pydantic instance by ``coerce_inputs_from_spec`` (which
+                # runs before ``_deserialize_inputs`` in ``materialize_graph``).
+                # Without this branch, the adapter never sees the structured
+                # value, so a serialiser that auto-promotes primitive fields
+                # to engine-typed wrappers (e.g. ``aiida-workgraph``'s
+                # ``orm.Int`` / ``orm.Float``) leaves them wrapped inside
+                # the dataclass and downstream ``int``-typed code breaks.
+                out[name] = adapter.deserialize(value, item)
+        else:
+            out[name] = adapter.deserialize(value, item)
+    return out
+
+
 def materialize_graph(
     func: Callable,
     in_spec: SocketSpec,
@@ -173,6 +208,9 @@ def materialize_graph(
         tag_socket_value(graph.inputs)
         inputs = graph.inputs._collect_values(unwrap=False)
         inputs = coerce_inputs_from_spec(inputs, in_spec)
+        inputs = _deserialize_inputs(
+            graph.inputs, inputs, getattr(graph, "serialization", None)
+        )
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from enum import Enum
 from typing import Any, Dict
 import importlib
 
 from pydantic import BaseModel
+
+
+def is_enum_type(tp: Any) -> bool:
+    """Return True for Enum subclasses (including ``str``- and ``int``-Enum)."""
+    return isinstance(tp, type) and issubclass(tp, Enum)
 
 
 def is_structured_instance(value: Any) -> bool:
@@ -29,11 +35,13 @@ def structured_to_dict(value: Any) -> Any:
 
 
 def structured_type_info(tp: Any) -> Dict[str, str] | None:
-    """Return a serializable descriptor for structured types."""
+    """Return a serializable descriptor for structured types (incl. ``Enum``)."""
     if is_dataclass(tp):
         return {"kind": "dataclass", "path": structured_type_path(tp)}
     if isinstance(tp, type) and issubclass(tp, BaseModel):
         return {"kind": "pydantic", "path": structured_type_path(tp)}
+    if is_enum_type(tp):
+        return {"kind": "enum", "path": structured_type_path(tp)}
     return None
 
 
@@ -51,15 +59,25 @@ def import_structured_type(path: str) -> Any:
 
 
 def coerce_structured_value(value: Any, info: Dict[str, str] | None) -> Any:
-    """Rebuild a structured instance from a dict when spec says so."""
+    """Rebuild a structured instance from a flat value when spec says so."""
     if info is None:
         return value
+    kind = info.get("kind")
+    # Enum check goes before the dict gate: its serialized form is a bare value,
+    # so an already-materialized-instance/dict short-circuit would never fire.
+    if kind == "enum":
+        cls = import_structured_type(info["path"])
+        if isinstance(value, cls):
+            return value
+        return cls(value)
     if is_structured_instance(value):
         return value
     if not isinstance(value, dict):
         return value
+    # Only import the target class once we know we must rebuild from a dict.
+    # Imports of already-materialized instances (e.g. locally-defined types
+    # whose qualname is not importable) must not reach here.
     cls = import_structured_type(info["path"])
-    kind = info.get("kind")
     if kind == "pydantic":
         if contains_tagged_value(value):
             if hasattr(cls, "model_construct"):
