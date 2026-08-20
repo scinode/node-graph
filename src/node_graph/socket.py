@@ -446,6 +446,19 @@ _RUNTIME_EXTRA_KEYS = {
 
 
 class TaggedValue(wrapt.ObjectProxy):
+    # ObjectProxy always exposes __iter__ at the C level, so isinstance(
+    # TaggedValue(1.5), Iterable) would wrongly be True. Dispatch to a subclass
+    # that shadows __iter__ when the wrapped value isn't iterable.
+    def __new__(cls, wrapped, socket=None):
+        if cls is TaggedValue:
+            from collections.abc import Iterable as _Iterable
+
+            target = (
+                _TaggedIterable if isinstance(wrapped, _Iterable) else _TaggedScalar
+            )
+            return super().__new__(target)
+        return super().__new__(cls)
+
     def __init__(self, wrapped, socket=None):
         super().__init__(wrapped)
 
@@ -495,6 +508,17 @@ class TaggedValue(wrapt.ObjectProxy):
 
     def __repr__(self):
         return f"TaggedValue({self.__wrapped__!r}, socket={self._socket!r}, uuid={self._uuid})"
+
+
+class _TaggedScalar(TaggedValue):
+    """TaggedValue wrapping a non-iterable. Setting ``__iter__ = None`` makes
+    the ``Iterable`` ABC subclass hook return False for this proxy."""
+
+    __iter__ = None
+
+
+class _TaggedIterable(TaggedValue):
+    """TaggedValue wrapping an iterable; iteration is forwarded by ObjectProxy."""
 
 
 class BaseSocket:
