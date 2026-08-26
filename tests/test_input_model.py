@@ -1183,3 +1183,70 @@ def test_a_non_idempotent_annotation_validator_is_refused():
     """Running twice doubles twice, so the two sides disagree and the write is refused."""
     with pytest.raises(ModelDerivedValueError, match="changed it from 6 to 12"):
         annotated_doubling.run(amount=3)
+
+
+# --------------------------------------------------------------------------
+# 14. A nested field accepts the class it names
+# --------------------------------------------------------------------------
+
+
+class Point(BaseModel):
+    x: int
+
+
+class HoldsAPoint(BaseModel):
+    point: Point
+
+
+class HoldsPointList(BaseModel):
+    points: list[Point]
+
+
+class HoldsPointMapping(BaseModel):
+    points: dict[str, Point]
+
+
+@task(input_model=HoldsAPoint)
+def holds_a_point(point):
+    return point
+
+
+@task(input_model=HoldsPointList)
+def holds_point_list(points):
+    return points
+
+
+@task(input_model=HoldsPointMapping)
+def holds_point_mapping(points):
+    return points
+
+
+@pytest.mark.parametrize(
+    "handle, written",
+    [
+        (holds_a_point, {"point": Point(x=1)}),
+        (holds_point_list, {"points": [Point(x=1)]}),
+        (holds_point_mapping, {"points": {"k": Point(x=1)}}),
+    ],
+    ids=["plain", "in-a-list", "in-a-mapping"],
+)
+def test_the_class_a_field_names_is_accepted_where_it_is_written(handle, written):
+    """A shadow is a different class; the class the field names is not a wrong value."""
+    with Graph(name="instances"):
+        assert handle(**written) is not None
+
+
+@pytest.mark.parametrize(
+    "handle, written",
+    [
+        (holds_a_point, {"point": {"x": "nope"}}),
+        (holds_point_list, {"points": [{"x": "nope"}]}),
+        (holds_point_mapping, {"points": {"k": {"x": "nope"}}}),
+    ],
+    ids=["plain", "in-a-list", "in-a-mapping"],
+)
+def test_a_wrong_value_in_the_same_place_is_still_refused(handle, written):
+    """The control: accepting the class does not stop the shadow checking a dict."""
+    with Graph(name="instances_bad"):
+        with pytest.raises(TaskInputValidationError, match="x"):
+            handle(**written)

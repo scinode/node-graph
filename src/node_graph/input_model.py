@@ -465,6 +465,30 @@ def _accept_reference(value: Any, handler: Any, info: Any) -> Any:
     return handler(value)
 
 
+def _accepting_instances_of(model: Type[BaseModel]) -> Callable[..., Any]:
+    """Return a wrap validator that also lets an instance of ``model`` through.
+
+    A nested field is checked against a shadow of the model it declares, and a
+    shadow is a different class: pydantic would refuse the very class the field
+    names. An instance already satisfies the declared type, so it passes as it
+    is, wherever it is written -- alone, or inside a ``list[M]`` or
+    ``dict[str, M]``.
+    """
+
+    def accept(value: Any, handler: Any, info: Any) -> Any:
+        from node_graph.socket import TaggedValue
+
+        if is_socket_reference(value):
+            return value
+        if isinstance(value, TaggedValue):
+            value = value.__wrapped__
+        if isinstance(value, model):
+            return value
+        return handler(value)
+
+    return accept
+
+
 def _rebuild_generic(annotation: Any, rebuild: Callable[[Any], Any]) -> Any:
     """Return ``annotation`` with ``rebuild`` applied to each of its arguments.
 
@@ -516,7 +540,10 @@ def _reference_tolerant(annotation: Any, depth: int = 0) -> Any:
     if rebuilt is not None:
         return Annotated[rebuilt, WrapValidator(_accept_reference)]
     if _is_model(annotation):
-        return Annotated[_wiring_shadow(annotation), WrapValidator(_accept_reference)]
+        return Annotated[
+            _wiring_shadow(annotation),
+            WrapValidator(_accepting_instances_of(annotation)),
+        ]
     return Annotated[annotation, WrapValidator(_accept_reference)]
 
 
