@@ -463,7 +463,10 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
                 or "property" to force property values even when linked.
         """
 
+        from node_graph.input_model import validate_task_inputs
+
         data = deep_copy_only_dicts(data)
+        validate_task_inputs(self, data)
         if value_source is None:
             value_source = "property" if self._allow_input_overrides else "link"
         if value_source not in ("link", "property"):

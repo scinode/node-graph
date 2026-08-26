@@ -90,6 +90,7 @@ __all__ = [
     "model_dumper_for_socket",
     "spec_from_model",
     "validate_graph_inputs",
+    "validate_task_inputs",
     "validate_wiring_inputs",
     "validated_callable",
 ]
@@ -103,6 +104,9 @@ _TASK_MODEL_CACHE = "_node_graph_cached_input_model"
 
 #: Sentinel telling "no model" apart from "not looked up yet".
 _UNRESOLVED = object()
+
+#: Sentinel standing for a field no partial write named.
+_MISSING = object()
 
 #: How deep a generic annotation is rebuilt before it is taken as a leaf.
 _MAX_ANNOTATION_DEPTH = 6
@@ -446,10 +450,15 @@ def check_signature_against_model(
 
 
 def is_socket_reference(value: Any) -> bool:
-    """Return True when ``value`` stands for something a link will deliver."""
-    from node_graph.socket import BaseSocket, TaggedValue
+    """Return True when ``value`` stands for something a link will deliver.
 
-    if isinstance(value, BaseSocket):
+    A task counts: writing one into an input links its top-level output, so
+    what arrives is decided later, exactly as for a socket.
+    """
+    from node_graph.socket import BaseSocket, TaggedValue
+    from node_graph.task import Task
+
+    if isinstance(value, (BaseSocket, Task)):
         return True
     return isinstance(value, TaggedValue) and value._socket is not None
 
@@ -571,22 +580,77 @@ def _wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
     )
 
 
+def _optional_field(field: Any) -> Any:
+    """Return ``field`` free to be missing, keeping its type and constraints."""
+    field = copy(field)
+    field.default = _MISSING
+    field.default_factory = None
+    field.validate_default = False
+    return field
+
+
+@functools.lru_cache(maxsize=None)
+def _partial_wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
+    """Return the wiring shadow with every field free to be missing.
+
+    Inputs may be written a few at a time and a link may supply the rest, so
+    a write that names some of the fields says nothing about the others. What
+    it does say is checked exactly as at a call: each value against the field
+    it is written to.
+    """
+    fields = {
+        name: (_reference_tolerant(field.annotation), _optional_field(field))
+        for name, field in model.model_fields.items()
+    }
+    return create_model(  # type: ignore[call-overload]
+        f"{model.__name__}__Partial",
+        __config__=_shadow_config(model),
+        **fields,
+    )
+
+
 def validate_wiring_inputs(
-    model: Type[BaseModel], inputs: Dict[str, Any], *, label: str
+    model: Type[BaseModel],
+    inputs: Dict[str, Any],
+    *,
+    label: str,
+    complete: bool = True,
 ) -> None:
     """Raise unless every literal in ``inputs`` fits the field it is written to.
+
+    ``complete`` says whether ``inputs`` is the whole call, in which case a
+    required field left out is refused as well.
 
     The validated instance is discarded and ``inputs`` is passed on untouched.
     That is not tidiness: pydantic strips the proxy a tagged value wears for
     most field types, and a stripped value is a literal, so a task wired to
     the graph's input would silently become a task holding a copy of it.
     """
+    shadow = _wiring_shadow(model) if complete else _partial_wiring_shadow(model)
     try:
-        _wiring_shadow(model).model_validate(inputs)
+        shadow.model_validate(inputs)
     except ValidationError as exc:
         raise TaskInputValidationError(
             f"Task '{label}' got inputs {model.__name__} rejects:\n{exc}"
         ) from exc
+
+
+def validate_task_inputs(task: Any, inputs: Dict[str, Any]) -> None:
+    """Check values written into ``task``'s sockets against its input model.
+
+    Reached by every route that writes an input -- calling the task, passing
+    the values to ``add_task``, setting them on the task afterwards -- so a
+    value the model refuses fails at the line that wrote it. A ``None`` is
+    left out, because writing one sets nothing.
+    """
+    model = _input_model_of_task(task)
+    if model is None:
+        return
+    written = {name: value for name, value in inputs.items() if value is not None}
+    if written:
+        validate_wiring_inputs(
+            model, written, label=getattr(task, "name", "task"), complete=False
+        )
 
 
 # --------------------------------------------------------------------------

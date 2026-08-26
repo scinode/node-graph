@@ -53,12 +53,18 @@ def links_of(graph: Graph) -> list[str]:
 
 @pytest.fixture
 def without_wiring_checks(monkeypatch):
-    """Run the body with checkpoint A disabled, as a negative control."""
+    """Run the body with checkpoint A disabled, as a negative control.
+
+    Both of its seams are stubbed: the call, and the write into the task's
+    sockets that every route to an input goes through.
+    """
+    from node_graph import input_model
     from node_graph.task_spec import BaseHandle
 
     monkeypatch.setattr(
         BaseHandle, "_validate_call_inputs", lambda self, exec_obj, inputs: None
     )
+    monkeypatch.setattr(input_model, "validate_task_inputs", lambda task, inputs: None)
 
 
 # --------------------------------------------------------------------------
@@ -1250,3 +1256,65 @@ def test_a_wrong_value_in_the_same_place_is_still_refused(handle, written):
     with Graph(name="instances_bad"):
         with pytest.raises(TaskInputValidationError, match="x"):
             handle(**written)
+
+
+# --------------------------------------------------------------------------
+# 15. Checkpoint A fires wherever an input is written
+# --------------------------------------------------------------------------
+
+
+class Bounded(BaseModel):
+    amount: int = Field(gt=0)
+    other: int = 5
+
+
+@task(input_model=Bounded)
+def bounded(amount, other):
+    return amount
+
+
+def test_a_bad_value_is_refused_when_the_task_is_called():
+    with pytest.raises(TaskInputValidationError, match="amount"):
+        with Graph(name="call"):
+            bounded(amount="bad", other=1)
+
+
+def test_a_bad_value_is_refused_when_it_is_passed_to_add_task():
+    graph = Graph(name="added")
+    with pytest.raises(TaskInputValidationError, match="amount"):
+        graph.add_task(bounded, "b", amount="bad")
+
+
+def test_a_bad_value_is_refused_when_it_is_set_on_the_task():
+    graph = Graph(name="set")
+    node = graph.add_task(bounded, "b")
+    with pytest.raises(TaskInputValidationError, match="amount"):
+        node.set_inputs({"amount": "bad"})
+
+
+def test_a_constraint_the_socket_cannot_see_is_refused_at_add_task():
+    graph = Graph(name="constrained")
+    with pytest.raises(TaskInputValidationError, match="greater than 0"):
+        graph.add_task(bounded, "b", amount=-1)
+
+
+def test_without_the_check_add_task_accepts_the_constraint_breach(monkeypatch):
+    """The control: the socket layer types ``amount`` as ``int`` and cannot see ``gt=0``."""
+    from node_graph import input_model as module
+
+    monkeypatch.setattr(module, "validate_task_inputs", lambda task, inputs: None)
+    graph = Graph(name="unchecked")
+    assert graph.add_task(bounded, "b", amount=-1) is not None
+
+
+def test_writing_only_some_of_the_fields_is_not_a_missing_input():
+    """Inputs may be written a few at a time, and a link may supply the rest."""
+    graph = Graph(name="partial")
+    assert graph.add_task(bounded, "b") is not None
+    assert graph.add_task(bounded, "c", amount=1) is not None
+
+
+def test_a_task_written_into_an_input_is_a_reference_not_a_value():
+    graph = Graph(name="linked")
+    producer = graph.add_task(bounded, "p", amount=1)
+    assert graph.add_task(bounded, "c", amount=producer.outputs.result) is not None
