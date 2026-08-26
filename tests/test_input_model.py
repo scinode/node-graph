@@ -263,7 +263,11 @@ GOOD_PRICE = {"amount": Decimal("1.5"), "pair": (1, 2), "ratio": 0.5}
         ("pair", [1, 2, 3]),
         ("ratio", -1.0),
     ],
-    ids=["decimal-from-nonsense", "tuple-of-the-wrong-length", "constraint-the-socket-cannot-see"],
+    ids=[
+        "decimal-from-nonsense",
+        "tuple-of-the-wrong-length",
+        "constraint-the-socket-cannot-see",
+    ],
 )
 def test_a_bad_literal_fails_at_the_line_that_wrote_it(field, value):
     """A field whose socket identifier is ``any`` has no other build-time check."""
@@ -286,7 +290,11 @@ def test_a_bad_literal_fails_at_the_line_that_wrote_it(field, value):
         ("pair", [1, 2, 3]),
         ("ratio", -1.0),
     ],
-    ids=["decimal-from-nonsense", "tuple-of-the-wrong-length", "constraint-the-socket-cannot-see"],
+    ids=[
+        "decimal-from-nonsense",
+        "tuple-of-the-wrong-length",
+        "constraint-the-socket-cannot-see",
+    ],
 )
 def test_a_bad_literal_at_the_call_passes_without_checkpoint_a(
     without_wiring_checks, field, value

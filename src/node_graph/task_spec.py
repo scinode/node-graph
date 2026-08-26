@@ -247,13 +247,14 @@ class BaseHandle:
         typo in a graph body fails at the line that wrote it rather than after
         the graph has been submitted.
         """
-        from node_graph.input_model import input_model_of_callable, validate_wiring_inputs
+        from node_graph.input_model import (
+            input_model_of_callable,
+            validate_wiring_inputs,
+        )
 
         model = input_model_of_callable(exec_obj)
         if model is not None:
-            validate_wiring_inputs(
-                model, inputs, label=self.identifier.split(".")[-1]
-            )
+            validate_wiring_inputs(model, inputs, label=self.identifier.split(".")[-1])
 
     def __call__(self, *args, **kwargs):
         graph = self._get_current_graph()

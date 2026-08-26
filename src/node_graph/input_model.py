@@ -88,6 +88,9 @@ _UNRESOLVED = object()
 #: How deep a generic annotation is rebuilt before it is taken as a leaf.
 _MAX_ANNOTATION_DEPTH = 6
 
+#: ``Optional[T]``'s second argument, which stands for itself in a rebuild.
+_NONE_TYPE = type(None)
+
 
 class ModelContractError(TypeError):
     """Raised when a model and the function it describes disagree."""
@@ -299,9 +302,7 @@ def check_signature_against_model(
             f"How to fix: add the parameter(s) to {name}, or remove the field(s) from {model.__name__}."
         )
 
-    uncovered = [
-        parameter for parameter in parameters if parameter not in declared
-    ]
+    uncovered = [parameter for parameter in parameters if parameter not in declared]
     if uncovered:
         raise ModelContractError(
             f"'{name}' takes {', '.join(repr(p) for p in uncovered)}, which {model.__name__} does not declare.\n"
@@ -344,7 +345,7 @@ def is_socket_reference(value: Any) -> bool:
 
     if isinstance(value, BaseSocket):
         return True
-    return type(value) is TaggedValue and value._socket is not None
+    return isinstance(value, TaggedValue) and value._socket is not None
 
 
 def _accept_reference(value: Any, handler: Any, info: Any) -> Any:
@@ -353,7 +354,7 @@ def _accept_reference(value: Any, handler: Any, info: Any) -> Any:
 
     if is_socket_reference(value):
         return value
-    if type(value) is TaggedValue:
+    if isinstance(value, TaggedValue):
         value = value.__wrapped__
     return handler(value)
 
@@ -375,7 +376,7 @@ def _rebuild_generic(annotation: Any, rebuild: Callable[[Any], Any]) -> Any:
         return Annotated[tuple([rebuild(args[0]), *args[1:]])]
     try:
         return origin[
-            tuple(rebuild(arg) if arg is not type(None) else arg for arg in args)
+            tuple(rebuild(arg) if arg is not _NONE_TYPE else arg for arg in args)
         ]
     except TypeError:
         return annotation
@@ -397,9 +398,7 @@ def _reference_tolerant(annotation: Any, depth: int = 0) -> Any:
     if rebuilt is not None:
         return Annotated[rebuilt, WrapValidator(_accept_reference)]
     if _is_model(annotation):
-        return Annotated[
-            _wiring_shadow(annotation), WrapValidator(_accept_reference)
-        ]
+        return Annotated[_wiring_shadow(annotation), WrapValidator(_accept_reference)]
     return Annotated[annotation, WrapValidator(_accept_reference)]
 
 
@@ -447,7 +446,9 @@ def _plain_annotation(annotation: Any, depth: int = 0) -> Any:
     """Return ``annotation`` with every model replaced by its plain twin."""
     if depth > _MAX_ANNOTATION_DEPTH:
         return annotation
-    rebuilt = _rebuild_generic(annotation, lambda arg: _plain_annotation(arg, depth + 1))
+    rebuilt = _rebuild_generic(
+        annotation, lambda arg: _plain_annotation(arg, depth + 1)
+    )
     if rebuilt is not None:
         return rebuilt
     if _is_model(annotation):
@@ -480,7 +481,8 @@ def _plain_values(value: Any) -> Any:
     """
     if isinstance(value, BaseModel):
         return {
-            name: _plain_values(getattr(value, name)) for name in type(value).model_fields
+            name: _plain_values(getattr(value, name))
+            for name in type(value).model_fields
         }
     if isinstance(value, dict):
         return {key: _plain_values(item) for key, item in value.items()}
@@ -489,7 +491,9 @@ def _plain_values(value: Any) -> Any:
     return value
 
 
-def _content_of(model: Type[BaseModel], values: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _content_of(
+    model: Type[BaseModel], values: Any
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Return the JSON content ``model``'s twin reads in ``values``."""
     twin = _plain_twin(model)
     try:
