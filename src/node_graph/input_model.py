@@ -27,7 +27,12 @@ while storage and provenance keep the value the caller wrote.
 
 Storage is the engine adapter's business, but the rendering is the model's:
 :func:`model_dumper_for_socket` resolves a socket's path through the model
-tree and returns the function that renders that leaf.
+tree and returns the function that renders that leaf. Reading back is the
+same bargain the other way round: every leaf socket records what a body
+receives for it (:data:`BODY_RECEIVES`), so a field declaring a type pydantic
+can rebuild from plain data arrives as plain Python, and one declaring an
+engine's own data class -- or ``Any`` -- arrives as whatever the engine
+stored.
 
 A mapping whose size is decided at runtime is written as a typed container
 field, ``dict[str, T]``: it becomes a dynamic namespace whose members are
@@ -56,7 +61,15 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, ValidationError, WrapValidator, create_model
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    TypeAdapter,
+    ValidationError,
+    WrapValidator,
+    create_model,
+)
+from pydantic.errors import PydanticSchemaGenerationError
 from pydantic_core import PydanticSerializationError
 
 __all__ = [
@@ -64,6 +77,7 @@ __all__ = [
     "ModelDerivedValueError",
     "TaskInputValidationError",
     "TaskOutputValidationError",
+    "BODY_RECEIVES",
     "apply_models",
     "check_content_invariance",
     "check_signature_against_model",
@@ -91,6 +105,9 @@ _MAX_ANNOTATION_DEPTH = 6
 
 #: ``Optional[T]``'s second argument, which stands for itself in a rebuild.
 _NONE_TYPE = type(None)
+
+#: Socket extra naming what a body receives for a leaf: ``"python"`` or ``"node"``.
+BODY_RECEIVES = "body_receives"
 
 
 class ModelContractError(TypeError):
@@ -188,14 +205,87 @@ def _model_of_type(annotation: Any) -> Optional[Type[BaseModel]]:
     return base if _is_model(base) else None
 
 
+def _union_arms(annotation: Any) -> Optional[List[Any]]:
+    """Return a union's arms other than ``None``, or ``None`` if it is no union."""
+    from node_graph.socket_spec import _is_union_origin
+
+    if not _is_union_origin(get_origin(annotation)):
+        return None
+    return [arg for arg in get_args(annotation) if arg is not _NONE_TYPE]
+
+
+def _arm_receives(annotation: Any) -> str:
+    """Return ``"python"`` or ``"node"`` for one type, unions not considered."""
+    base = _strip_optional_type(annotation)
+    if base is Any or base is inspect.Parameter.empty:
+        return "node"
+    if _is_model(base):
+        return "python"
+    try:
+        TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=False))
+    except PydanticSchemaGenerationError:
+        return "node"
+    except Exception:
+        # A model, dataclass or TypedDict refuses the config argument because
+        # it carries its own; each is rebuilt from plain data all the same.
+        return "python"
+    return "python"
+
+
+def _body_receives(annotation: Any, label: str) -> str:
+    """Return ``"python"`` or ``"node"`` for what a body is handed for ``annotation``.
+
+    ``"python"`` when pydantic can build the declared type out of plain data,
+    so the engine's storage wrapper has to come off before the model sees the
+    value. ``"node"`` when the field can only be satisfied by an instance of a
+    class pydantic treats as arbitrary -- an engine's own data class, say --
+    and when the field declares ``Any``, which declares nothing to rebuild.
+
+    A union is read one arm at a time and every arm must give the same answer.
+    ``X | None`` is not a union in this sense: ``None`` is neither, so such a
+    field takes ``X``'s answer. A union spanning both -- ``int | orm.Int`` --
+    is refused: a socket delivers one form, and nothing here can choose.
+    """
+    arms = _union_arms(annotation)
+    if arms is None or len(arms) == 1:
+        return _arm_receives(annotation if arms is None else arms[0])
+    kinds = [(arm, _arm_receives(arm)) for arm in arms]
+    answers = {kind for _, kind in kinds}
+    if len(answers) == 1:
+        return answers.pop()
+    rebuilt = ", ".join(repr(arm) for arm, kind in kinds if kind == "python")
+    instanced = ", ".join(repr(arm) for arm, kind in kinds if kind == "node")
+    raise ModelContractError(
+        f"{label} declares {annotation!r}, whose arms disagree on how the value arrives: "
+        f"{rebuilt} are rebuilt from plain data, {instanced} only an instance satisfies.\n"
+        f"How to fix: declare {label} as one or the other. A socket delivers one form, so a "
+        "union spanning both leaves nothing to decide it."
+    )
+
+
+def _mark_body_arrival(spec: Any, annotation: Any, label: str) -> Any:
+    """Record on a leaf socket what a body receives for it.
+
+    A namespace holds no value of its own, so only leaves are marked. The mark
+    travels with the stored spec, which is what lets the read edge answer for a
+    socket alone, without resolving the model behind it.
+    """
+    if spec.is_namespace():
+        return spec
+    extras = dict(spec.meta.extras or {})
+    extras[BODY_RECEIVES] = _body_receives(annotation, label)
+    return replace(spec, meta=replace(spec.meta, extras=extras))
+
+
 def _fields_from_model(model: Type[BaseModel], spec: Any, api: Any) -> Any:
     """Overlay on ``spec`` what the model knows and ``from_model`` does not.
 
-    Three things: a field's requiredness, which ``from_model`` leaves at
+    Four things: a field's requiredness, which ``from_model`` leaves at
     ``True`` whatever the field's default; a default rendered JSON-safe,
-    because the spec is stored with the task; and a ``dict[str, T]`` field
-    turned into a typed dynamic namespace, so each key of the mapping is a
-    socket of its own and can be linked by name.
+    because the spec is stored with the task; a ``dict[str, T]`` field turned
+    into a typed dynamic namespace, so each key of the mapping is a socket of
+    its own and can be linked by name; and, on every leaf, what a body
+    receives for it (:func:`_body_receives`).
     """
     fields = dict(spec.fields or {})
     for name, field in model.model_fields.items():
@@ -210,10 +300,21 @@ def _fields_from_model(model: Type[BaseModel], spec: Any, api: Any) -> Any:
                 child = replace(
                     child, item=_fields_from_model(item_model, child.item, api)
                 )
+            elif child.item is not None:
+                child = replace(
+                    child,
+                    item=_mark_body_arrival(
+                        child.item, item_type, f"{model.__name__}.{name}[]"
+                    ),
+                )
         else:
             nested = _model_of_type(field.annotation)
             if nested is not None and child.is_namespace():
                 child = _fields_from_model(nested, child, api)
+            else:
+                child = _mark_body_arrival(
+                    child, field.annotation, f"{model.__name__}.{name}"
+                )
         child = replace(child, meta=replace(child.meta, required=field.is_required()))
         if not field.is_required() and not child.is_namespace():
             child = replace(
@@ -577,7 +678,6 @@ def validate_graph_inputs(
     inputs: Dict[str, Any],
     *,
     label: str,
-    adapter: Any = None,
 ) -> None:
     """Raise unless a graph's resolved inputs satisfy ``model``.
 
@@ -586,14 +686,12 @@ def validate_graph_inputs(
     caller keeps the tagged values it had: the body turns those tags into
     links, and a fresh object carries none.
 
-    ``adapter`` is the graph's serialization adapter, asked for the plain
-    Python behind whatever the engine wrapped each value in.
+    ``inputs`` arrive as the body will see them: the engine's read edge has
+    already given each leaf the form its field declares.
     """
     from node_graph.utils import untagged_copy
 
     given = untagged_copy(inputs)
-    if adapter is not None and hasattr(adapter, "to_python"):
-        given = adapter.to_python(given)
     try:
         validated = model.model_validate(given)
     except ValidationError as exc:

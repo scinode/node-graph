@@ -26,6 +26,7 @@ from pydantic import (
 from node_graph import Graph, task
 from node_graph.engine.local import LocalEngine
 from node_graph.input_model import (
+    BODY_RECEIVES,
     ModelContractError,
     ModelDerivedValueError,
     TaskInputValidationError,
@@ -836,3 +837,119 @@ def test_replacing_a_value_with_no_json_form_is_still_refused():
 def test_a_value_with_no_json_form_is_stored_as_it_stands():
     payload = Opaque()
     assert dump_model_field(HoldsAnOpaqueValue, "payload", payload) is payload
+
+
+# --------------------------------------------------------------------------
+# 9. What a body receives for each kind of field
+# --------------------------------------------------------------------------
+
+
+class Marker:
+    """A class pydantic can only accept instances of."""
+
+
+class EveryKind(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    text: str
+    number: int
+    fraction: float
+    flag: bool
+    mapping: dict
+    items: list
+    anything: Any
+    amount: Decimal
+    marker: Marker
+    nested: dict[str, int]
+
+
+@task(input_model=EveryKind)
+def every_kind(
+    text, number, fraction, flag, mapping, items, anything, amount, marker, nested
+):
+    return text
+
+
+def _arrival(name):
+    return every_kind._spec.inputs.fields[name].meta.extras[BODY_RECEIVES]
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["text", "number", "fraction", "flag", "mapping", "items", "amount"],
+)
+def test_a_field_pydantic_can_rebuild_is_read_as_python(field):
+    """The engine's wrapper comes off, because the model builds the value back."""
+    assert _arrival(field) == "python"
+
+
+@pytest.mark.parametrize("field", ["anything", "marker"])
+def test_a_field_only_an_instance_satisfies_is_read_as_a_node(field):
+    """``Any`` declares nothing to rebuild, and an arbitrary class wants its own instance."""
+    assert _arrival(field) == "node"
+
+
+def test_the_member_of_a_typed_mapping_carries_the_mark_too():
+    item = every_kind._spec.inputs.fields["nested"].item
+    assert item.meta.extras[BODY_RECEIVES] == "python"
+
+
+def test_a_nested_models_leaves_carry_the_mark_and_the_namespace_does_not():
+    class Inner(BaseModel):
+        x: int
+
+    class Outer(BaseModel):
+        inner: Inner
+
+    @task(input_model=Outer)
+    def outer(inner):
+        return inner
+
+    namespace = outer._spec.inputs.fields["inner"]
+    assert BODY_RECEIVES not in namespace.meta.extras
+    assert namespace.fields["x"].meta.extras[BODY_RECEIVES] == "python"
+
+
+def _kind_of(annotation):
+    """Return the mark a one-field model gives ``annotation``."""
+
+    class OneField(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+        field: annotation
+
+    @task(input_model=OneField)
+    def one_field(field):
+        return field
+
+    return one_field._spec.inputs.fields["field"].meta.extras[BODY_RECEIVES]
+
+
+@pytest.mark.parametrize(
+    "annotation, expected",
+    [
+        (Optional[int], "python"),
+        (Optional[Marker], "node"),
+        (Union[int, str], "python"),
+        (Union[Marker, Opaque], "node"),
+    ],
+    ids=["optional-python", "optional-node", "two-python-arms", "two-node-arms"],
+)
+def test_a_union_whose_arms_agree_takes_their_answer(annotation, expected):
+    """``None`` is neither kind, so ``X | None`` is read as ``X``."""
+    assert _kind_of(annotation) == expected
+
+
+def test_a_union_spanning_both_kinds_is_refused_at_decoration():
+    """A socket delivers one form, so nothing here could choose between them."""
+    with pytest.raises(ModelContractError) as excinfo:
+        _kind_of(Union[int, Marker])
+    message = str(excinfo.value)
+    assert "OneField.field" in message
+    assert "int" in message and "Marker" in message
+
+
+def test_a_none_arm_does_not_make_a_mixed_union_agree():
+    """The control: dropping ``None`` leaves the two disagreeing arms it was hiding."""
+    with pytest.raises(ModelContractError, match="OneField.field"):
+        _kind_of(Optional[Union[int, Marker]])
