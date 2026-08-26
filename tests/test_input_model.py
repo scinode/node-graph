@@ -672,6 +672,20 @@ def test_a_rewriting_validator_is_refused_at_the_run_edge_too():
 # --------------------------------------------------------------------------
 
 
+class BodyRan(RuntimeError):
+    """Raised by a body that should not have been reached."""
+
+
+@task(input_model=SpanInputs)
+def announcing_span(low, high):
+    raise BodyRan
+
+
+@task(inputs=spec_from_model(SpanInputs))
+def announcing_span_without_model(low, high):
+    raise BodyRan
+
+
 def test_the_body_receives_what_the_model_declares():
     @task(input_model=Coercions, outputs=["amount", "color", "pair"])
     def kinds(amount, color, pair):
@@ -689,16 +703,15 @@ def test_the_body_receives_what_the_model_declares():
 
 
 def test_a_stored_value_the_model_refuses_fails_before_the_body_runs():
-    ran = []
-
-    @task(input_model=SpanInputs)
-    def span_body(low, high):
-        ran.append(True)
-        return high - low
-
+    """The body announces itself by raising, and what comes back is the model's refusal."""
     with pytest.raises(TaskInputValidationError, match="low must be below high"):
-        span_body.run(low=9, high=3)
-    assert ran == []
+        announcing_span.run(low=9, high=3)
+
+
+def test_without_the_model_the_same_values_reach_the_body():
+    """The control: the same sockets, no contract, and the rule is never consulted."""
+    with pytest.raises(BodyRan):
+        announcing_span_without_model.run(low=9, high=3)
 
 
 class SumAndProduct(BaseModel):

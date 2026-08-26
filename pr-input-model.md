@@ -54,13 +54,13 @@ span_graph.build(low=9, high=3)
 
 ## Testing
 
-`tests/test_input_model.py`, 49 tests. Each checkpoint has a test that passes with its hook disabled, so the test is measuring the hook and not some other layer:
+`tests/test_input_model.py`, 50 tests. Each checkpoint has a test that passes with its hook disabled, so the test is measuring the hook and not some other layer:
 
 - **A** is parameterized over three fields the type map reads as `any` or `annotated` — a `Decimal` given nonsense, a `tuple[int, int]` given three items, a `Field(gt=0)` given `-1`. With the hook stubbed out, all three build without complaint. This is also the honest bound on what A adds: a leaf socket typed `int` already refuses a bad literal at `set_inputs`, so for those A changes the message, not the outcome.
 - **B**'s control is a cross-field rule over two ints, each of which any layer would accept on its own; with the hook stubbed out, `build(low=9, high=3)` succeeds. A second test drives a subgraph whose bound is produced by an upstream task under `LocalEngine`, which is the first moment that value exists.
-- **C** asserts the body never ran: a list the body appends to stays empty when the model rejects the inputs.
+- **C**'s body raises `BodyRan` if it is reached at all. With the model, `run(low=9, high=3)` comes back as the model's refusal; the control task with the same sockets and no model comes back as `BodyRan`.
 - **Link preservation** builds the same graph twice, once with A stubbed out, and compares every link; a companion test asserts `validate_wiring_inputs` hands back the very objects it was given, by `id`.
 - **Content invariance** is tested in both directions: a derivation given an already-correct value passes, the same derivation given a wrong one raises and names the field, and `Decimal`, `Enum` and tuple coercions all pass.
 - **The documented limits are tests too**, so they cannot rot silently: a field validator capping a value does not fire at A, and a `mode='before'` normalizer is not honoured there — with the fix (a widened `list[int] | list[list[int]]`) shown working beside it.
 
-Full suite: 412 passed, 1 skipped (363 before this branch, 49 new).
+Full suite: 413 passed, 1 skipped (363 passed, 1 skipped before this branch; the 50 new tests are the difference).
