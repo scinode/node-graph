@@ -21,6 +21,9 @@ from .mixins import IOOwnerMixin, WidgetRenderableMixin
 from node_graph.knowledge import KnowledgeGraph
 from dataclasses import dataclass
 from dataclasses import replace
+from functools import lru_cache
+from pydantic import ConfigDict, TypeAdapter, ValidationError
+from typing_extensions import TypedDict
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,29 @@ class GraphSpec:
         )
 
 
+class GraphMetadata(TypedDict, total=False):
+    """The keys `Graph.metadata` reserves for its own serialization bookkeeping.
+
+    `extra="allow"` keeps any other key a caller stashes in `metadata`. A
+    subclass declares a wider schema by inheriting from this one, and refuses
+    undeclared keys by overriding `__pydantic_config__` with `extra="forbid"`.
+    """
+
+    __pydantic_config__ = ConfigDict(extra="allow")
+
+    # The class to rebuild this graph as, written by `Graph.get_metadata()`.
+    graph_class: Dict[str, Any]
+    # The decorated callable's identity record, written by
+    # `utils/graph.py` when a graph is built from a `@task.graph` function.
+    definition: Dict[str, Any]
+
+
+@lru_cache(maxsize=None)
+def metadata_adapter(schema: type) -> TypeAdapter:
+    """Return a cached validator for a metadata schema."""
+    return TypeAdapter(schema)
+
+
 class Graph(IOOwnerMixin, WidgetRenderableMixin):
     """A collection of tasks and links.
 
@@ -94,29 +120,23 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     platform: str = "node_graph"
 
-    # Metadata keys this class reserves for its own serialization bookkeeping.
-    # Subclasses extend by union, never by override, so a subclass's reserved
-    # keys add to the base class's rather than replacing them:
-    # `_declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}`.
-    # `definition` is set by `utils/graph.py::graph._metadata.setdefault("definition", ...)`
-    # when a graph is built from a `@task.graph`-decorated function.
-    _declared_metadata_keys: frozenset = frozenset({"graph_class", "definition"})
-
-    # Opt-in: when True, a `metadata=` key outside `_declared_metadata_keys`
-    # raises at construction. Off by default so existing callers who stash
-    # arbitrary keys in `metadata` keep working unchanged.
-    _validate_metadata_keys: bool = False
+    # The TypedDict declaring what `metadata` may carry. A subclass widens it
+    # by inheriting from `GraphMetadata` and pointing this attribute at the
+    # result; that TypedDict's own `__pydantic_config__` decides whether keys
+    # outside it are kept or refused.
+    _metadata_schema: type = GraphMetadata
 
     @classmethod
-    def _validate_metadata(cls, metadata: Dict[str, Any]) -> None:
-        """Reject metadata keys outside `_declared_metadata_keys`, if validation is enabled."""
-        if not cls._validate_metadata_keys or not metadata:
-            return
-        unknown = set(metadata) - cls._declared_metadata_keys
-        if unknown:
-            raise ValueError(
-                f"Unknown metadata key(s) {sorted(unknown)}. Valid keys: {sorted(cls._declared_metadata_keys)}."
-            )
+    def validate_metadata(cls, metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Return a validated copy of `metadata`, leaving the argument untouched.
+
+        Raises `pydantic.ValidationError` (a `ValueError`) when a declared key
+        holds the wrong type, or when a key is absent from `_metadata_schema`
+        and that schema forbids extras.
+        """
+        return metadata_adapter(cls._metadata_schema).validate_python(
+            dict(metadata or {})
+        )
 
     def __init__(
         self,
@@ -165,8 +185,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
         self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid, graph=self)
-        self._validate_metadata(metadata or {})
-        self._metadata: Dict[str, Any] = dict(metadata or {})
+        self._metadata: Dict[str, Any] = self.validate_metadata(metadata)
 
         self.state = "CREATED"
         self.action = "NONE"
@@ -630,7 +649,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         return data
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Export graph metadata including *live* graph-level IO specs."""
+        """Export graph metadata, validated, including *live* graph-level IO specs."""
         meta: Dict[str, Any] = {}
         # also save the parent class information
         meta["graph_class"] = {
@@ -641,7 +660,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             if key == "graph_class":
                 continue
             meta[key] = value
-        return meta
+        return self.validate_metadata(meta)
 
     def export_tasks_to_dict(
         self, include_sockets: bool = False, should_serialize: bool = False
@@ -770,6 +789,12 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         # graph_type is discarded: old serialized graphs may still carry it,
         # but nothing constructs or reads it any more.
         extra_meta = {k: v for k, v in raw_meta.items() if k not in {"graph_type"}}
+        try:
+            extra_meta = cls.validate_metadata(extra_meta)
+        except ValidationError as exc:
+            raise ValueError(
+                f"Cannot load graph {ngdata.get('name')!r}: invalid metadata. {exc}"
+            ) from exc
         ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),

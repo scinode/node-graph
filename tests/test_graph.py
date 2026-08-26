@@ -1,5 +1,7 @@
 from node_graph import Graph, task, namespace
 from node_graph.config import INPUT_SOCKET_NAME, OUTPUT_SOCKET_NAME
+from node_graph.graph import GraphMetadata
+from pydantic import ConfigDict, ValidationError
 import pytest
 from typing import Any
 from node_graph.tasks.tests import test_float, test_add
@@ -273,49 +275,79 @@ def test_graph_metadata_roundtrip():
     assert restored._metadata["definition"]["package_version"] == "1.2.3"
 
 
-def test_declared_metadata_keys_extended_by_subclass():
-    """A subclass extends `_declared_metadata_keys` by union, not by override."""
-
-    class Subgraph(Graph):
-        _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
-
-    assert Subgraph._declared_metadata_keys == Graph._declared_metadata_keys | {"pk"}
-    assert "graph_class" in Subgraph._declared_metadata_keys
-    assert "definition" in Subgraph._declared_metadata_keys
+def test_metadata_schema_permissive_by_default():
+    """Base `Graph` keeps any metadata key, unchanged from before this feature existed."""
+    ng = Graph(name="permissive", metadata={"anything": "goes", "another": 1})
+    assert ng._metadata == {"anything": "goes", "another": 1}
+    assert ng.to_dict()["metadata"]["anything"] == "goes"
 
 
-def test_metadata_key_validation_is_opt_in():
-    """A subclass that turns on `_validate_metadata_keys` rejects undeclared keys."""
-
-    class StrictGraph(Graph):
-        _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
-        _validate_metadata_keys = True
-
-    StrictGraph(name="strict", metadata={"pk": 1})  # declared keys pass
-    with pytest.raises(ValueError, match="Unknown metadata key"):
-        StrictGraph(name="strict", metadata={"label": "not declared here"})
+def test_metadata_declared_key_type_is_checked():
+    """A declared key holding the wrong type is refused, even on permissive `Graph`."""
+    with pytest.raises(ValidationError, match="graph_class"):
+        Graph(name="wrong-type", metadata={"graph_class": "not a dict"})
 
 
-def test_metadata_key_validation_enforced_on_from_dict_reconstruction():
-    """`from_dict()` validates exactly like fresh construction: a payload carrying a
-    key outside the declared set — e.g. written by an older version of a validating
-    subclass, or hand-edited — raises, naming the offending key, rather than loading
-    silently. Affected data must have the stray key removed before it can be loaded."""
+def test_subclass_narrows_metadata_schema():
+    """A subclass declaring a wider TypedDict with `extra="forbid"` refuses a typo."""
+
+    class StrictMetadata(GraphMetadata, total=False):
+        __pydantic_config__ = ConfigDict(extra="forbid")
+
+        pk: int
 
     class StrictGraph(Graph):
-        _declared_metadata_keys = Graph._declared_metadata_keys | {"pk"}
-        _validate_metadata_keys = True
+        _metadata_schema = StrictMetadata
+
+    assert StrictGraph(name="strict", metadata={"pk": 1})._metadata == {"pk": 1}
+    with pytest.raises(ValidationError, match="typo_key"):
+        StrictGraph(name="strict", metadata={"typo_key": 1})
+    with pytest.raises(ValidationError, match="pk"):
+        StrictGraph(name="strict", metadata={"pk": "not an int"})
+
+
+def test_metadata_validated_at_serialization_not_at_mutation():
+    """`_metadata` is a plain dict: a stray key survives assignment and raises at `to_dict()`."""
+
+    class StrictMetadata(GraphMetadata, total=False):
+        __pydantic_config__ = ConfigDict(extra="forbid")
+
+    class StrictGraph(Graph):
+        _metadata_schema = StrictMetadata
+
+    ng = StrictGraph(name="strict")
+    ng._metadata["typo_key"] = 1  # no complaint here: no setter, no custom dict
+    with pytest.raises(ValidationError, match="typo_key"):
+        ng.to_dict()
+
+
+def test_metadata_schema_enforced_on_from_dict():
+    """`from_dict()` refuses a payload key the schema doesn't declare, naming graph and key."""
+
+    class StrictMetadata(GraphMetadata, total=False):
+        __pydantic_config__ = ConfigDict(extra="forbid")
+
+        pk: int
+
+    class StrictGraph(Graph):
+        _metadata_schema = StrictMetadata
 
     payload = StrictGraph(name="strict", metadata={"pk": 1}).to_dict()
     payload["metadata"]["legacy_key"] = "from an old version"
-    with pytest.raises(ValueError, match=r"Unknown metadata key\(s\) \['legacy_key'\]"):
+    with pytest.raises(ValueError) as excinfo:
         StrictGraph.from_dict(payload)
+    assert "Cannot load graph 'strict'" in str(excinfo.value)
+    assert "legacy_key" in str(excinfo.value)
 
 
-def test_metadata_key_validation_default_is_permissive():
-    """Base `Graph` accepts any metadata key, unchanged from before this feature existed."""
-    ng = Graph(name="permissive", metadata={"anything": "goes", "another": 1})
-    assert ng._metadata == {"anything": "goes", "another": 1}
+def test_to_dict_metadata_is_the_validated_copy():
+    """`to_dict()` writes exactly what `validate_metadata()` returns, not the raw dict."""
+    ng = Graph(name="dumped", metadata={"definition": {"module": "m"}, "spare": 1})
+    dumped = ng.to_dict()["metadata"]
+    assert dumped == Graph.validate_metadata(ng.get_metadata())
+    # the dump is a copy: mutating it leaves the graph's own metadata alone
+    dumped["spare"] = 2
+    assert ng._metadata["spare"] == 1
 
 
 def test_graph_definition_metadata_from_build():
