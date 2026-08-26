@@ -32,6 +32,7 @@ class FunctionTask(Task):
         error_handlers: Optional[Dict[str, ErrorHandlerSpec]] = None,
         metadata: Optional[dict] = None,
         version: Optional[str] = None,
+        executor: Optional[Callable] = None,
     ) -> TaskSpec:
         """
         - infers function I/O
@@ -46,7 +47,10 @@ class FunctionTask(Task):
         func_in, func_out = infer_specs_from_callable(obj, input_spec, output_spec)
         error_handlers = normalize_error_handlers(error_handlers)
         metadata = dict(metadata or {})
-        executor = RuntimeExecutor.from_callable(obj)
+        # The spec is inferred from ``obj``, so its signature, source and
+        # return annotation stay visible even when something else runs.
+        run_callable = executor or obj
+        executor = RuntimeExecutor.from_callable(run_callable)
         # We always use the EMBEDDED schema for the function task, but when storing the spec in the DB,
         # we will check if the callable is a BaseHandler, and switch the schema_source to HANDLER accordingly.
         # This avoids cyclic import.
@@ -66,5 +70,5 @@ class FunctionTask(Task):
         )
         is_graph_task = str(task_type).upper() == "GRAPH"
         handle = GraphTaskHandle(spec) if is_graph_task else TaskHandle(spec)
-        handle._callable = obj
+        handle._callable = run_callable
         return handle
