@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import enum
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Annotated, Any, Optional, Union
 
 import pytest
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -29,6 +30,7 @@ from node_graph.input_model import (
     ModelDerivedValueError,
     TaskInputValidationError,
     TaskOutputValidationError,
+    dump_model_field,
     spec_from_model,
     validate_wiring_inputs,
 )
@@ -154,8 +156,14 @@ def test_a_mapping_keyed_by_anything_but_str_is_refused():
         spec_from_model(IntKeyed)
 
 
-def test_no_class_path_is_written_into_the_task():
-    """The spec stored with the task names no class: the model is reached through the code."""
+def test_no_class_path_is_imported_to_rebuild_a_value():
+    """A moved class cannot break stored data: nothing reads a path out of the spec to load it.
+
+    The class's name is still recorded, under ``py_type``, and is only ever
+    compared as a string -- by link type-checking and in error messages. The
+    ``structured_type`` descriptor, which names a class to import, is the one
+    a model contract has no use for: the model rebuilds the value instead.
+    """
 
     class PaintInputs(BaseModel):
         color: Color
@@ -164,7 +172,9 @@ def test_no_class_path_is_written_into_the_task():
     def paint(color):
         return color
 
-    assert "structured_type" not in paint._spec.inputs.fields["color"].meta.extras
+    extras = paint._spec.inputs.fields["color"].meta.extras
+    assert "structured_type" not in extras
+    assert extras["py_type"].endswith("Color")
 
 
 # --------------------------------------------------------------------------
@@ -777,3 +787,52 @@ def test_the_model_still_validates_when_called_directly():
     """The contract lives on the model, so it holds outside a graph too."""
     with pytest.raises(ValidationError):
         SpanInputs(low=9, high=3)
+
+
+# --------------------------------------------------------------------------
+# 8. A value the model has no JSON form for
+# --------------------------------------------------------------------------
+
+
+class Opaque:
+    """An object with no JSON form at all."""
+
+
+class HoldsAnOpaqueValue(BaseModel):
+    payload: Any
+    n: int
+
+
+@task(input_model=HoldsAnOpaqueValue)
+def holds_an_opaque_value(payload, n):
+    return n
+
+
+def test_a_value_with_no_json_form_does_not_break_the_check():
+    """It is compared as the object it is, rather than aborting on a serializer error."""
+    assert holds_an_opaque_value.run(payload=Opaque(), n=1) == 1
+
+
+class ReplacesAnOpaqueValue(BaseModel):
+    payload: Any
+    n: int
+
+    @model_validator(mode="after")
+    def _replace(self):
+        self.payload = Opaque()
+        return self
+
+
+@task(input_model=ReplacesAnOpaqueValue)
+def replaces_an_opaque_value(payload, n):
+    return n
+
+
+def test_replacing_a_value_with_no_json_form_is_still_refused():
+    with pytest.raises(ModelDerivedValueError, match="'payload'"):
+        replaces_an_opaque_value.run(payload=Opaque(), n=1)
+
+
+def test_a_value_with_no_json_form_is_stored_as_it_stands():
+    payload = Opaque()
+    assert dump_model_field(HoldsAnOpaqueValue, "payload", payload) is payload

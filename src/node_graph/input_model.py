@@ -57,6 +57,7 @@ from typing import (
 )
 
 from pydantic import BaseModel, ValidationError, WrapValidator, create_model
+from pydantic_core import PydanticSerializationError
 
 __all__ = [
     "ModelContractError",
@@ -494,13 +495,28 @@ def _plain_values(value: Any) -> Any:
 def _content_of(
     model: Type[BaseModel], values: Any
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """Return the JSON content ``model``'s twin reads in ``values``."""
+    """Return the content ``model``'s twin reads in ``values``, field by field.
+
+    A field is rendered as JSON, which is the form two values can be compared
+    in whatever they are spelled as. A field pydantic cannot render -- an
+    engine's data node or any object under ``Any`` -- keeps the object itself
+    instead, so it is compared as it stands rather than aborting the check
+    with a serialization error.
+    """
     twin = _plain_twin(model)
     try:
         instance = twin.model_validate(_plain_values(values))
     except ValidationError as exc:
         return None, str(exc)
-    return instance.model_dump(mode="json", warnings=False), None
+    content: Dict[str, Any] = {}
+    for name in type(instance).model_fields:
+        try:
+            content[name] = instance.model_dump(
+                mode="json", include={name}, warnings=False
+            )[name]
+        except (PydanticSerializationError, KeyError):
+            content[name] = getattr(instance, name)
+    return content, None
 
 
 def check_content_invariance(
@@ -647,9 +663,17 @@ def dump_model_field(model: Type[BaseModel], name: str, value: Any) -> Any:
     The value is placed in an unvalidated instance and dumped through the
     model, so a ``field_serializer`` declared on ``model`` decides the stored
     form. Only ``name`` is dumped, so the other fields need not be present.
+
+    A value the model has no JSON form for -- an engine's data node, an object
+    under ``Any`` -- and a field ``Field(exclude=True)`` keeps out of a dump
+    are returned as they are, for the engine's own serialization to store or
+    to refuse in its own words.
     """
     holder = model.model_construct(**{name: value})
-    return holder.model_dump(mode="json", include={name}, warnings=False)[name]
+    try:
+        return holder.model_dump(mode="json", include={name}, warnings=False)[name]
+    except (PydanticSerializationError, KeyError):
+        return value
 
 
 def dump_model_item(model: Type[BaseModel], name: str, key: str, value: Any) -> Any:
