@@ -239,6 +239,22 @@ class BaseHandle:
             )
         return dict(kwargs)
 
+    def _validate_call_inputs(self, exec_obj, inputs) -> None:
+        """Check what is written at this call against the task's input model.
+
+        A socket reference passes: it stands for a value nobody has yet. Every
+        literal beside it is checked against the field it is written to, so a
+        typo in a graph body fails at the line that wrote it rather than after
+        the graph has been submitted.
+        """
+        from node_graph.input_model import input_model_of_callable, validate_wiring_inputs
+
+        model = input_model_of_callable(exec_obj)
+        if model is not None:
+            validate_wiring_inputs(
+                model, inputs, label=self.identifier.split(".")[-1]
+            )
+
     def __call__(self, *args, **kwargs):
         graph = self._get_current_graph()
 
@@ -255,6 +271,7 @@ class BaseHandle:
         if isinstance(exec_obj, BaseHandle) and hasattr(exec_obj, "_callable"):
             exec_obj = exec_obj._callable
         prepared_inputs = self._prepare_call_inputs(exec_obj, *args, **kwargs)
+        self._validate_call_inputs(exec_obj, prepared_inputs)
 
         task.set_inputs(prepared_inputs)
 
