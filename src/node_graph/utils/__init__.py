@@ -105,6 +105,24 @@ def resolve_tagged_values(inputs: Any) -> Any:
     return inputs
 
 
+def untagged_copy(inputs: Any) -> Any:
+    """Return a copy of ``inputs`` with every ``TaggedValue`` unwrapped.
+
+    ``resolve_tagged_values`` unwraps in place, which is right when the caller
+    is done with the tags and wrong when it is not: a graph body still needs
+    them to draw its links.
+    """
+    from node_graph.socket import TaggedValue
+
+    if isinstance(inputs, TaggedValue):
+        return untagged_copy(inputs.__wrapped__)
+    if isinstance(inputs, dict):
+        return {key: untagged_copy(value) for key, value in inputs.items()}
+    if isinstance(inputs, (list, tuple)):
+        return type(inputs)(untagged_copy(value) for value in inputs)
+    return inputs
+
+
 def get_arg_type(name: str, args_data: dict, arg_type: str = "kwargs") -> None:
     """Get the argument type from the input data."""
     if arg_type.upper() == "ARGS":
