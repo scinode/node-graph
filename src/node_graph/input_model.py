@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+from copy import copy
 from dataclasses import replace
 from typing import (
     Annotated,
@@ -577,6 +578,20 @@ def _plain_annotation(annotation: Any, depth: int = 0) -> Any:
     return annotation
 
 
+def _comparable_field(field: Any) -> Any:
+    """Return ``field`` with ``exclude`` cleared, so its content is comparable.
+
+    ``Field(exclude=True)`` keeps a field out of a dump, which would keep it
+    out of the comparison too: a rule rewriting that field would then pass
+    unseen. Exclusion is about what is rendered, not about what was written.
+    """
+    if getattr(field, "exclude", None) is None:
+        return field
+    field = copy(field)
+    field.exclude = None
+    return field
+
+
 @functools.lru_cache(maxsize=None)
 def _plain_twin(model: Type[BaseModel]) -> Type[BaseModel]:
     """Return ``model``'s fields with its validators and serializers left out.
@@ -588,7 +603,7 @@ def _plain_twin(model: Type[BaseModel]) -> Type[BaseModel]:
     input said before any rule ran.
     """
     fields = {
-        name: (_plain_annotation(field.annotation), field)
+        name: (_plain_annotation(field.annotation), _comparable_field(field))
         for name, field in model.model_fields.items()
     }
     return create_model(  # type: ignore[call-overload]

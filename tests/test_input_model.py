@@ -1028,3 +1028,38 @@ def test_an_arbitrary_type_is_accepted_where_its_config_allows_it():
         )
         == "a"
     )
+
+
+# --------------------------------------------------------------------------
+# 11. A field kept out of the model's dump
+# --------------------------------------------------------------------------
+
+
+class Excluded(BaseModel):
+    secret: str = Field(exclude=True)
+    n: int
+
+    @field_validator("secret")
+    @classmethod
+    def _rewrite(cls, value):
+        return value + "-REWRITTEN"
+
+
+@task(input_model=Excluded)
+def excluded(secret, n):
+    return secret
+
+
+def test_a_field_kept_out_of_a_dump_is_still_compared():
+    """``exclude=True`` says what is rendered, not what may be rewritten unseen."""
+    with pytest.raises(ModelDerivedValueError, match="'secret'"):
+        excluded.run(secret="abc", n=1)
+
+
+def test_an_excluded_fields_default_is_stored_as_it_stands():
+    """``dump_model_field`` has no rendered form to give, and says the value instead."""
+
+    class WithExcludedDefault(BaseModel):
+        secret: str = Field(default="abc", exclude=True)
+
+    assert dump_model_field(WithExcludedDefault, "secret", "abc") == "abc"
