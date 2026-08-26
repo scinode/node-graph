@@ -1063,3 +1063,123 @@ def test_an_excluded_fields_default_is_stored_as_it_stands():
         secret: str = Field(default="abc", exclude=True)
 
     assert dump_model_field(WithExcludedDefault, "secret", "abc") == "abc"
+
+
+# --------------------------------------------------------------------------
+# 12. The reference the invariance check compares against
+# --------------------------------------------------------------------------
+
+
+class MutatesInPlace(BaseModel):
+    rows: Any
+    n: int
+
+    @model_validator(mode="after")
+    def _append(self):
+        self.rows.append("INJECTED")
+        return self
+
+
+@task(input_model=MutatesInPlace)
+def mutates_in_place(rows, n):
+    return list(rows)
+
+
+def test_a_validator_that_rewrites_its_input_in_place_is_refused():
+    """The reference is read before the model runs, so there is still one to compare with."""
+    with pytest.raises(ModelDerivedValueError, match="'rows'"):
+        mutates_in_place.run(rows=["a"], n=1)
+
+
+class Rebinds(BaseModel):
+    rows: list
+    n: int
+
+    @model_validator(mode="after")
+    def _rebind(self):
+        self.rows = [*self.rows, "INJECTED"]
+        return self
+
+
+@task(input_model=Rebinds)
+def rebinds(rows, n):
+    return list(rows)
+
+
+def test_a_validator_that_replaces_its_input_is_refused():
+    with pytest.raises(ModelDerivedValueError, match="'rows'"):
+        rebinds.run(rows=["a"], n=1)
+
+
+class Leaf(BaseModel):
+    x: int
+
+
+class ReachesInside(BaseModel):
+    model_config = ConfigDict(revalidate_instances="never")
+
+    leaf: Leaf
+    n: int
+
+    @model_validator(mode="after")
+    def _reach(self):
+        self.leaf.x = 999
+        return self
+
+
+@task(input_model=ReachesInside)
+def reaches_inside(leaf, n):
+    return leaf.x
+
+
+def test_a_validator_that_reaches_into_a_nested_instance_is_refused():
+    """The caller's own instance is mutated, so only a reference taken first sees it."""
+    with pytest.raises(ModelDerivedValueError, match="'leaf'"):
+        reaches_inside.run(leaf=Leaf(x=1), n=1)
+
+
+def test_without_taking_the_reference_first_the_mutation_is_invisible():
+    """The control: read the reference after the model ran and both sides say the same."""
+    from node_graph import input_model as module
+
+    given = {"rows": ["a"], "n": 1}
+    validated = MutatesInPlace.model_validate(dict(given))
+    after_the_fact = module.content_snapshot(MutatesInPlace, given)
+    module.check_content_invariance(
+        MutatesInPlace, after_the_fact, validated, label="control"
+    )
+    assert given["rows"] == ["a", "INJECTED"]
+
+
+# --------------------------------------------------------------------------
+# 13. An annotation's own validators run on both sides
+# --------------------------------------------------------------------------
+
+
+class AnnotatedIdempotent(BaseModel):
+    amount: Annotated[int, AfterValidator(lambda value: abs(value))]
+
+
+@task(input_model=AnnotatedIdempotent)
+def annotated_idempotent(amount):
+    return amount
+
+
+def test_an_idempotent_annotation_validator_passes():
+    """It runs on both sides and lands on the same value, so nothing changed."""
+    assert annotated_idempotent.run(amount=-6) == 6
+
+
+class AnnotatedDoubling(BaseModel):
+    amount: Annotated[int, AfterValidator(lambda value: value * 2)]
+
+
+@task(input_model=AnnotatedDoubling)
+def annotated_doubling(amount):
+    return amount
+
+
+def test_a_non_idempotent_annotation_validator_is_refused():
+    """Running twice doubles twice, so the two sides disagree and the write is refused."""
+    with pytest.raises(ModelDerivedValueError, match="changed it from 6 to 12"):
+        annotated_doubling.run(amount=3)

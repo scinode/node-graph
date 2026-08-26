@@ -54,6 +54,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    NamedTuple,
     Optional,
     Tuple,
     Type,
@@ -79,8 +80,10 @@ __all__ = [
     "TaskInputValidationError",
     "TaskOutputValidationError",
     "BODY_RECEIVES",
+    "ContentSnapshot",
     "apply_models",
     "check_content_invariance",
+    "content_snapshot",
     "check_signature_against_model",
     "dump_model_field",
     "input_model_of_callable",
@@ -659,28 +662,56 @@ def _content_of(
     return content, None
 
 
+class ContentSnapshot(NamedTuple):
+    """What a model's inputs said, read before any of its validators ran."""
+
+    content: Optional[Dict[str, Any]]
+    error: Optional[str]
+    names: Tuple[str, ...]
+
+
+def content_snapshot(model: Type[BaseModel], given: Dict[str, Any]) -> ContentSnapshot:
+    """Return what ``given`` says, read before ``model`` is allowed to run.
+
+    Taken first and kept, because a validator may rewrite the very values it
+    is judged against: one that appends to a list in place, or reaches into a
+    nested model instance, leaves nothing behind to compare with. Rendering
+    the values to JSON here is what makes the snapshot independent of what
+    happens to them afterwards.
+    """
+    content, error = _content_of(model, given)
+    return ContentSnapshot(content, error, tuple(given))
+
+
 def check_content_invariance(
     model: Type[BaseModel],
-    given: Dict[str, Any],
+    before_snapshot: ContentSnapshot,
     validated: BaseModel,
     *,
     label: str,
 ) -> None:
-    """Raise if validating ``given`` changed what any of its fields says.
+    """Raise if validating changed what any supplied field says.
 
-    Coercion is free to change how a value is spelled -- ``'60'`` may become a
-    ``Decimal`` and a list a tuple -- because both spellings carry the same
-    content. Deriving a value is not: the body would then run on a value that
-    never reached storage, so provenance would record one input and the body
-    would have seen another. A rule that leaves an already-resolved value
-    alone therefore passes, and one that rewrites it is refused.
+    ``before_snapshot`` comes from :func:`content_snapshot`, taken before the
+    model ran. Coercion is free to change how a value is spelled -- ``'60'``
+    may become a ``Decimal`` and a list a tuple -- because both spellings
+    carry the same content. Deriving a value is not: the body would then run
+    on a value that never reached storage, so provenance would record one
+    input and the body would have seen another. A rule that leaves an
+    already-resolved value alone therefore passes, and one that rewrites it is
+    refused.
 
-    Only the fields ``given`` supplies are compared, so a default filling a
+    Only the fields the caller supplied are compared, so a default filling a
     field the caller omitted is not a change. Validators written into an
     annotation (``Annotated[int, AfterValidator(...)]``) are part of the type
-    and run on both sides, so they are not seen here.
+    and run on both sides of the comparison, so they must be idempotent: one
+    that doubles its input is refused, because the second run doubles it
+    again.
+
+    A field the model has no JSON form for is compared as the object it is,
+    which catches a rule that replaces it and not one that reaches inside it.
     """
-    before, before_error = _content_of(model, given)
+    before, before_error, names = before_snapshot
     after, after_error = _content_of(model, _plain_values(validated))
     if before_error is not None:
         raise ModelDerivedValueError(
@@ -694,7 +725,7 @@ def check_content_invariance(
         raise ModelDerivedValueError(
             f"'{label}' got values from {model.__name__} that its own fields refuse.\n{after_error}"
         )
-    for name in given:
+    for name in names:
         if name not in before or name not in after:
             continue
         if before[name] != after[name]:
@@ -731,13 +762,14 @@ def validate_graph_inputs(
     from node_graph.utils import untagged_copy
 
     given = untagged_copy(inputs)
+    before = content_snapshot(model, given)
     try:
         validated = model.model_validate(given)
     except ValidationError as exc:
         raise TaskInputValidationError(
             f"Graph '{label}' got inputs {model.__name__} rejects:\n{exc}"
         ) from exc
-    check_content_invariance(model, given, validated, label=label)
+    check_content_invariance(model, before, validated, label=label)
 
 
 # --------------------------------------------------------------------------
@@ -765,13 +797,14 @@ def validated_callable(
     @functools.wraps(func)
     def call(**kwargs: Any) -> Any:
         if input_model is not None:
+            before = content_snapshot(input_model, kwargs)
             try:
                 validated = input_model.model_validate(kwargs)
             except ValidationError as exc:
                 raise TaskInputValidationError(
                     f"Task '{label}' got inputs {input_model.__name__} rejects:\n{exc}"
                 ) from exc
-            check_content_invariance(input_model, kwargs, validated, label=label)
+            check_content_invariance(input_model, before, validated, label=label)
             kwargs = dict(validated)
         result = func(**kwargs)
         if output_model is not None:
