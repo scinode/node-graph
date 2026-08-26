@@ -18,10 +18,12 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PlainSerializer,
     ValidationError,
     field_validator,
     model_validator,
 )
+from typing_extensions import TypedDict
 
 from node_graph import Graph, task
 from node_graph.engine.local import LocalEngine
@@ -153,6 +155,34 @@ def test_an_open_topped_model_is_refused():
 
     with pytest.raises(ModelContractError, match="declares no contract"):
         spec_from_model(OpenTopped)
+
+
+def test_a_nested_open_topped_model_is_refused_too():
+    """A field the nested model admits has no socket, so it never reaches storage."""
+
+    class OpenInner(BaseModel):
+        model_config = ConfigDict(extra="allow")
+        x: int
+
+    class HoldsIt(BaseModel):
+        inner: OpenInner
+
+    with pytest.raises(ModelContractError, match="OpenInner sets extra='allow'"):
+        spec_from_model(HoldsIt)
+
+
+def test_an_open_topped_model_inside_a_container_is_refused_too():
+    """The walk follows containers, so hiding the model in a list changes nothing."""
+
+    class OpenInner(BaseModel):
+        model_config = ConfigDict(extra="allow")
+        x: int
+
+    class HoldsThem(BaseModel):
+        rows: list[OpenInner]
+
+    with pytest.raises(ModelContractError, match="OpenInner sets extra='allow'"):
+        spec_from_model(HoldsThem)
 
 
 def test_a_mapping_keyed_by_anything_but_str_is_refused():
@@ -1062,6 +1092,33 @@ def test_a_field_kept_out_of_a_dump_is_still_compared():
         excluded.run(secret="abc", n=1)
 
 
+class HiddenByItsAnnotation(BaseModel):
+    """Every value renders as ``0``, so a rewrite leaves no trace in the dump."""
+
+    amount: Annotated[int, PlainSerializer(lambda value: 0, return_type=int)]
+
+    @field_validator("amount")
+    @classmethod
+    def _double(cls, value):
+        return value * 2
+
+
+@task(input_model=HiddenByItsAnnotation)
+def hidden_by_its_annotation(amount):
+    return amount
+
+
+def test_a_serializer_written_into_the_annotation_cannot_hide_a_rewrite():
+    """It renders, so the twin drops it and compares what the field actually says."""
+    with pytest.raises(ModelDerivedValueError, match="changed it from 1 to 2"):
+        hidden_by_its_annotation.run(amount=1)
+
+
+def test_the_same_serializer_still_decides_the_stored_form():
+    """The control: dropping it from the twin does not drop it from storage."""
+    assert dump_model_field(HiddenByItsAnnotation, "amount", 7) == 0
+
+
 def test_an_excluded_fields_default_is_stored_as_it_stands():
     """``dump_model_field`` has no rendered form to give, and says the value instead."""
 
@@ -1318,3 +1375,255 @@ def test_a_task_written_into_an_input_is_a_reference_not_a_value():
     graph = Graph(name="linked")
     producer = graph.add_task(bounded, "p", amount=1)
     assert graph.add_task(bounded, "c", amount=producer.outputs.result) is not None
+
+
+# --------------------------------------------------------------------------
+# 16. A value whose inequality is not a yes or no
+# --------------------------------------------------------------------------
+
+
+class HoldsAnArray(BaseModel):
+    payload: Any
+    n: int
+
+
+@task(input_model=HoldsAnArray)
+def holds_an_array(payload, n):
+    return n
+
+
+class ReplacesTheArray(BaseModel):
+    payload: Any
+    n: int
+
+    @model_validator(mode="after")
+    def _replace(self):
+        import numpy
+
+        self.payload = numpy.array([9, 9])
+        return self
+
+
+@task(input_model=ReplacesTheArray)
+def replaces_the_array(payload, n):
+    return n
+
+
+@pytest.mark.parametrize("size", [1, 2], ids=["one-element", "two-elements"])
+def test_an_array_the_model_leaves_alone_passes(size):
+    """``array != array`` answers with an array, which the check must not read as a bool."""
+    numpy = pytest.importorskip("numpy")
+    assert holds_an_array.run(payload=numpy.arange(size), n=1) == 1
+
+
+@pytest.mark.parametrize("size", [1, 2], ids=["one-element", "two-elements"])
+def test_replacing_an_array_is_still_refused(size):
+    """The control: the comparison still decides, it just cannot ask ``if``."""
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(ModelDerivedValueError, match="'payload'"):
+        replaces_the_array.run(payload=numpy.arange(size), n=1)
+
+
+# --------------------------------------------------------------------------
+# 17. A container of values only an instance satisfies
+# --------------------------------------------------------------------------
+
+
+def _spec_of(annotation):
+    """Return the spec a one-field model gives ``annotation``."""
+
+    class OneField(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+        field: annotation
+
+    return spec_from_model(OneField).fields["field"]
+
+
+class MarkerRow(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    marker: Marker
+
+
+class MixedRow(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    marker: Marker
+    count: int
+
+
+class MarkerEntry(TypedDict):
+    marker: Marker
+
+
+class MixedEntry(TypedDict):
+    marker: Marker
+    count: int
+
+
+def test_a_list_of_values_only_an_instance_satisfies_is_refused():
+    """Storage keeps a list as one node of plain data, so the members cannot come back."""
+    with pytest.raises(ModelContractError, match="cannot round-trip through storage"):
+        _spec_of(list[Marker])
+
+
+def test_the_refusal_names_the_mapping_that_does_work():
+    with pytest.raises(ModelContractError, match=r"dict\[str, Marker\]"):
+        _spec_of(list[Marker])
+
+
+def test_a_mapping_of_the_same_type_is_the_shape_that_survives():
+    """The control: one socket, and one node, per key."""
+    spec = _spec_of(dict[str, Marker])
+    assert spec.meta.dynamic is True
+    assert spec.item.meta.extras[BODY_RECEIVES] == "node"
+
+
+def test_a_list_of_plain_data_is_untouched():
+    """The refusal is about what the members are, not about the list."""
+    assert _spec_of(list[int]).meta.extras[BODY_RECEIVES] == "python"
+
+
+def test_a_list_of_anything_is_untouched():
+    """``Any`` declares nothing, so it declares nothing to refuse either."""
+    assert _spec_of(list[Any]).meta.extras[BODY_RECEIVES] == "python"
+
+
+def test_a_typed_dict_of_engine_types_arrives_as_the_engine_stored_it():
+    """Pydantic builds the mapping readily; what is inside it still wants an instance."""
+    assert _spec_of(MarkerEntry).meta.extras[BODY_RECEIVES] == "node"
+
+
+def test_a_typed_dict_whose_members_disagree_is_refused():
+    with pytest.raises(ModelContractError, match="whose members disagree"):
+        _spec_of(MixedEntry)
+
+
+def test_a_model_in_a_list_is_read_through_its_own_fields():
+    """``list[MarkerRow]`` is a list of values only an instance satisfies, once removed."""
+    with pytest.raises(ModelContractError, match="cannot round-trip through storage"):
+        _spec_of(list[MarkerRow])
+
+
+def test_a_model_in_a_list_whose_members_disagree_is_refused():
+    with pytest.raises(ModelContractError, match="whose members disagree"):
+        _spec_of(list[MixedRow])
+
+
+def test_a_list_of_models_of_plain_data_still_works():
+    """The control: the same shape, with members the model can rebuild."""
+    assert _spec_of(list[Point]).meta.extras[BODY_RECEIVES] == "python"
+
+
+def test_a_union_refusal_reads_as_a_sentence():
+    """One arm on each side, so the verbs are singular and ``Any`` says what it is."""
+    with pytest.raises(ModelContractError) as excinfo:
+        _spec_of(Union[int, Marker])
+    message = str(excinfo.value)
+    assert "int is rebuilt from plain data" in message
+    assert "Marker arrives as the engine stored it" in message
+
+
+def test_an_any_arm_is_named_for_what_it_declares():
+    with pytest.raises(ModelContractError, match="Any declares nothing to rebuild"):
+        _spec_of(Union[int, Any])
+
+
+# --------------------------------------------------------------------------
+# 18. A field reachable only by its alias
+# --------------------------------------------------------------------------
+
+
+class AliasedOnly(BaseModel):
+    """No ``populate_by_name``: as written, the model takes ``qty`` and not ``amount``."""
+
+    amount: int = Field(alias="qty")
+
+
+@task(input_model=AliasedOnly)
+def aliased_only(amount):
+    return amount
+
+
+def test_the_socket_is_named_by_the_field_not_the_alias():
+    assert set(aliased_only._spec.inputs.fields) == {"amount"}
+
+
+def test_an_aliased_field_is_accepted_under_the_name_that_names_its_socket():
+    """The socket delivers ``amount``, so every checkpoint has to take it."""
+    assert aliased_only.run(amount=5) == 5
+
+
+def test_an_aliased_field_is_still_accepted_under_its_alias():
+    """Widening what is accepted takes nothing away from the model as written."""
+    assert AliasedOnly.model_validate({"qty": 5}).amount == 5
+
+
+def test_a_field_renamed_by_an_alias_generator_is_accepted_too():
+    class Generated(BaseModel):
+        model_config = ConfigDict(alias_generator=lambda name: name.upper())
+
+        amount: int
+
+    @task(input_model=Generated)
+    def generated(amount):
+        return amount
+
+    assert generated.run(amount=5) == 5
+
+
+def test_the_model_as_written_still_refuses_the_field_name():
+    """The control: the acceptance is added for the contract, not taken from the user."""
+    with pytest.raises(ValidationError):
+        AliasedOnly.model_validate({"amount": 5})
+
+
+# --------------------------------------------------------------------------
+# 19. What the body returns
+# --------------------------------------------------------------------------
+
+
+class OpaqueOutput(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    payload: Marker
+    n: int
+
+
+def test_an_output_with_no_json_form_is_returned_as_it_stands():
+    """One field the model cannot render does not cost the others theirs.
+
+    Dumping the whole model raises on ``Marker``; per field, only that field
+    has no rendering and it keeps the object instead. The engine copies the
+    object on its way out, so it is compared by type.
+    """
+
+    @task(output_model=OpaqueOutput)
+    def emits(x):
+        return {"payload": Marker(), "n": x}
+
+    returned = emits.run(x=3)
+    assert isinstance(returned["payload"], Marker)
+    assert returned["n"] == 3
+
+
+def test_a_returned_key_the_model_does_not_declare_is_refused():
+    """It has no socket to be written to, so it would be dropped between here and there."""
+
+    @task(output_model=SumAndProduct)
+    def emits_extra(x, y):
+        return {"total": x + y, "product": x * y, "difference": x - y}
+
+    with pytest.raises(TaskOutputValidationError, match="'difference'"):
+        emits_extra.run(x=3, y=2)
+
+
+def test_the_declared_keys_alone_still_pass():
+    """The control: the same body without the extra key is accepted."""
+
+    @task(output_model=SumAndProduct)
+    def emits_declared(x, y):
+        return {"total": x + y, "product": x * y}
+
+    assert emits_declared.run(x=3, y=2) == {"total": 5, "product": 6}

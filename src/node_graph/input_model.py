@@ -36,15 +36,18 @@ stored.
 
 A mapping whose size is decided at runtime is written as a typed container
 field, ``dict[str, T]``: it becomes a dynamic namespace whose members are
-sockets named by the mapping's keys, each shaped by ``T``. ``extra='allow'``
-is refused -- a model that admits fields it does not declare is not a
-contract.
+sockets named by the mapping's keys, each shaped by ``T``. It is also the
+only shape that carries engine data classes: a list of them is refused,
+because storage keeps a list as one node of plain data. ``extra='allow'`` is
+refused at any depth -- a model that admits fields it does not declare is not
+a contract.
 """
 
 from __future__ import annotations
 
 import functools
 import inspect
+import sys
 from copy import copy
 from dataclasses import replace
 from typing import (
@@ -61,18 +64,22 @@ from typing import (
     cast,
     get_args,
     get_origin,
+    get_type_hints,
 )
 
 from pydantic import (
     BaseModel,
     ConfigDict,
+    PlainSerializer,
     TypeAdapter,
     ValidationError,
+    WrapSerializer,
     WrapValidator,
     create_model,
 )
 from pydantic.errors import PydanticSchemaGenerationError
 from pydantic_core import PydanticSerializationError
+from typing_extensions import is_typeddict
 
 __all__ = [
     "ModelContractError",
@@ -116,6 +123,15 @@ _NONE_TYPE = type(None)
 
 #: Socket extra naming what a body receives for a leaf: ``"python"`` or ``"node"``.
 BODY_RECEIVES = "body_receives"
+
+#: Container origins whose members storage flattens into one node.
+_SEQUENCE_ORIGINS = (list, tuple, set, frozenset)
+
+#: Annotation metadata that renders a value, which the content check must not see.
+_SERIALIZER_METADATA = (PlainSerializer, WrapSerializer)
+
+#: ``populate_by_name``'s replacement, on pydantic 2.11 and later.
+_HAS_VALIDATE_BY_NAME = "validate_by_name" in getattr(ConfigDict, "__annotations__", {})
 
 
 class ModelContractError(TypeError):
@@ -222,25 +238,125 @@ def _union_arms(annotation: Any) -> Optional[List[Any]]:
     return [arg for arg in get_args(annotation) if arg is not _NONE_TYPE]
 
 
-def _arm_receives(annotation: Any) -> str:
+def _annotation_name(annotation: Any) -> str:
+    """Render an annotation the way it is written."""
+    if isinstance(annotation, type) and get_origin(annotation) is None:
+        return annotation.__name__
+    return repr(annotation)
+
+
+def _plural(items: List[str], singular: str, plural: str) -> str:
+    """Return the word ``items``'s number takes."""
+    return singular if len(items) == 1 else plural
+
+
+def _disagreeing_kinds(
+    label: str, subject: str, parts: str, kinds: List[Tuple[str, str]]
+) -> ModelContractError:
+    """Return the error raised when the pieces of a type arrive in both forms.
+
+    ``kinds`` pairs each piece's rendered name with ``"python"`` or ``"node"``.
+    """
+    rebuilt = [name for name, kind in kinds if kind == "python"]
+    stored = [name for name, kind in kinds if kind == "node"]
+    note = " (Any declares nothing to rebuild)" if "typing.Any" in stored else ""
+    return ModelContractError(
+        f"{label} declares {subject}, whose {parts} disagree on how the value arrives: "
+        f"{', '.join(rebuilt)} {_plural(rebuilt, 'is', 'are')} rebuilt from plain data, "
+        f"{', '.join(stored)} {_plural(stored, 'arrives', 'arrive')} as the engine stored "
+        f"{_plural(stored, 'it', 'them')}{note}.\n"
+        f"How to fix: declare {label} so its {parts} agree. A socket delivers one form, so a "
+        f"value spanning both leaves nothing to decide it."
+    )
+
+
+def _declared_members(annotation: Any) -> Optional[List[Tuple[str, Any]]]:
+    """Return the ``(name, type)`` members ``annotation`` declares, else ``None``.
+
+    A model and a ``TypedDict`` name their members' types, and those decide
+    how the value arrives: pydantic builds the mapping around an ``orm.Int``
+    readily enough, and the ``orm.Int`` inside it still only an instance
+    satisfies. A container is followed only as far as a member that declares
+    members of its own, so ``list[int]`` is left to the plain reading below.
+    """
+    base = _strip_optional_type(annotation)
+    if _is_model(base):
+        return [(name, field.annotation) for name, field in base.model_fields.items()]
+    if is_typeddict(base):
+        try:
+            hints = get_type_hints(base, include_extras=True)
+        except Exception:
+            return None
+        return list(hints.items())
+    origin = get_origin(base)
+    if origin in _SEQUENCE_ORIGINS or origin is dict:
+        args = list(get_args(base))
+        if origin is dict:
+            args = args[1:]
+        members = [
+            (f"[{index}]", arg)
+            for index, arg in enumerate(args)
+            if arg is not Ellipsis
+            and arg is not _NONE_TYPE
+            and _declared_members(arg) is not None
+        ]
+        return members or None
+    return None
+
+
+def _refuse_container_of_nodes(base: Any, label: str, depth: int) -> None:
+    """Raise when a sequence's members are values only an instance satisfies.
+
+    Storage keeps a sequence as one node holding plain data, so its members
+    come back as plain data whatever they were written as. A mapping is the
+    shape that survives: ``dict[str, T]`` becomes one socket, and one node,
+    per key.
+    """
+    if get_origin(base) not in _SEQUENCE_ORIGINS:
+        return
+    for arg in get_args(base):
+        if arg is Ellipsis or arg is _NONE_TYPE or _strip_optional_type(arg) is Any:
+            continue
+        if _body_receives(arg, f"{label}[]", depth + 1) != "node":
+            continue
+        name = _annotation_name(_strip_optional_type(arg))
+        raise ModelContractError(
+            f"{label} declares {_annotation_name(base)}, and a container of {name} cannot "
+            f"round-trip through storage, which keeps it as one node holding plain data.\n"
+            f"How to fix: declare {label} as dict[str, {name}], which gives each member a "
+            f"socket and a node of its own, or as a container of plain data."
+        )
+
+
+def _arm_receives(annotation: Any, label: str, depth: int = 0) -> str:
     """Return ``"python"`` or ``"node"`` for one type, unions not considered."""
     base = _strip_optional_type(annotation)
     if base is Any or base is inspect.Parameter.empty:
         return "node"
-    if _is_model(base):
-        return "python"
+    if depth <= _MAX_ANNOTATION_DEPTH:
+        _refuse_container_of_nodes(base, label, depth)
+        members = _declared_members(base)
+        if members is not None:
+            kinds = [
+                (name, _body_receives(member, f"{label}.{name}", depth + 1))
+                for name, member in members
+            ]
+            answers = {kind for _, kind in kinds}
+            if len(answers) == 1:
+                return answers.pop()
+            raise _disagreeing_kinds(label, _annotation_name(base), "members", kinds)
     try:
         TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=False))
     except PydanticSchemaGenerationError:
         return "node"
     except Exception:
-        # A model, dataclass or TypedDict refuses the config argument because
-        # it carries its own; each is rebuilt from plain data all the same.
+        # A dataclass or TypedDict refuses the config argument because it
+        # carries its own; each is rebuilt from plain data all the same.
         return "python"
     return "python"
 
 
-def _body_receives(annotation: Any, label: str) -> str:
+def _body_receives(annotation: Any, label: str, depth: int = 0) -> str:
     """Return ``"python"`` or ``"node"`` for what a body is handed for ``annotation``.
 
     ``"python"`` when pydantic can build the declared type out of plain data,
@@ -249,25 +365,27 @@ def _body_receives(annotation: Any, label: str) -> str:
     class pydantic treats as arbitrary -- an engine's own data class, say --
     and when the field declares ``Any``, which declares nothing to rebuild.
 
+    A type that declares members of its own -- a nested model, a ``TypedDict``
+    -- is read through them, because they are what has to be satisfied.
+
     A union is read one arm at a time and every arm must give the same answer.
     ``X | None`` is not a union in this sense: ``None`` is neither, so such a
     field takes ``X``'s answer. A union spanning both -- ``int | orm.Int`` --
-    is refused: a socket delivers one form, and nothing here can choose.
+    is refused, and so are members that disagree: a socket delivers one form,
+    and nothing here can choose.
     """
     arms = _union_arms(annotation)
     if arms is None or len(arms) == 1:
-        return _arm_receives(annotation if arms is None else arms[0])
-    kinds = [(arm, _arm_receives(arm)) for arm in arms]
+        return _arm_receives(annotation if arms is None else arms[0], label, depth)
+    kinds = [(arm, _arm_receives(arm, label, depth)) for arm in arms]
     answers = {kind for _, kind in kinds}
     if len(answers) == 1:
         return answers.pop()
-    rebuilt = ", ".join(repr(arm) for arm, kind in kinds if kind == "python")
-    instanced = ", ".join(repr(arm) for arm, kind in kinds if kind == "node")
-    raise ModelContractError(
-        f"{label} declares {annotation!r}, whose arms disagree on how the value arrives: "
-        f"{rebuilt} are rebuilt from plain data, {instanced} only an instance satisfies.\n"
-        f"How to fix: declare {label} as one or the other. A socket delivers one form, so a "
-        "union spanning both leaves nothing to decide it."
+    raise _disagreeing_kinds(
+        label,
+        repr(annotation),
+        "arms",
+        [(_annotation_name(arm), kind) for arm, kind in kinds],
     )
 
 
@@ -335,20 +453,48 @@ def _fields_from_model(model: Type[BaseModel], spec: Any, api: Any) -> Any:
     return replace(spec, fields=fields)
 
 
-def spec_from_model(model: Type[BaseModel], api: Any = None) -> Any:
-    """Return the socket namespace ``model`` describes.
+def _models_reached_by(annotation: Any, depth: int = 0) -> List[Type[BaseModel]]:
+    """Return every model ``annotation`` reaches, through containers and unions."""
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return []
+    base = _strip_optional_type(annotation)
+    if _is_model(base):
+        return [base]
+    found: List[Type[BaseModel]] = []
+    for arg in get_args(base):
+        found.extend(_models_reached_by(arg, depth + 1))
+    return found
 
-    An open-topped model is refused: ``extra='allow'`` accepts fields nothing
-    declared, which is the one shape a contract cannot describe. A mapping
-    whose size is only known at runtime is written as a typed container field,
-    ``dict[str, T]``.
+
+def _refuse_open_models(model: Type[BaseModel], seen: set, depth: int = 0) -> None:
+    """Raise for any model reachable from ``model`` that admits undeclared fields.
+
+    A nested model is checked too: a field it admits but does not declare has
+    no socket, so it reaches the body without ever reaching storage.
     """
-    api = _socket_api(api)
+    if model in seen or depth > _MAX_ANNOTATION_DEPTH:
+        return
+    seen.add(model)
     if model.model_config.get("extra") == "allow":
         raise ModelContractError(
             f"{model.__name__} sets extra='allow', which declares no contract for the fields it admits.\n"
             "How to fix: declare the dynamic part as a field of type dict[str, T]."
         )
+    for field in model.model_fields.values():
+        for nested in _models_reached_by(field.annotation):
+            _refuse_open_models(nested, seen, depth + 1)
+
+
+def spec_from_model(model: Type[BaseModel], api: Any = None) -> Any:
+    """Return the socket namespace ``model`` describes.
+
+    An open-topped model is refused, at any depth: ``extra='allow'`` accepts
+    fields nothing declared, which is the one shape a contract cannot
+    describe. A mapping whose size is only known at runtime is written as a
+    typed container field, ``dict[str, T]``.
+    """
+    api = _socket_api(api)
+    _refuse_open_models(model, set())
     return _strip_structured_types(
         _fields_from_model(model, api.from_model(model), api)
     )
@@ -521,16 +667,46 @@ def _rebuild_generic(annotation: Any, rebuild: Callable[[Any], Any]) -> Any:
         return annotation
 
 
+def _accepting_field_names(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Return ``config`` with every field reachable by the name it is declared under."""
+    config = dict(config)
+    config["populate_by_name"] = True
+    if _HAS_VALIDATE_BY_NAME:
+        config["validate_by_name"] = True
+    return config
+
+
 def _shadow_config(model: Type[BaseModel]) -> ConfigDict:
     """Return the config a model rebuilt from ``model``'s fields must carry.
 
     ``model_config`` decides what a field accepts and how it coerces --
-    whitespace stripped, an alias reachable by field name, a class pydantic
-    would otherwise refuse to build a schema for. A rebuilt model that
-    dropped it would judge the same value differently from the model it
-    stands for.
+    whitespace stripped, a class pydantic would otherwise refuse to build a
+    schema for. A rebuilt model that dropped it would judge the same value
+    differently from the model it stands for.
+
+    One key is added rather than copied: a socket is named by its field, so
+    every rebuilt model accepts that name whatever alias the field carries.
     """
-    return ConfigDict(**model.model_config)  # type: ignore[typeddict-item]
+    return cast(ConfigDict, _accepting_field_names(dict(model.model_config)))
+
+
+@functools.lru_cache(maxsize=None)
+def _by_field_name(model: Type[BaseModel]) -> Type[BaseModel]:
+    """Return ``model`` accepting each field under the name that names its socket.
+
+    A field carrying ``Field(alias=...)`` is written by its alias and its
+    socket is named by the field, so the model as written would refuse the
+    very keys the graph delivers. The result is the model with one config key
+    added -- its rules, its types, its name in an error message.
+    """
+    config = _accepting_field_names(dict(model.model_config))
+    if config == dict(model.model_config):
+        return model
+    twin = type(
+        model.__name__, (model,), {"model_config": ConfigDict(**config)}  # type: ignore[misc]
+    )
+    twin.__qualname__ = model.__qualname__
+    return cast(Type[BaseModel], twin)
 
 
 def _reference_tolerant(annotation: Any, depth: int = 0) -> Any:
@@ -659,9 +835,20 @@ def validate_task_inputs(task: Any, inputs: Dict[str, Any]) -> None:
 
 
 def _plain_annotation(annotation: Any, depth: int = 0) -> Any:
-    """Return ``annotation`` with every model replaced by its plain twin."""
+    """Return ``annotation`` with every model replaced by its plain twin.
+
+    Serializers written into the annotation (``Annotated[int,
+    PlainSerializer(...)]``) are dropped along the way. They render, and a
+    renderer that maps every value to the same output would hide a rewrite
+    from the comparison the twin exists to make.
+    """
     if depth > _MAX_ANNOTATION_DEPTH:
         return annotation
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        inner = _plain_annotation(args[0], depth + 1)
+        kept = [item for item in args[1:] if not isinstance(item, _SERIALIZER_METADATA)]
+        return Annotated[tuple([inner, *kept])] if kept else inner
     rebuilt = _rebuild_generic(
         annotation, lambda arg: _plain_annotation(arg, depth + 1)
     )
@@ -673,16 +860,22 @@ def _plain_annotation(annotation: Any, depth: int = 0) -> Any:
 
 
 def _comparable_field(field: Any) -> Any:
-    """Return ``field`` with ``exclude`` cleared, so its content is comparable.
+    """Return ``field`` with what only renders it taken off, so it is comparable.
 
-    ``Field(exclude=True)`` keeps a field out of a dump, which would keep it
-    out of the comparison too: a rule rewriting that field would then pass
-    unseen. Exclusion is about what is rendered, not about what was written.
+    Two things are taken off. ``Field(exclude=True)`` keeps a field out of a
+    dump, which would keep it out of the comparison too. A serializer written
+    into the annotation (``Annotated[int, PlainSerializer(...)]``) lands in
+    the field's metadata rather than in its type, and one that maps every
+    value to the same output would hide a rewrite behind it. Both say how a
+    value is rendered, not what was written.
     """
-    if getattr(field, "exclude", None) is None:
+    metadata = list(getattr(field, "metadata", ()) or ())
+    kept = [item for item in metadata if not isinstance(item, _SERIALIZER_METADATA)]
+    if getattr(field, "exclude", None) is None and len(kept) == len(metadata):
         return field
     field = copy(field)
     field.exclude = None
+    field.metadata = kept
     return field
 
 
@@ -753,6 +946,32 @@ def _content_of(
     return content, None
 
 
+def _same_content(before: Any, after: Any) -> bool:
+    """Return True when two readings of a field say the same thing.
+
+    A field rendered as JSON compares as JSON. One kept as the object it is --
+    an engine's data node, anything under ``Any`` -- may answer an inequality
+    with something other than a bool: a numpy array answers with an array of
+    them, which no ``if`` can read. Such a value counts as unchanged when it
+    is the same object, when a whole-array comparison says so, or when the two
+    render identically.
+    """
+    if before is after:
+        return True
+    try:
+        return not bool(before != after)
+    except (TypeError, ValueError):
+        pass
+    numpy = sys.modules.get("numpy")
+    if (
+        numpy is not None
+        and isinstance(before, numpy.ndarray)
+        and isinstance(after, numpy.ndarray)
+    ):
+        return bool(numpy.array_equal(before, after))
+    return repr(before) == repr(after)
+
+
 class ContentSnapshot(NamedTuple):
     """What a model's inputs said, read before any of its validators ran."""
 
@@ -819,7 +1038,7 @@ def check_content_invariance(
     for name in names:
         if name not in before or name not in after:
             continue
-        if before[name] != after[name]:
+        if not _same_content(before[name], after[name]):
             raise ModelDerivedValueError(
                 f"'{label}': validating input '{name}' through {model.__name__} changed it from "
                 f"{before[name]!r} to {after[name]!r}.\n"
@@ -855,7 +1074,7 @@ def validate_graph_inputs(
     given = untagged_copy(inputs)
     before = content_snapshot(model, given)
     try:
-        validated = model.model_validate(given)
+        validated = _by_field_name(model).model_validate(given)
     except ValidationError as exc:
         raise TaskInputValidationError(
             f"Graph '{label}' got inputs {model.__name__} rejects:\n{exc}"
@@ -866,6 +1085,53 @@ def validate_graph_inputs(
 # --------------------------------------------------------------------------
 # Checkpoint C -- the run edge
 # --------------------------------------------------------------------------
+
+
+def _dump_model_instance(instance: BaseModel) -> Dict[str, Any]:
+    """Return the JSON-safe form of every field of ``instance``.
+
+    A field the model has no JSON form for keeps the object it holds, exactly
+    as :func:`dump_model_field` does on the way in, so one such output does
+    not cost the whole return value its rendering.
+    """
+    try:
+        return cast(Dict[str, Any], instance.model_dump(mode="json", warnings=False))
+    except PydanticSerializationError:
+        pass
+    dumped: Dict[str, Any] = {}
+    for name in type(instance).model_fields:
+        try:
+            dumped[name] = instance.model_dump(
+                mode="json", include={name}, warnings=False
+            )[name]
+        except (PydanticSerializationError, KeyError):
+            dumped[name] = getattr(instance, name)
+    return dumped
+
+
+def _refuse_undeclared_outputs(model: Type[BaseModel], result: Any, label: str) -> None:
+    """Raise when a returned mapping carries a key ``model`` does not declare.
+
+    The model declares the output sockets, so a key it does not name has
+    nowhere to be written and would be dropped between the body and the
+    task's outputs.
+    """
+    if not isinstance(result, dict):
+        return
+    declared = set()
+    for name, field in model.model_fields.items():
+        declared.add(name)
+        for alias in (field.alias, field.validation_alias, field.serialization_alias):
+            if isinstance(alias, str):
+                declared.add(alias)
+    undeclared = [key for key in result if key not in declared]
+    if undeclared:
+        raise TaskOutputValidationError(
+            f"Task '{label}' returned {', '.join(repr(key) for key in undeclared)}, "
+            f"which {model.__name__} does not declare.\n"
+            f"How to fix: add the field(s) to {model.__name__}, or drop them from what "
+            f"the body returns."
+        )
 
 
 def validated_callable(
@@ -890,7 +1156,7 @@ def validated_callable(
         if input_model is not None:
             before = content_snapshot(input_model, kwargs)
             try:
-                validated = input_model.model_validate(kwargs)
+                validated = _by_field_name(input_model).model_validate(kwargs)
             except ValidationError as exc:
                 raise TaskInputValidationError(
                     f"Task '{label}' got inputs {input_model.__name__} rejects:\n{exc}"
@@ -899,13 +1165,14 @@ def validated_callable(
             kwargs = dict(validated)
         result = func(**kwargs)
         if output_model is not None:
+            _refuse_undeclared_outputs(output_model, result, label)
             try:
-                accepted = output_model.model_validate(result)
+                accepted = _by_field_name(output_model).model_validate(result)
             except ValidationError as exc:
                 raise TaskOutputValidationError(
                     f"Task '{label}' returned outputs {output_model.__name__} rejects:\n{exc}"
                 ) from exc
-            result = accepted.model_dump(mode="json")
+            result = _dump_model_instance(accepted)
         return result
 
     setattr(call, INPUT_MODEL_ATTR, input_model)
