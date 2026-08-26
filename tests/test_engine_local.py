@@ -7,6 +7,7 @@ from node_graph.engine.local import LocalEngine
 from node_graph.engine.provenance import ProvenanceRecorder
 from typing import Annotated, Any
 from dataclasses import dataclass
+from enum import Enum
 from pydantic import BaseModel
 
 
@@ -213,3 +214,56 @@ def test_local_engine_accepts_dataclass_models():
 
     assert results["sum"] == 7
     assert results["product"] == 12
+
+
+class Color(str, Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
+
+class Priority(int, Enum):
+    LOW = 1
+    HIGH = 9
+
+
+@task(outputs=ns(name=str))
+def color_name(color: Color) -> dict:
+    assert isinstance(color, Color), f"expected Color, got {type(color).__name__}"
+    return {"name": color.name}
+
+
+@task(outputs=ns(name=str))
+def priority_name(priority: Priority) -> dict:
+    assert isinstance(
+        priority, Priority
+    ), f"expected Priority, got {type(priority).__name__}"
+    return {"name": priority.name}
+
+
+def test_local_engine_coerces_str_enum():
+    # A ``str``-Enum member flattens to a bare ``str`` across a serialization
+    # boundary (it *is* a str). Feed the engine that flattened form, not the
+    # member itself, so the coercion has something real to rebuild; passing
+    # ``Color.GREEN`` directly would leave the body's isinstance check trivially
+    # satisfied and the test unable to fail. The signature records the enum type,
+    # so ``coerce_inputs_from_spec`` must turn ``"green"`` back into ``Color.GREEN``
+    # before the body runs.
+    ng = Graph(name="local-enum", outputs=ns(name=str))
+    node = ng.add_task(color_name, "pick", color="green")
+    ng.add_link(node.outputs.name, ng.outputs.name)
+
+    results = LocalEngine().run(ng)
+
+    assert results["name"] == "GREEN"
+
+
+def test_local_engine_coerces_int_enum():
+    # Same for an ``int``-Enum: its flattened form is a bare ``int``.
+    ng = Graph(name="local-int-enum", outputs=ns(name=str))
+    node = ng.add_task(priority_name, "pick", priority=9)
+    ng.add_link(node.outputs.name, ng.outputs.name)
+
+    results = LocalEngine().run(ng)
+
+    assert results["name"] == "HIGH"
