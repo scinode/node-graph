@@ -169,7 +169,9 @@ def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
     return out
 
 
-def _validate_graph_body_inputs(func: Callable, inputs: dict, name: str) -> None:
+def _validate_graph_body_inputs(
+    func: Callable, inputs: dict, name: str, adapter: Any = None
+) -> None:
     """Check a graph's resolved inputs against its input model, if it has one.
 
     Every expansion of a ``@task.graph`` passes through here -- ``build()`` on
@@ -181,7 +183,7 @@ def _validate_graph_body_inputs(func: Callable, inputs: dict, name: str) -> None
 
     model = input_model_of_callable(func)
     if model is not None:
-        validate_graph_inputs(model, inputs, label=name)
+        validate_graph_inputs(model, inputs, label=name, adapter=adapter)
 
 
 def materialize_graph(
@@ -226,7 +228,9 @@ def materialize_graph(
         inputs = _deserialize_inputs(
             graph.inputs, inputs, getattr(graph, "serialization", None)
         )
-        _validate_graph_body_inputs(func, inputs, name)
+        _validate_graph_body_inputs(
+            func, inputs, name, getattr(graph, "serialization", None)
+        )
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)

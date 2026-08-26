@@ -520,7 +520,9 @@ def test_a_cross_field_rule_passes_without_checkpoint_b(monkeypatch):
     import node_graph.utils.graph as graph_utils
 
     monkeypatch.setattr(
-        graph_utils, "_validate_graph_body_inputs", lambda func, inputs, name: None
+        graph_utils,
+        "_validate_graph_body_inputs",
+        lambda func, inputs, name, adapter=None: None,
     )
     assert span.build(low=9, high=3) is not None
 

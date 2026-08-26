@@ -557,7 +557,11 @@ def check_content_invariance(
 
 
 def validate_graph_inputs(
-    model: Type[BaseModel], inputs: Dict[str, Any], *, label: str
+    model: Type[BaseModel],
+    inputs: Dict[str, Any],
+    *,
+    label: str,
+    adapter: Any = None,
 ) -> None:
     """Raise unless a graph's resolved inputs satisfy ``model``.
 
@@ -565,10 +569,15 @@ def validate_graph_inputs(
     runs here, cross-field rules included. The instance is discarded and the
     caller keeps the tagged values it had: the body turns those tags into
     links, and a fresh object carries none.
+
+    ``adapter`` is the graph's serialization adapter, asked for the plain
+    Python behind whatever the engine wrapped each value in.
     """
     from node_graph.utils import untagged_copy
 
     given = untagged_copy(inputs)
+    if adapter is not None and hasattr(adapter, "to_python"):
+        given = adapter.to_python(given)
     try:
         validated = model.model_validate(given)
     except ValidationError as exc:
