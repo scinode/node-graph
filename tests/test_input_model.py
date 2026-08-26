@@ -953,3 +953,78 @@ def test_a_none_arm_does_not_make_a_mixed_union_agree():
     """The control: dropping ``None`` leaves the two disagreeing arms it was hiding."""
     with pytest.raises(ModelContractError, match="OneField.field"):
         _kind_of(Optional[Union[int, Marker]])
+
+
+# --------------------------------------------------------------------------
+# 10. The model's own config decides what its fields accept
+# --------------------------------------------------------------------------
+
+
+class Stripped(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    text: str
+
+
+@task(input_model=Stripped)
+def stripped(text):
+    return text
+
+
+def test_a_config_that_coerces_is_not_a_derivation():
+    """Both sides strip, because both carry the config, so the content is unchanged."""
+    assert stripped.run(text="  silicon  ") == "silicon"
+
+
+class StripsByHand(BaseModel):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def _strip(cls, value):
+        return value.strip()
+
+
+@task(input_model=StripsByHand)
+def strips_by_hand(text):
+    return text
+
+
+def test_the_control_a_validator_doing_the_same_thing_is_a_derivation():
+    """A rule is the model's own; only one side runs it, so the content changes."""
+    with pytest.raises(ModelDerivedValueError, match="'text'"):
+        strips_by_hand.run(text="  silicon  ")
+
+
+class Aliased(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    amount: int = Field(alias="qty")
+
+
+@task(input_model=Aliased)
+def aliased(amount):
+    return amount
+
+
+def test_a_field_reachable_by_its_own_name_is_accepted_at_the_call():
+    assert aliased.run(amount=5) == 5
+
+
+def test_an_arbitrary_type_is_accepted_where_its_config_allows_it():
+    marker = Marker()
+    assert (
+        every_kind.run(
+            text="a",
+            number=1,
+            fraction=1.0,
+            flag=True,
+            mapping={},
+            items=[],
+            anything="whatever",
+            amount=Decimal("1"),
+            marker=marker,
+            nested={"k": 1},
+        )
+        == "a"
+    )

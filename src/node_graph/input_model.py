@@ -484,6 +484,18 @@ def _rebuild_generic(annotation: Any, rebuild: Callable[[Any], Any]) -> Any:
         return annotation
 
 
+def _shadow_config(model: Type[BaseModel]) -> ConfigDict:
+    """Return the config a model rebuilt from ``model``'s fields must carry.
+
+    ``model_config`` decides what a field accepts and how it coerces --
+    whitespace stripped, an alias reachable by field name, a class pydantic
+    would otherwise refuse to build a schema for. A rebuilt model that
+    dropped it would judge the same value differently from the model it
+    stands for.
+    """
+    return ConfigDict(**model.model_config)  # type: ignore[typeddict-item]
+
+
 def _reference_tolerant(annotation: Any, depth: int = 0) -> Any:
     """Return ``annotation`` with every level willing to hold a reference.
 
@@ -512,13 +524,20 @@ def _wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
     and ``@model_validator`` are left out: a rule written for whole, resolved
     inputs would otherwise be judged at wiring time against a placeholder, and
     a proxy that forwards comparisons makes that failure silent rather than
-    loud.
+    loud. It keeps ``model_config``, because the config decides what a field
+    accepts -- an alias reachable by field name, a class pydantic would
+    otherwise refuse to build a schema for -- and a shadow that judged those
+    differently would refuse calls the model accepts.
     """
     fields = {
         name: (_reference_tolerant(field.annotation), field)
         for name, field in model.model_fields.items()
     }
-    return create_model(f"{model.__name__}__Wiring", **fields)  # type: ignore[call-overload]
+    return create_model(  # type: ignore[call-overload]
+        f"{model.__name__}__Wiring",
+        __config__=_shadow_config(model),
+        **fields,
+    )
 
 
 def validate_wiring_inputs(
@@ -563,15 +582,20 @@ def _plain_twin(model: Type[BaseModel]) -> Type[BaseModel]:
     """Return ``model``'s fields with its validators and serializers left out.
 
     Built with no base class, so what survives is the field types and their
-    constraints. Coercion is therefore identical to the model's and every rule
-    the user wrote is absent, which is what makes the twin a reference for
-    what the input said before any rule ran.
+    constraints, and ``model_config``, which decides how a value is coerced.
+    Coercion is therefore identical to the model's and every rule the user
+    wrote is absent, which is what makes the twin a reference for what the
+    input said before any rule ran.
     """
     fields = {
         name: (_plain_annotation(field.annotation), field)
         for name, field in model.model_fields.items()
     }
-    return create_model(f"{model.__name__}__Content", **fields)  # type: ignore[call-overload]
+    return create_model(  # type: ignore[call-overload]
+        f"{model.__name__}__Content",
+        __config__=_shadow_config(model),
+        **fields,
+    )
 
 
 def _plain_values(value: Any) -> Any:
