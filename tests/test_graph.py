@@ -37,6 +37,17 @@ def test_from_dict(ng_decorator):
     assert ng.to_dict() == ng1.to_dict()
 
 
+def test_from_dict_discards_stale_graph_type():
+    """A stored graph_type key from an old payload loads without error."""
+    ng = Graph(name="test_graph")
+    ngdata = ng.to_dict()
+    assert "graph_type" not in ngdata["metadata"]
+    ngdata["metadata"]["graph_type"] = "NORMAL"
+    restored = Graph.from_dict(ngdata)
+    assert not hasattr(restored, "graph_type")
+    assert "graph_type" not in restored.to_dict()["metadata"]
+
+
 def test_from_dict_namespace_links():
     @task()
     def make_pair(x: int, y: int) -> namespace(a=int, nested=namespace(x=int, y=int)):

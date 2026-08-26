@@ -68,7 +68,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
     Attributes:
         name (str): The name of the task graph.
         uuid (str): The UUID of this task graph.
-        graph_type (str): The type of the task graph.
         state (str): The state of this task graph.
         action (str): The action of this task graph.
         platform (str): The platform used to create this task graph.
@@ -102,7 +101,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         outputs: Optional[SocketSpec | List[str]] = None,
         ctx: Optional[SocketSpec | List[str]] = None,
         uuid: Optional[str] = None,
-        graph_type: str = "NORMAL",
         graph: Optional[Graph] = None,
         parent: Optional[Task] = None,
         interactive_widget: bool = False,
@@ -116,12 +114,10 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         Args:
             name (str, optional): The name of the task graph. Defaults to "Graph".
             uuid (str, optional): The UUID of the task graph. Defaults to None.
-            graph_type (str, optional): The type of the task graph. Defaults to "NORMAL".
         """
 
         self.name = name
         self.uuid = uuid or str(uuid1())
-        self.graph_type = graph_type
         self.graph = graph
         self.parent = parent
         self.type_mapping = dict(self._REGISTRY.type_mapping)
@@ -610,16 +606,14 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
     def get_metadata(self) -> Dict[str, Any]:
         """Export graph metadata including *live* graph-level IO specs."""
-        meta: Dict[str, Any] = {
-            "graph_type": self.graph_type,
-        }
+        meta: Dict[str, Any] = {}
         # also save the parent class information
         meta["graph_class"] = {
             "callable_name": self.__class__.__name__,
             "module_path": self.__class__.__module__,
         }
         for key, value in (self._metadata or {}).items():
-            if key in {"graph_type", "graph_class"}:
+            if key == "graph_class":
                 continue
             meta[key] = value
         return meta
@@ -748,7 +742,8 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         """
         spec = GraphSpec.from_dict(ngdata.get("spec", {}))
         raw_meta = ngdata.get("metadata", {}) or {}
-        base_meta = {k: raw_meta[k] for k in ("graph_type",) if k in raw_meta}
+        # graph_type is discarded: old serialized graphs may still carry it,
+        # but nothing constructs or reads it any more.
         extra_meta = {k: v for k, v in raw_meta.items() if k not in {"graph_type"}}
         ng = cls(
             name=ngdata["name"],
@@ -756,7 +751,6 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             inputs=spec.inputs,
             outputs=spec.outputs,
             ctx=spec.ctx,
-            graph_type=base_meta.get("graph_type", "NORMAL"),
             metadata=extra_meta,
         )
         ng.state = ngdata.get("state", "CREATED")
