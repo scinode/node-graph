@@ -50,6 +50,8 @@ span_graph.build(low=9, high=3)
 
 **Validation may change how a value is spelled, never what it says.** `'60'` may become a `Decimal` and a list a tuple; deriving or rewriting an input is refused, because the body would then run on a value that never reached storage. The comparison is made through a plain twin of the model — same fields and constraints, every user rule absent — so a `field_serializer` (which renders, and so is representation) stays out of it. The rule in one line: a validator must be a no-op on values that are already resolved. `str.upper()` on `'SILICON'` passes; on `'silicon'` it raises `ModelDerivedValueError` naming the field and the task.
 
+**A graph body is handed whatever the engine wraps its values in**, which is right for drawing links and wrong for validating. `SerializationAdapter.to_python` returns what a wrapped value holds — the identity for an adapter that wraps nothing — and the graph checkpoint asks the graph's own adapter before validating. Without it, a model declaring `str` refuses the storage node holding one, and every graph contract with a `str` field fails at expansion.
+
 **Without either keyword nothing changes.** `apply_models` is the identity, and a task declared the usual way takes exactly the path it took before.
 
 ## Testing
@@ -63,4 +65,4 @@ span_graph.build(low=9, high=3)
 - **Content invariance** is tested in both directions: a derivation given an already-correct value passes, the same derivation given a wrong one raises and names the field, and `Decimal`, `Enum` and tuple coercions all pass.
 - **The documented limits are tests too**, so they cannot rot silently: a field validator capping a value does not fire at A, and a `mode='before'` normalizer is not honoured there — with the fix (a widened `list[int] | list[list[int]]`) shown working beside it.
 
-Full suite: 413 passed, 1 skipped (363 passed, 1 skipped before this branch; the 50 new tests are the difference).
+Full suite: 413 passed, 1 skipped (363 passed, 1 skipped before this branch; the 50 new tests are the difference). `to_python`'s own control lives in aiida-workgraph, where an adapter that wraps values exists to test it against.
