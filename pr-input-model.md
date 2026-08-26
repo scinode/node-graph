@@ -54,7 +54,7 @@ span_graph.build(low=9, high=3)
 
 ## Testing
 
-`tests/test_input_model.py`, 50 tests. Each checkpoint has a test that passes with its hook disabled, so the test is measuring the hook and not some other layer:
+`tests/test_input_model.py`, 50 tests. Each checkpoint's test is paired with a control that shows the failure does not happen without it, so the test is measuring that checkpoint and not some other layer:
 
 - **A** is parameterized over three fields the type map reads as `any` or `annotated` — a `Decimal` given nonsense, a `tuple[int, int]` given three items, a `Field(gt=0)` given `-1`. With the hook stubbed out, all three build without complaint. This is also the honest bound on what A adds: a leaf socket typed `int` already refuses a bad literal at `set_inputs`, so for those A changes the message, not the outcome.
 - **B**'s control is a cross-field rule over two ints, each of which any layer would accept on its own; with the hook stubbed out, `build(low=9, high=3)` succeeds. A second test drives a subgraph whose bound is produced by an upstream task under `LocalEngine`, which is the first moment that value exists.
