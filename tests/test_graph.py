@@ -316,9 +316,24 @@ def test_metadata_validated_at_serialization_not_at_mutation():
         _metadata_schema = StrictMetadata
 
     ng = StrictGraph(name="strict")
-    ng._metadata["typo_key"] = 1  # no complaint here: no setter, no custom dict
+    ng.metadata["typo_key"] = 1  # no complaint here: no setter, no custom dict
     with pytest.raises(ValidationError, match="typo_key"):
         ng.to_dict()
+    del ng.metadata["typo_key"]
+    ng.metadata = {"typo_key": 1}  # whole-dict reassignment behaves the same way
+    with pytest.raises(ValidationError, match="typo_key"):
+        ng.to_dict()
+
+
+def test_metadata_property_is_the_live_dict():
+    """`Graph.metadata` reads and writes `_metadata` itself, with no checks of its own."""
+    ng = Graph(name="plain", metadata={"start": 1})
+    assert ng.metadata is ng._metadata
+    ng.metadata["added"] = 2
+    assert ng.to_dict()["metadata"]["added"] == 2
+    ng.metadata = {"replaced": 3}
+    assert ng._metadata == {"replaced": 3}
+    assert "added" not in ng.to_dict()["metadata"]
 
 
 def test_metadata_schema_enforced_on_from_dict():

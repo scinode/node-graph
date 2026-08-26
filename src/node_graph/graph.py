@@ -241,6 +241,20 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         graph_ctx.inputs._name = "ctx"
 
     @property
+    def metadata(self) -> Dict[str, Any]:
+        """The graph's metadata, as a plain dict.
+
+        Mutating it is unchecked: `_metadata_schema` is applied at the
+        construction, load and serialization seams, so a key set here surfaces
+        at the next `to_dict()` rather than at the assignment.
+        """
+        return self._metadata
+
+    @metadata.setter
+    def metadata(self, value: Optional[Dict[str, Any]]) -> None:
+        self._metadata = dict(value or {})
+
+    @property
     def graph_inputs(self) -> Task:
         """Group inputs task."""
         return self.tasks["graph_inputs"]
