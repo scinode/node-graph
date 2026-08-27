@@ -1563,6 +1563,43 @@ def test_a_task_written_into_an_input_is_a_reference_not_a_value():
     assert graph.add_task(bounded, "c", amount=producer.outputs.result) is not None
 
 
+class Rated(BaseModel):
+    """The rule is the model's own, so no socket type could carry it."""
+
+    rating: int = 1
+
+    @field_validator("rating")
+    @classmethod
+    def _in_range(cls, value):
+        if not 1 <= value <= 5:
+            raise ValueError("rating runs from 1 to 5")
+        return value
+
+
+@task(input_model=Rated)
+def rated(rating):
+    return rating
+
+
+def test_a_field_rule_is_refused_when_it_is_passed_to_add_task():
+    graph = Graph(name="rated_added")
+    with pytest.raises(TaskInputValidationError, match="rating runs from 1 to 5"):
+        graph.add_task(rated, "r", rating=9)
+
+
+def test_a_field_rule_is_refused_when_it_is_set_on_the_task():
+    graph = Graph(name="rated_set")
+    node = graph.add_task(rated, "r")
+    with pytest.raises(TaskInputValidationError, match="rating runs from 1 to 5"):
+        node.set_inputs({"rating": 9})
+
+
+def test_without_the_check_add_task_accepts_the_broken_rule(without_wiring_checks):
+    """The control: the socket layer types ``rating`` as ``int`` and sees no rule."""
+    graph = Graph(name="rated_unchecked")
+    assert graph.add_task(rated, "r", rating=9) is not None
+
+
 # --------------------------------------------------------------------------
 # 16. A value whose inequality is not a yes or no
 # --------------------------------------------------------------------------
