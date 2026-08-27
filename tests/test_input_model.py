@@ -1707,6 +1707,21 @@ def test_without_the_check_add_task_accepts_the_constraint_breach(monkeypatch):
     assert graph.add_task(bounded, "b", amount=-1) is not None
 
 
+def test_assigning_to_a_socket_writes_past_the_check():
+    """The one write route the model does not reach, pinned so the claim cannot rot.
+
+    The socket layer types ``amount`` as ``int`` and carries no ``gt=0``, so
+    the assignment is refused by nothing and the value is stored;
+    ``set_inputs`` refuses the same value.
+    """
+    graph = Graph(name="assigned")
+    node = graph.add_task(bounded, "b")
+    node.inputs.amount.value = -1
+    assert node.inputs.amount.value == -1
+    with pytest.raises(TaskInputValidationError, match="greater than 0"):
+        node.set_inputs({"amount": -1})
+
+
 def test_writing_only_some_of_the_fields_is_not_a_missing_input():
     """Inputs may be written a few at a time, and a link may supply the rest."""
     graph = Graph(name="partial")
