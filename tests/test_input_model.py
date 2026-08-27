@@ -439,36 +439,211 @@ def test_validating_at_the_call_hands_back_the_very_objects_it_was_given():
     assert {name: id(value) for name, value in given.items()} == before
 
 
-def test_a_field_validator_does_not_fire_at_the_call():
-    """The boundary, pinned: checkpoint A checks types, and only types.
+class Spin(enum.Enum):
+    """The four spin treatments a workflow accepts."""
 
-    The model runs as a flat shadow with the user's decorators left out, so a
-    rule written for whole, resolved inputs is not judged against a
-    placeholder. The rule still fires at the run edge.
+    NONE = "none"
+    COLLINEAR = "collinear"
+    NON_COLLINEAR = "non_collinear"
+    SPIN_ORBIT = "spin_orbit"
+
+
+class PhInputs(BaseModel):
+    spin: Spin = Spin.NONE
+    structure: str
+
+    @field_validator("spin")
+    @classmethod
+    def _supported(cls, value):
+        if value in (Spin.NON_COLLINEAR, Spin.SPIN_ORBIT):
+            raise ValueError(
+                "ph.x has no electric-field perturbation for noncollinear magnetism"
+            )
+        return value
+
+
+#: What each run of ``ph``'s body was handed, so a test can see it did not run.
+ph_ran_with: list = []
+
+
+@task(input_model=PhInputs)
+def ph(spin, structure):
+    ph_ran_with.append(spin)
+    return 11.7
+
+
+class EpsInputs(BaseModel):
+    spin: Spin = Spin.NONE
+    structure: str
+
+
+@task.graph(input_model=EpsInputs)
+def eps(spin, structure):
+    return ph(spin=spin, structure=structure).result
+
+
+def test_a_rule_on_the_inner_task_refuses_the_wiring_that_breaks_it():
+    """The graph takes every spin; the rule is ph's own and fires where ph is wired.
+
+    The value is refused at the line inside ``eps`` that hands it to ``ph``, so
+    the graph is never built and no ``ph`` runs.
     """
+    ph_ran_with.clear()
+    with pytest.raises(TaskInputValidationError, match="noncollinear magnetism"):
+        eps.build(spin=Spin.NON_COLLINEAR, structure="si")
+    assert ph_ran_with == []
 
-    class Capped(BaseModel):
-        a: int
-        b: int
 
-        @field_validator("a")
+def test_a_spin_the_rule_admits_still_reaches_the_body_as_the_enum():
+    """The control: the same wiring builds, runs, and hands the body the enum."""
+    ph_ran_with.clear()
+    graph = eps.build(spin=Spin.COLLINEAR, structure="si")
+    assert "ph" in graph.tasks
+    graph.run()
+    assert ph_ran_with == [Spin.COLLINEAR]
+
+
+@task()
+def a_thousand():
+    return 1000
+
+
+class Capped(BaseModel):
+    a: int
+    b: int
+
+    @field_validator("a")
+    @classmethod
+    def cap(cls, value):
+        if value > 100:
+            raise ValueError("a must be at most 100")
+        return value
+
+
+@task(input_model=Capped)
+def capped(a, b):
+    return a + b
+
+
+def test_a_field_validator_does_not_fire_on_a_reference_at_the_call():
+    """The boundary, pinned: a rule is not judged against a value that does not exist.
+
+    A field written as a link is checked for its shape at the call and for its
+    rule at the run edge, on what the link delivered.
+    """
+    with Graph(name="linked") as graph:
+        source = a_thousand()
+        capped(a=source.result, b=1)
+    assert links_of(graph) == ["a_thousand.outputs.result -> capped.inputs.a"]
+
+
+def test_the_rule_the_reference_escaped_fires_when_the_link_delivers():
+    """The other half of the same claim: 1000 is refused, one checkpoint later."""
+    with Graph(name="delivered") as graph:
+        source = a_thousand()
+        capped(a=source.result, b=1)
+    with pytest.raises(TaskInputValidationError, match="at most 100"):
+        graph.run()
+
+
+def test_the_control_the_same_value_written_as_a_literal_is_refused_at_the_call():
+    """What the reference bought: written plainly, the rule answers immediately."""
+    with pytest.raises(TaskInputValidationError, match="at most 100"):
+        with Graph(name="literal"):
+            capped(a=1000, b=1)
+
+
+def test_a_reference_nested_inside_a_value_leaves_the_whole_field_waiting():
+    """A rule reads the field, so one member still to arrive holds the rule back."""
+
+    class Weights(BaseModel):
+        weights: dict[str, int]
+
+        @field_validator("weights")
         @classmethod
-        def cap(cls, value):
-            if value > 100:
-                raise ValueError("a must be at most 100")
+        def _positive(cls, value):
+            if any(item < 0 for item in value.values()):
+                raise ValueError("every weight must be positive")
             return value
 
-    @task(input_model=Capped)
-    def capped(a, b):
-        return a + b
+    @task(input_model=Weights)
+    def weighted(weights):
+        return sum(weights.values())
 
-    @task.graph()
-    def over_the_cap(m):
-        return capped(a=1000, b=m)
+    with Graph(name="nested") as graph:
+        source = a_thousand()
+        weighted(weights={"a": -1, "b": source.result})
+    assert graph.tasks["weighted"] is not None
+    with pytest.raises(TaskInputValidationError, match="every weight must be positive"):
+        with Graph(name="whole"):
+            weighted(weights={"a": -1, "b": 2})
 
-    assert over_the_cap.build(m=1) is not None
-    with pytest.raises(TaskInputValidationError, match="at most 100"):
-        capped.run(a=1000, b=1)
+
+def test_a_model_validator_still_waits_for_the_run_edge():
+    """A cross-field rule may read a field no one has written yet."""
+
+    class Ordered(BaseModel):
+        low: int
+        high: int
+
+        @model_validator(mode="after")
+        def _ordered(self):
+            if self.low >= self.high:
+                raise ValueError("low must be below high")
+            return self
+
+    @task(input_model=Ordered)
+    def ordered(low, high):
+        return high - low
+
+    graph = Graph(name="unordered")
+    assert graph.add_task(ordered, "o", low=9, high=1) is not None
+    with pytest.raises(TaskInputValidationError, match="low must be below high"):
+        ordered.run(low=9, high=1)
+
+
+def test_a_field_rule_reaching_for_a_sibling_waits_until_it_is_there():
+    """It cannot be answered on a partial write, so the later checkpoints answer it."""
+
+    class Bounds(BaseModel):
+        low: int
+        high: int
+
+        @field_validator("high")
+        @classmethod
+        def _above_low(cls, value, info):
+            if value <= info.data["low"]:
+                raise ValueError("high must exceed low")
+            return value
+
+    @task(input_model=Bounds)
+    def bounds(low, high):
+        return high - low
+
+    graph = Graph(name="sibling")
+    assert graph.add_task(bounds, "b", high=5) is not None
+    with pytest.raises(TaskInputValidationError, match="high must exceed low"):
+        bounds.run(low=9, high=5)
+
+
+def test_a_rewriting_field_validator_leaves_the_written_value_alone():
+    """The rule runs on a copy: what was written is what reaches storage."""
+
+    class Shouted(BaseModel):
+        text: str
+
+        @field_validator("text")
+        @classmethod
+        def _shout(cls, value):
+            return value.upper()
+
+    @task(input_model=Shouted)
+    def shouted(text):
+        return text
+
+    graph = Graph(name="quiet")
+    node = graph.add_task(shouted, "s", text="silicon")
+    assert node.inputs.text.value == "silicon"
 
 
 def test_a_before_validator_is_not_honoured_at_the_call():

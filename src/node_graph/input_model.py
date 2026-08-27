@@ -10,8 +10,10 @@ Three checkpoints, three questions:
 - **wiring** (:func:`validate_wiring_inputs`): every value written at the call
   that is not a socket reference must satisfy the field it is written to. A
   reference passes untouched -- what flows through it is not known yet. The
-  model runs as a flat shadow, so a field's *type* is checked and the model's
-  own ``@field_validator``/``@model_validator`` are not.
+  model runs as a flat shadow, so a field's *type* is checked, and the
+  model's own ``mode='after'`` ``@field_validator``s run on the fields whose
+  value is resolved. A ``@model_validator`` does not: it may read a field no
+  one has written yet.
 - **graph expansion** (:func:`validate_graph_inputs`): a ``@task.graph``'s
   inputs are resolved by then, so the real model runs, cross-field rules
   included. The body still receives the original tagged values, because
@@ -76,6 +78,7 @@ from pydantic import (
     WrapSerializer,
     WrapValidator,
     create_model,
+    field_validator,
 )
 from pydantic.errors import PydanticSchemaGenerationError
 from pydantic_core import PydanticSerializationError
@@ -609,6 +612,35 @@ def is_socket_reference(value: Any) -> bool:
     return isinstance(value, TaggedValue) and value._socket is not None
 
 
+def _awaits_a_link(value: Any, depth: int = 0) -> bool:
+    """Return True when ``value`` holds anything a link has yet to deliver.
+
+    A tag is looked through: it carries the value it stands for, and a value
+    is what a rule can run on. A socket or a task is not -- what arrives
+    through it is decided later -- and one nested anywhere inside a mapping, a
+    sequence or a model instance leaves the whole value waiting.
+    """
+    from node_graph.socket import BaseSocket, TaggedValue
+    from node_graph.task import Task
+
+    if isinstance(value, TaggedValue):
+        value = value.__wrapped__
+    if isinstance(value, (BaseSocket, Task)):
+        return True
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return False
+    if isinstance(value, BaseModel):
+        return any(
+            _awaits_a_link(getattr(value, name, None), depth + 1)
+            for name in type(value).model_fields
+        )
+    if isinstance(value, dict):
+        return any(_awaits_a_link(item, depth + 1) for item in value.values())
+    if isinstance(value, _SEQUENCE_ORIGINS):
+        return any(_awaits_a_link(item, depth + 1) for item in value)
+    return False
+
+
 def _accept_reference(value: Any, handler: Any, info: Any) -> Any:
     """Let a socket reference through untouched; validate anything else."""
     from node_graph.socket import TaggedValue
@@ -785,6 +817,63 @@ def _partial_wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
     )
 
 
+def _own_field_validators(model: Type[BaseModel]) -> Dict[str, Any]:
+    """Return ``model``'s ``mode='after'`` field validators, ready for a twin.
+
+    Each is taken as the model bound it, so ``cls`` inside it is still the
+    class the user wrote it on, and ``check_fields`` is off because the twin
+    may be handed a subset of the fields.
+
+    Only ``mode='after'`` is taken. It judges a value the field's type has
+    already accepted, which is the value every later checkpoint judges too; a
+    ``before``, ``wrap`` or ``plain`` validator runs in place of that type and
+    may rewrite what it is given, and a rewritten input is refused downstream
+    (:func:`check_content_invariance`).
+    """
+    rebuilt: Dict[str, Any] = {}
+    for name, decorator in model.__pydantic_decorators__.field_validators.items():
+        info = decorator.info
+        if info.mode != "after":
+            continue
+        rebuilt[name] = field_validator(*info.fields, mode="after", check_fields=False)(
+            decorator.func
+        )
+    return rebuilt
+
+
+@functools.lru_cache(maxsize=None)
+def _rule_shadow(model: Type[BaseModel]) -> Optional[Type[BaseModel]]:
+    """Return the shadow running ``model``'s field rules, or None if it has none.
+
+    It carries the partial shadow's fields, so any subset of them may be
+    written, and the model's own ``mode='after'`` field validators.
+    ``@model_validator``s are left out: one may read a field no one has
+    written yet.
+    """
+    validators = _own_field_validators(model)
+    if not validators:
+        return None
+    fields = {
+        name: (_reference_tolerant(field.annotation), _optional_field(field))
+        for name, field in model.model_fields.items()
+    }
+    return create_model(  # type: ignore[call-overload]
+        f"{model.__name__}__Rules",
+        __config__=_shadow_config(model),
+        __validators__=validators,
+        **fields,
+    )
+
+
+def _rejected_wiring(
+    model: Type[BaseModel], exc: ValidationError, label: str
+) -> TaskInputValidationError:
+    """Return the error reporting what ``model`` refused at ``label``."""
+    return TaskInputValidationError(
+        f"Task '{label}' got inputs {model.__name__} rejects:\n{exc}"
+    )
+
+
 def validate_wiring_inputs(
     model: Type[BaseModel],
     inputs: Dict[str, Any],
@@ -797,18 +886,39 @@ def validate_wiring_inputs(
     ``complete`` says whether ``inputs`` is the whole call, in which case a
     required field left out is refused as well.
 
+    Types are checked first, on everything written. The model's own
+    ``mode='after'`` field validators then run on the fields whose value is
+    resolved; a field written as a socket reference is checked for its shape
+    alone, because what flows through it is not known yet. A rule that raises
+    anything other than a validation failure is left to the later checkpoints,
+    which is where a rule needing more than what was written is answered.
+
     The validated instance is discarded and ``inputs`` is passed on untouched.
     That is not tidiness: pydantic strips the proxy a tagged value wears for
     most field types, and a stripped value is a literal, so a task wired to
     the graph's input would silently become a task holding a copy of it.
     """
+    from node_graph.utils import untagged_copy
+
     shadow = _wiring_shadow(model) if complete else _partial_wiring_shadow(model)
     try:
         shadow.model_validate(inputs)
     except ValidationError as exc:
-        raise TaskInputValidationError(
-            f"Task '{label}' got inputs {model.__name__} rejects:\n{exc}"
-        ) from exc
+        raise _rejected_wiring(model, exc, label) from exc
+    rules = _rule_shadow(model)
+    if rules is None:
+        return
+    resolved = {
+        name: value for name, value in inputs.items() if not _awaits_a_link(value)
+    }
+    if not resolved:
+        return
+    try:
+        rules.model_validate(untagged_copy(resolved))
+    except ValidationError as exc:
+        raise _rejected_wiring(model, exc, label) from exc
+    except Exception:
+        return
 
 
 def validate_task_inputs(task: Any, inputs: Dict[str, Any]) -> None:
