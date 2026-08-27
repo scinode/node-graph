@@ -579,6 +579,17 @@ def test_a_reference_nested_inside_a_value_leaves_the_whole_field_waiting():
             weighted(weights={"a": -1, "b": 2})
 
 
+def test_the_private_name_the_rules_are_read_from_still_answers():
+    """One canary: pydantic's decorator record is what the rule shadow is built from."""
+    from node_graph.input_model import _own_field_validators
+
+    decorators = Capped.__pydantic_decorators__.field_validators
+    assert set(decorators) == {"cap"}
+    assert decorators["cap"].info.mode == "after"
+    assert decorators["cap"].info.fields == ("a",)
+    assert set(_own_field_validators(Capped)) == {"cap"}
+
+
 def test_a_model_validator_still_waits_for_the_run_edge():
     """A cross-field rule may read a field no one has written yet."""
 
