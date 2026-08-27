@@ -71,9 +71,12 @@ class GraphMetadata(TypedDict, total=False):
     `extra="allow"` keeps any other key a caller stashes in `metadata`. A
     subclass declares a wider schema by inheriting from this one, and refuses
     undeclared keys by overriding `__pydantic_config__` with `extra="forbid"`.
+    `strict=True` refuses type coercion: a declared key holding a value of
+    the wrong type is rejected rather than converted (e.g. a `bool` field
+    given `"yes"` or `1`).
     """
 
-    __pydantic_config__ = ConfigDict(extra="allow")
+    __pydantic_config__ = ConfigDict(extra="allow", strict=True)
 
     # The class to rebuild this graph as, written by `Graph.get_metadata()`.
     graph_class: Dict[str, Any]
@@ -86,6 +89,17 @@ class GraphMetadata(TypedDict, total=False):
 def metadata_adapter(schema: type) -> TypeAdapter:
     """Return a cached validator for a metadata schema."""
     return TypeAdapter(schema)
+
+
+class MetadataValidationError(ValueError):
+    """Raised when a graph's `metadata` fails validation against its schema."""
+
+    def __init__(self, schema: type, name: Optional[str], exc: ValidationError) -> None:
+        valid_keys = sorted(schema.__annotations__)
+        label = f"graph {name!r}" if name is not None else "graph"
+        super().__init__(
+            f"Invalid metadata for {label}. Valid keys: {valid_keys}. {exc}"
+        )
 
 
 class Graph(IOOwnerMixin, WidgetRenderableMixin):
@@ -127,16 +141,22 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
     _metadata_schema: type = GraphMetadata
 
     @classmethod
-    def validate_metadata(cls, metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def validate_metadata(
+        cls, metadata: Optional[Dict[str, Any]], *, name: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Return a validated copy of `metadata`, leaving the argument untouched.
 
-        Raises `pydantic.ValidationError` (a `ValueError`) when a declared key
-        holds the wrong type, or when a key is absent from `_metadata_schema`
-        and that schema forbids extras.
+        Raises `MetadataValidationError` (a `ValueError`) naming `name` and
+        the schema's valid keys, when a declared key holds the wrong type,
+        or when a key is absent from `_metadata_schema` and that schema
+        forbids extras.
         """
-        return metadata_adapter(cls._metadata_schema).validate_python(
-            dict(metadata or {})
-        )
+        try:
+            return metadata_adapter(cls._metadata_schema).validate_python(
+                dict(metadata or {})
+            )
+        except ValidationError as exc:
+            raise MetadataValidationError(cls._metadata_schema, name, exc) from exc
 
     def __init__(
         self,
@@ -185,7 +205,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
         self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid, graph=self)
-        self._metadata: Dict[str, Any] = self.validate_metadata(metadata)
+        self._metadata: Dict[str, Any] = self.validate_metadata(metadata, name=self.name)
 
         self.state = "CREATED"
         self.action = "NONE"
@@ -674,7 +694,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
             if key == "graph_class":
                 continue
             meta[key] = value
-        return self.validate_metadata(meta)
+        return self.validate_metadata(meta, name=self.name)
 
     def export_tasks_to_dict(
         self, include_sockets: bool = False, should_serialize: bool = False
@@ -803,12 +823,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         # graph_type is discarded: old serialized graphs may still carry it,
         # but nothing constructs or reads it any more.
         extra_meta = {k: v for k, v in raw_meta.items() if k not in {"graph_type"}}
-        try:
-            extra_meta = cls.validate_metadata(extra_meta)
-        except ValidationError as exc:
-            raise ValueError(
-                f"Cannot load graph {ngdata.get('name')!r}: invalid metadata. {exc}"
-            ) from exc
+        extra_meta = cls.validate_metadata(extra_meta, name=ngdata.get("name"))
         ng = cls(
             name=ngdata["name"],
             uuid=ngdata.get("uuid"),
