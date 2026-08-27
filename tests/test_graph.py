@@ -288,8 +288,9 @@ def test_metadata_declared_key_type_is_checked():
         Graph(name="wrong-type", metadata={"graph_class": "not a dict"})
 
 
-def test_subclass_narrows_metadata_schema():
-    """A subclass declaring a wider TypedDict with `extra="forbid"` refuses a typo."""
+@pytest.fixture
+def strict_graph():
+    """A `Graph` subclass whose metadata schema adds `pk` and forbids unknown keys."""
 
     class StrictMetadata(GraphMetadata, total=False):
         __pydantic_config__ = ConfigDict(extra="forbid")
@@ -299,23 +300,23 @@ def test_subclass_narrows_metadata_schema():
     class StrictGraph(Graph):
         _metadata_schema = StrictMetadata
 
-    assert StrictGraph(name="strict", metadata={"pk": 1})._metadata == {"pk": 1}
+    return StrictGraph
+
+
+def test_subclass_narrows_metadata_schema(strict_graph):
+    """A subclass declaring a wider TypedDict with `extra="forbid"` refuses a typo."""
+
+    assert strict_graph(name="strict", metadata={"pk": 1})._metadata == {"pk": 1}
     with pytest.raises(ValueError, match="typo_key"):
-        StrictGraph(name="strict", metadata={"typo_key": 1})
+        strict_graph(name="strict", metadata={"typo_key": 1})
     with pytest.raises(ValueError, match="pk"):
-        StrictGraph(name="strict", metadata={"pk": "not an int"})
+        strict_graph(name="strict", metadata={"pk": "not an int"})
 
 
-def test_metadata_validated_at_serialization_not_at_mutation():
+def test_metadata_validated_at_serialization_not_at_mutation(strict_graph):
     """`_metadata` is a plain dict: a stray key survives assignment and raises at `to_dict()`."""
 
-    class StrictMetadata(GraphMetadata, total=False):
-        __pydantic_config__ = ConfigDict(extra="forbid")
-
-    class StrictGraph(Graph):
-        _metadata_schema = StrictMetadata
-
-    ng = StrictGraph(name="strict")
+    ng = strict_graph(name="strict")
     ng.metadata["typo_key"] = 1  # no complaint here: no setter, no custom dict
     with pytest.raises(ValueError, match="typo_key"):
         ng.to_dict()
@@ -336,21 +337,13 @@ def test_metadata_property_is_the_live_dict():
     assert "added" not in ng.to_dict()["metadata"]
 
 
-def test_metadata_schema_enforced_on_from_dict():
+def test_metadata_schema_enforced_on_from_dict(strict_graph):
     """`from_dict()` refuses a payload key the schema doesn't declare, naming graph and key."""
 
-    class StrictMetadata(GraphMetadata, total=False):
-        __pydantic_config__ = ConfigDict(extra="forbid")
-
-        pk: int
-
-    class StrictGraph(Graph):
-        _metadata_schema = StrictMetadata
-
-    payload = StrictGraph(name="strict", metadata={"pk": 1}).to_dict()
+    payload = strict_graph(name="strict", metadata={"pk": 1}).to_dict()
     payload["metadata"]["legacy_key"] = "from an old version"
     with pytest.raises(ValueError) as excinfo:
-        StrictGraph.from_dict(payload)
+        strict_graph.from_dict(payload)
     assert "graph 'strict'" in str(excinfo.value)
     assert "legacy_key" in str(excinfo.value)
 
