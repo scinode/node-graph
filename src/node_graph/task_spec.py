@@ -242,10 +242,10 @@ class BaseHandle:
     def _validate_call_inputs(self, exec_obj, inputs) -> None:
         """Check what is written at this call against the task's input model.
 
-        A socket reference passes: it stands for a value nobody has yet. Every
-        literal beside it is checked against the field it is written to, so a
-        typo in a graph body fails at the line that wrote it rather than after
-        the graph has been submitted.
+        A socket passes: it stands for a value nobody has yet. Every value
+        beside it is checked against the field it is written to -- a tagged
+        value by what it carries -- so a typo in a graph body fails at the
+        line that wrote it rather than after the graph has been submitted.
         """
         from node_graph.input_model import (
             input_model_of_callable,

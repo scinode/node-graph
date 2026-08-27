@@ -7,13 +7,14 @@ the signature only names the parameters.
 
 Three checkpoints, three questions:
 
-- **wiring** (:func:`validate_wiring_inputs`): every value written at the call
-  that is not a socket reference must satisfy the field it is written to. A
-  reference passes untouched -- what flows through it is not known yet. The
-  model runs as a flat shadow, so a field's *type* is checked, and the
-  model's own ``mode='after'`` ``@field_validator``s run on the fields whose
-  value is resolved. A ``@model_validator`` does not: it may read a field no
-  one has written yet.
+- **wiring** (:func:`validate_wiring_inputs`): every value written must
+  satisfy the field it is written to. The model runs as a flat shadow, so a
+  field's *type* is checked and a socket or a task written into an input
+  passes untouched -- what flows through it is not known yet. The model's own
+  ``mode='after'`` ``@field_validator``s then run over the fields whose value
+  is resolved: a tagged value is judged by the value it carries, and a field
+  holding a socket or a task waits. A ``@model_validator`` waits in every
+  case, because it may read a field no one has written yet.
 - **graph expansion** (:func:`validate_graph_inputs`): a ``@task.graph``'s
   inputs are resolved by then, so the real model runs, cross-field rules
   included. The body still receives the original tagged values, because
@@ -57,6 +58,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    FrozenSet,
     List,
     Literal,
     NamedTuple,
@@ -637,7 +639,9 @@ def _awaits_a_link(value: Any, depth: int = 0) -> bool:
     A tag is looked through: it carries the value it stands for, and a value
     is what a rule can run on. A socket or a task is not -- what arrives
     through it is decided later -- and one nested anywhere inside a mapping, a
-    sequence or a model instance leaves the whole value waiting.
+    sequence or a model instance leaves the whole value waiting. So does a
+    value nested deeper than the walk goes: what has not been looked at is not
+    known to have arrived.
     """
     from node_graph.socket import BaseSocket, TaggedValue
     from node_graph.task import Task
@@ -647,7 +651,7 @@ def _awaits_a_link(value: Any, depth: int = 0) -> bool:
     if isinstance(value, (BaseSocket, Task)):
         return True
     if depth > _MAX_ANNOTATION_DEPTH:
-        return False
+        return True
     if isinstance(value, BaseModel):
         return any(
             _awaits_a_link(getattr(value, name, None), depth + 1)
@@ -860,22 +864,54 @@ def _own_field_validators(model: Type[BaseModel]) -> Dict[str, Any]:
     return rebuilt
 
 
-@functools.lru_cache(maxsize=None)
-def _rule_shadow(model: Type[BaseModel]) -> Optional[Type[BaseModel]]:
-    """Return the shadow running ``model``'s field rules, or None if it has none.
+def _write_names_of(name: str, field: Any) -> Tuple[str, ...]:
+    """Return every key a write may name ``field`` by: its own name and its aliases."""
+    names = [name]
+    for alias in (field.alias, field.validation_alias):
+        if isinstance(alias, str):
+            names.append(alias)
+        else:
+            names.extend(
+                choice
+                for choice in getattr(alias, "choices", ())
+                if isinstance(choice, str)
+            )
+    return tuple(names)
 
-    It carries the partial shadow's fields, so any subset of them may be
-    written, and the model's own ``mode='after'`` field validators.
-    ``@model_validator``s are left out: one may read a field no one has
-    written yet.
+
+def _fields_named_by(model: Type[BaseModel], written: FrozenSet[str]) -> FrozenSet[str]:
+    """Return the fields of ``model`` that ``written`` names, by name or by alias."""
+    return frozenset(
+        name
+        for name, field in model.model_fields.items()
+        if not written.isdisjoint(_write_names_of(name, field))
+    )
+
+
+@functools.lru_cache(maxsize=None)
+def _rule_shadow(
+    model: Type[BaseModel], written: FrozenSet[str]
+) -> Optional[Type[BaseModel]]:
+    """Return the shadow running ``model``'s rules over ``written``, or None if none apply.
+
+    Only the named fields are built, and each keeps the annotation its model
+    declares: a rule reads the value its field declares, so a nested model
+    reaches it as an instance of the class the field names. A field left out
+    is absent from ``info.data`` rather than standing there as a placeholder.
+
+    ``@model_validator``s are left out: one may read a field nobody has
+    written.
     """
     validators = _own_field_validators(model)
     if not validators:
         return None
     fields = {
-        name: (_reference_tolerant(field.annotation), _optional_field(field))
+        name: (field.annotation, _optional_field(field))
         for name, field in model.model_fields.items()
+        if name in written
     }
+    if not fields:
+        return None
     return create_model(  # type: ignore[call-overload]
         f"{model.__name__}__Rules",
         __config__=_shadow_config(model),
@@ -906,11 +942,11 @@ def validate_wiring_inputs(
     required field left out is refused as well.
 
     Types are checked first, on everything written. The model's own
-    ``mode='after'`` field validators then run on the fields whose value is
-    resolved; a field written as a socket reference is checked for its shape
-    alone, because what flows through it is not known yet. A rule that raises
-    anything other than a validation failure is left to the later checkpoints,
-    which is where a rule needing more than what was written is answered.
+    ``mode='after'`` field validators then run over the fields whose value is
+    resolved; a field holding a socket or a task is checked for its shape
+    alone, because what flows through it is not known yet. A rule reading a
+    field nobody wrote raises ``KeyError`` from ``info.data``, and that rule
+    waits for the later checkpoints, where the whole payload is in hand.
 
     The validated instance is discarded and ``inputs`` is passed on untouched.
     That is not tidiness: pydantic strips the proxy a tagged value wears for
@@ -924,19 +960,19 @@ def validate_wiring_inputs(
         shadow.model_validate(inputs)
     except ValidationError as exc:
         raise _rejected_wiring(model, exc, label) from exc
-    rules = _rule_shadow(model)
-    if rules is None:
-        return
     resolved = {
         name: value for name, value in inputs.items() if not _awaits_a_link(value)
     }
     if not resolved:
         return
+    rules = _rule_shadow(model, _fields_named_by(model, frozenset(resolved)))
+    if rules is None:
+        return
     try:
         rules.model_validate(untagged_copy(resolved))
     except ValidationError as exc:
         raise _rejected_wiring(model, exc, label) from exc
-    except Exception:
+    except KeyError:
         return
 
 

@@ -613,28 +613,185 @@ def test_a_model_validator_still_waits_for_the_run_edge():
         ordered.run(low=9, high=1)
 
 
+#: What each field rule below was handed, in the order the rules ran.
+#:
+#: The models are written at module level so a task can name them: a task
+#: carries a model it cannot import by value, and a copy's rule would write
+#: to a copy of this list.
+RULE_DATA: list = []
+
+
+class Bounds(BaseModel):
+    low: int
+    high: int
+
+    @field_validator("high")
+    @classmethod
+    def _above_low(cls, value, info):
+        RULE_DATA.append(dict(info.data))
+        if value <= info.data["low"]:
+            raise ValueError("high must exceed low")
+        return value
+
+
+@task(input_model=Bounds)
+def bounds(low, high):
+    return high - low
+
+
 def test_a_field_rule_reaching_for_a_sibling_waits_until_it_is_there():
-    """It cannot be answered on a partial write, so the later checkpoints answer it."""
+    """A rule reading a field nobody wrote cannot be answered on that write.
 
-    class Bounds(BaseModel):
-        low: int
-        high: int
-
-        @field_validator("high")
-        @classmethod
-        def _above_low(cls, value, info):
-            if value <= info.data["low"]:
-                raise ValueError("high must exceed low")
-            return value
-
-    @task(input_model=Bounds)
-    def bounds(low, high):
-        return high - low
+    What the rule is handed is the discriminating part: the sibling is absent,
+    so the lookup raises and the rule waits. A placeholder standing in for it
+    would be judged instead, and judged wrong.
+    """
+    RULE_DATA.clear()
 
     graph = Graph(name="sibling")
     assert graph.add_task(bounds, "b", high=5) is not None
+    assert RULE_DATA == [{}]
     with pytest.raises(TaskInputValidationError, match="high must exceed low"):
         bounds.run(low=9, high=5)
+    assert RULE_DATA[-1] == {"low": 9}
+
+
+class Flagged(BaseModel):
+    strict: bool = False
+    value: int = 0
+
+    @field_validator("value")
+    @classmethod
+    def _capped_when_strict(cls, value, info):
+        RULE_DATA.append(dict(info.data))
+        if info.data.get("strict") and value > 10:
+            raise ValueError("value is capped at 10 in strict mode")
+        return value
+
+
+@task(input_model=Flagged)
+def flagged(strict, value):
+    return value
+
+
+def test_a_rule_reading_an_unwritten_sibling_reads_it_as_absent():
+    """Absent, not defaulted and not a stand-in, so the rule answers as the model does."""
+    RULE_DATA.clear()
+
+    # The model's own verdict on the same write, which the wiring check must
+    # not contradict: the default stands in only where the model itself runs.
+    assert Flagged(value=99).value == 99
+    assert RULE_DATA == [{"strict": False}]
+
+    graph = Graph(name="flagged")
+    assert graph.add_task(flagged, "f", value=99) is not None
+    assert RULE_DATA[-1] == {}
+    with pytest.raises(TaskInputValidationError, match="capped at 10"):
+        graph.add_task(flagged, "g", strict=True, value=99)
+    assert RULE_DATA[-1] == {"strict": True}
+
+
+class Inner(BaseModel):
+    n: int = 1
+
+    def doubled(self) -> int:
+        return self.n * 2
+
+
+class Outer(BaseModel):
+    inner: Inner = Inner()
+
+    @field_validator("inner")
+    @classmethod
+    def _within_reach(cls, value):
+        if not isinstance(value, Inner):
+            raise ValueError("inner is not an Inner")
+        if value.doubled() > 100:
+            raise ValueError("inner.n is capped at 50")
+        return value
+
+
+@task(input_model=Outer)
+def outer(inner):
+    return inner
+
+
+def test_a_rule_on_a_nested_field_gets_the_class_the_field_names():
+    """It reads the value its field declares, so ``isinstance`` holds and methods answer."""
+    graph = Graph(name="nested_ok")
+    assert graph.add_task(outer, "a", inner={"n": 3}) is not None
+    assert graph.add_task(outer, "b", inner=Inner(n=3)) is not None
+
+
+def test_and_refuses_the_nested_value_the_model_refuses():
+    """The other half: a rule that can read the instance can also judge it."""
+    assert Outer(inner={"n": 3}).inner.n == 3
+    with pytest.raises(ValidationError, match="capped at 50"):
+        Outer(inner={"n": 999})
+    graph = Graph(name="nested_bad")
+    with pytest.raises(TaskInputValidationError, match="capped at 50"):
+        graph.add_task(outer, "c", inner={"n": 999})
+
+
+def test_a_link_deeper_than_the_walk_goes_leaves_the_field_waiting():
+    """Unproved is not resolved: what the walk did not reach counts as awaiting a link."""
+    from node_graph.input_model import _MAX_ANNOTATION_DEPTH
+
+    class Deep(BaseModel):
+        payload: Any = None
+
+        @field_validator("payload")
+        @classmethod
+        def _bottoms_out_in_an_int(cls, value):
+            innermost = value
+            while isinstance(innermost, list) and innermost:
+                innermost = innermost[0]
+            if not isinstance(innermost, int):
+                raise ValueError("payload must bottom out in an int")
+            return value
+
+    @task(input_model=Deep)
+    def deep(payload):
+        return payload
+
+    graph = Graph(name="deep")
+    source = graph.add_task(a_thousand, "s")
+    # One list below where the walk stops, so the socket is never looked at.
+    buried = source.outputs.result
+    for _ in range(_MAX_ANNOTATION_DEPTH + 2):
+        buried = [buried]
+    assert graph.add_task(deep, "d", payload=buried) is not None
+    assert graph.add_task(deep, "e", payload=[source.outputs.result]) is not None
+    # The control: on a value with nothing left to arrive, the rule does run.
+    with pytest.raises(TaskInputValidationError, match="bottom out in an int"):
+        graph.add_task(deep, "f", payload=[["not an int"]])
+
+
+def test_a_rule_on_an_aliased_field_fires_under_either_name():
+    """A socket is named by its field, and a write naming the alias reaches it too."""
+
+    class Priced(BaseModel):
+        model_config = ConfigDict(populate_by_name=True)
+
+        amount: int = Field(alias="qty")
+
+        @field_validator("amount")
+        @classmethod
+        def _not_negative(cls, value):
+            if value < 0:
+                raise ValueError("amount cannot be negative")
+            return value
+
+    @task(input_model=Priced)
+    def priced(amount):
+        return amount
+
+    graph = Graph(name="aliased_rule")
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        graph.add_task(priced, "a", amount=-1)
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        graph.add_task(priced, "b", qty=-1)
+    assert graph.add_task(priced, "c", amount=5) is not None
 
 
 def test_a_rewriting_field_validator_leaves_the_written_value_alone():
