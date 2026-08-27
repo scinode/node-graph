@@ -979,10 +979,10 @@ def validate_wiring_inputs(
 def validate_task_inputs(task: Any, inputs: Dict[str, Any]) -> None:
     """Check values written into ``task``'s sockets against its input model.
 
-    Reached by every route that writes an input -- calling the task, passing
-    the values to ``add_task``, setting them on the task afterwards -- so a
-    value the model refuses fails at the line that wrote it. A ``None`` is
-    left out, because writing one sets nothing.
+    Reached by ``add_task`` and by ``set_inputs``, so a value the model
+    refuses fails at the line that wrote it. Assigning to a socket's
+    ``value`` writes past this check, as it does past the socket layer's own.
+    A ``None`` is left out, because writing one sets nothing.
     """
     model = _input_model_of_task(task)
     if model is None:
