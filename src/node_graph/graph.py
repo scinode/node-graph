@@ -203,7 +203,9 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         if init_graph_level_tasks:
             self._init_graph_level_tasks()
         self.knowledge_graph = KnowledgeGraph(graph_uuid=self.uuid, graph=self)
-        self._metadata: Dict[str, Any] = self.validate_metadata(metadata, name=self.name)
+        self._metadata: Dict[str, Any] = self.validate_metadata(
+            metadata, name=self.name
+        )
 
         self.state = "CREATED"
         self.action = "NONE"
