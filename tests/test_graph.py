@@ -1,5 +1,7 @@
 from node_graph import Graph, task, namespace
 from node_graph.config import INPUT_SOCKET_NAME, OUTPUT_SOCKET_NAME
+from node_graph.graph import GraphMetadata
+from pydantic import ConfigDict
 import pytest
 from typing import Any
 from node_graph.tasks.tests import test_float, test_add
@@ -35,6 +37,17 @@ def test_from_dict(ng_decorator):
     assert len(ng.tasks) == len(ng1.tasks)
     assert len(ng.links) == len(ng1.links)
     assert ng.to_dict() == ng1.to_dict()
+
+
+def test_from_dict_discards_stale_graph_type():
+    """A stored graph_type key from an old payload loads without error."""
+    ng = Graph(name="test_graph")
+    ngdata = ng.to_dict()
+    assert "graph_type" not in ngdata["metadata"]
+    ngdata["metadata"]["graph_type"] = "NORMAL"
+    restored = Graph.from_dict(ngdata)
+    assert not hasattr(restored, "graph_type")
+    assert "graph_type" not in restored.to_dict()["metadata"]
 
 
 def test_from_dict_namespace_links():
@@ -260,6 +273,89 @@ def test_graph_metadata_roundtrip():
     assert restored._metadata["foo"] == "bar"
     assert restored.get_metadata()["foo"] == "bar"
     assert restored._metadata["definition"]["package_version"] == "1.2.3"
+
+
+def test_metadata_schema_permissive_by_default():
+    """Base `Graph` keeps any metadata key, unchanged from before this feature existed."""
+    ng = Graph(name="permissive", metadata={"anything": "goes", "another": 1})
+    assert ng._metadata == {"anything": "goes", "another": 1}
+    assert ng.to_dict()["metadata"]["anything"] == "goes"
+
+
+def test_metadata_declared_key_type_is_checked():
+    """A declared key holding the wrong type is refused, even on permissive `Graph`."""
+    with pytest.raises(ValueError, match="graph_class"):
+        Graph(name="wrong-type", metadata={"graph_class": "not a dict"})
+
+
+@pytest.fixture
+def strict_graph():
+    """A `Graph` subclass whose metadata schema adds `pk` and forbids unknown keys."""
+
+    class StrictMetadata(GraphMetadata, total=False):
+        __pydantic_config__ = ConfigDict(extra="forbid")
+
+        pk: int
+
+    class StrictGraph(Graph):
+        _metadata_schema = StrictMetadata
+
+    return StrictGraph
+
+
+def test_subclass_narrows_metadata_schema(strict_graph):
+    """A subclass declaring a wider TypedDict with `extra="forbid"` refuses a typo."""
+
+    assert strict_graph(name="strict", metadata={"pk": 1})._metadata == {"pk": 1}
+    with pytest.raises(ValueError, match="typo_key"):
+        strict_graph(name="strict", metadata={"typo_key": 1})
+    with pytest.raises(ValueError, match="pk"):
+        strict_graph(name="strict", metadata={"pk": "not an int"})
+
+
+def test_metadata_validated_at_serialization_not_at_mutation(strict_graph):
+    """`_metadata` is a plain dict: a stray key survives assignment and raises at `to_dict()`."""
+
+    ng = strict_graph(name="strict")
+    ng.metadata["typo_key"] = 1  # no complaint here: no setter, no custom dict
+    with pytest.raises(ValueError, match="typo_key"):
+        ng.to_dict()
+    del ng.metadata["typo_key"]
+    ng.metadata = {"typo_key": 1}  # whole-dict reassignment behaves the same way
+    with pytest.raises(ValueError, match="typo_key"):
+        ng.to_dict()
+
+
+def test_metadata_property_is_the_live_dict():
+    """`Graph.metadata` reads and writes `_metadata` itself, with no checks of its own."""
+    ng = Graph(name="plain", metadata={"start": 1})
+    assert ng.metadata is ng._metadata
+    ng.metadata["added"] = 2
+    assert ng.to_dict()["metadata"]["added"] == 2
+    ng.metadata = {"replaced": 3}
+    assert ng._metadata == {"replaced": 3}
+    assert "added" not in ng.to_dict()["metadata"]
+
+
+def test_metadata_schema_enforced_on_from_dict(strict_graph):
+    """`from_dict()` refuses a payload key the schema doesn't declare, naming graph and key."""
+
+    payload = strict_graph(name="strict", metadata={"pk": 1}).to_dict()
+    payload["metadata"]["legacy_key"] = "from an old version"
+    with pytest.raises(ValueError) as excinfo:
+        strict_graph.from_dict(payload)
+    assert "graph 'strict'" in str(excinfo.value)
+    assert "legacy_key" in str(excinfo.value)
+
+
+def test_to_dict_metadata_is_the_validated_copy():
+    """`to_dict()` writes exactly what `validate_metadata()` returns, not the raw dict."""
+    ng = Graph(name="dumped", metadata={"definition": {"module": "m"}, "spare": 1})
+    dumped = ng.to_dict()["metadata"]
+    assert dumped == Graph.validate_metadata(ng.get_metadata())
+    # the dump is a copy: mutating it leaves the graph's own metadata alone
+    dumped["spare"] = 2
+    assert ng._metadata["spare"] == 1
 
 
 def test_graph_definition_metadata_from_build():
