@@ -253,16 +253,28 @@ def _plural(items: List[str], singular: str, plural: str) -> str:
     return singular if len(items) == 1 else plural
 
 
+def _declares_any(annotation: Any) -> bool:
+    """Return True when ``annotation`` is ``Any``, under an ``Optional`` or not."""
+    return _strip_optional_type(annotation) is Any
+
+
 def _disagreeing_kinds(
-    label: str, subject: str, parts: str, kinds: List[Tuple[str, str]]
+    label: str,
+    subject: str,
+    parts: str,
+    kinds: List[Tuple[str, str]],
+    *,
+    declares_any: bool,
 ) -> ModelContractError:
     """Return the error raised when the pieces of a type arrive in both forms.
 
     ``kinds`` pairs each piece's rendered name with ``"python"`` or ``"node"``.
+    ``declares_any`` says whether one of the pieces is ``Any``, which is worth
+    naming: it is on the stored side because it declares nothing to rebuild.
     """
     rebuilt = [name for name, kind in kinds if kind == "python"]
     stored = [name for name, kind in kinds if kind == "node"]
-    note = " (Any declares nothing to rebuild)" if "typing.Any" in stored else ""
+    note = " (Any declares nothing to rebuild)" if declares_any else ""
     return ModelContractError(
         f"{label} declares {subject}, whose {parts} disagree on how the value arrives: "
         f"{', '.join(rebuilt)} {_plural(rebuilt, 'is', 'are')} rebuilt from plain data, "
@@ -347,7 +359,13 @@ def _arm_receives(annotation: Any, label: str, depth: int = 0) -> str:
             answers = {kind for _, kind in kinds}
             if len(answers) == 1:
                 return answers.pop()
-            raise _disagreeing_kinds(label, _annotation_name(base), "members", kinds)
+            raise _disagreeing_kinds(
+                label,
+                _annotation_name(base),
+                "members",
+                kinds,
+                declares_any=any(_declares_any(member) for _, member in members),
+            )
     try:
         TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=False))
     except PydanticSchemaGenerationError:
@@ -389,6 +407,7 @@ def _body_receives(annotation: Any, label: str, depth: int = 0) -> str:
         repr(annotation),
         "arms",
         [(_annotation_name(arm), kind) for arm, kind in kinds],
+        declares_any=any(_declares_any(arm) for arm, _ in kinds),
     )
 
 
