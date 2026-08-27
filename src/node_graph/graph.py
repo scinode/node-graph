@@ -21,7 +21,6 @@ from .mixins import IOOwnerMixin, WidgetRenderableMixin
 from node_graph.knowledge import KnowledgeGraph
 from dataclasses import dataclass
 from dataclasses import replace
-from functools import lru_cache
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 from typing_extensions import TypedDict
 
@@ -85,12 +84,6 @@ class GraphMetadata(TypedDict, total=False):
     definition: Dict[str, Any]
 
 
-@lru_cache(maxsize=None)
-def metadata_adapter(schema: type) -> TypeAdapter:
-    """Return a cached validator for a metadata schema."""
-    return TypeAdapter(schema)
-
-
 class MetadataValidationError(ValueError):
     """Raised when a graph's `metadata` fails validation against its schema."""
 
@@ -139,6 +132,13 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
     # result; that TypedDict's own `__pydantic_config__` decides whether keys
     # outside it are kept or refused.
     _metadata_schema: type = GraphMetadata
+    # Built once per class from `_metadata_schema`, on the class's first
+    # validation; a subclass never sets this itself.
+    _metadata_adapter: TypeAdapter
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        cls._metadata_adapter = TypeAdapter(cls._metadata_schema)
 
     @classmethod
     def validate_metadata(
@@ -152,9 +152,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
         forbids extras.
         """
         try:
-            return metadata_adapter(cls._metadata_schema).validate_python(
-                dict(metadata or {})
-            )
+            return cls._metadata_adapter.validate_python(dict(metadata or {}))
         except ValidationError as exc:
             raise MetadataValidationError(cls._metadata_schema, name, exc) from exc
 
@@ -1058,3 +1056,7 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
 
         self.engine = LocalEngine()
         return self.engine.run(self)
+
+
+# The base class is not its own subclass: build its adapter here.
+Graph._metadata_adapter = TypeAdapter(GraphMetadata)
