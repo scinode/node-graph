@@ -1512,6 +1512,50 @@ def _refuse_undeclared_outputs(model: Type[BaseModel], result: Any, label: str) 
         )
 
 
+#: Suffix under which a module answers for a task's validated wrapper.
+_VALIDATED_SUFFIX = "__node_graph_validated"
+
+
+def _bind_validated_callable(
+    wrapper: Callable[..., Any], func: Callable[..., Any]
+) -> None:
+    """Bind ``wrapper`` in ``func``'s module under the name its executor records.
+
+    A task records its executor as ``<module>.<callable name>`` and resolves
+    it by importing that path again. ``functools.wraps`` copies ``func``'s
+    name onto the wrapper, so the recorded path names ``func`` -- which
+    carries no model and enforces nothing -- and only the spelling that
+    rebinds the decorated name to the task handle resolves back to something
+    stamped. The wrapper takes a name of its own here and its module answers
+    to it, so the recorded path reaches the wrapper whatever the caller does
+    with the name it decorated.
+
+    The wrapper keeps the name it was given, so what an engine labels a
+    process with does not change; the bound name is recorded separately, for
+    the executor to store. ``__qualname__`` is left alone as well: it is what
+    decides that a callable defined in ``__main__`` or nested in another scope
+    travels as a pickle instead, and a pickle carries the stamp with it.
+    """
+    from node_graph.executor import BOUND_NAME_ATTR
+
+    module_name = getattr(func, "__module__", None)
+    qualname = getattr(func, "__qualname__", "") or ""
+    if not module_name or module_name == "__main__" or "." in qualname:
+        return
+    base = f"{getattr(func, '__name__', 'task')}{_VALIDATED_SUFFIX}"
+    module = sys.modules.get(module_name)
+    if module is None:
+        # Importing the module runs this decoration again and binds the name.
+        setattr(wrapper, BOUND_NAME_ATTR, base)
+        return
+    name, index = base, 1
+    while getattr(module, name, wrapper) is not wrapper:
+        index += 1
+        name = f"{base}_{index}"
+    setattr(wrapper, BOUND_NAME_ATTR, name)
+    setattr(module, name, wrapper)
+
+
 def validated_callable(
     func: Callable[..., Any],
     *,
@@ -1555,6 +1599,7 @@ def validated_callable(
 
     setattr(call, INPUT_MODEL_ATTR, input_model)
     setattr(call, OUTPUT_MODEL_ATTR, output_model)
+    _bind_validated_callable(call, func)
     return call
 
 

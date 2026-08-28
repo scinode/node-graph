@@ -2622,3 +2622,110 @@ def test_the_shadows_a_write_is_judged_by_end_at_the_same_bound():
     validate_wiring_inputs(Chain, {"n": 1, "next": {"n": 2}}, label="c", complete=False)
     with pytest.raises(TaskInputValidationError, match="n is capped at 10"):
         validate_wiring_inputs(Chain, {"n": 99}, label="c", complete=False)
+
+
+# --------------------------------------------------------------------------
+# 27. A handle that does not take the name of the function it decorates
+# --------------------------------------------------------------------------
+
+
+class BandCount(BaseModel):
+    """A rule no socket type check can stand in for."""
+
+    nbnd: int = 1
+
+    @field_validator("nbnd")
+    @classmethod
+    def _counted(cls, value):
+        if value < 0:
+            raise ValueError("nbnd counts bands, so it cannot be negative")
+        return value
+
+
+class BandCap(BaseModel):
+    """The opposite rule on the same field, for a second task off one function."""
+
+    nbnd: int = 1
+
+    @field_validator("nbnd")
+    @classmethod
+    def _capped(cls, value):
+        if value > 10:
+            raise ValueError("nbnd is capped at 10")
+        return value
+
+
+def _band_body(nbnd):
+    return nbnd
+
+
+#: The decorated name is never rebound, so the module still binds the function.
+counted_bands = task(input_model=BandCount)(_band_body)
+capped_bands = task(input_model=BandCap)(_band_body)
+
+
+@task(input_model=BandCount)
+def rebound_bands(nbnd):
+    """The ordinary spelling: the handle replaces the module global."""
+    return nbnd
+
+
+@pytest.mark.parametrize(
+    "handle",
+    [counted_bands, rebound_bands],
+    ids=["handle named apart", "handle rebound to the name"],
+)
+def test_the_run_edge_holds_the_model_whatever_the_handle_is_called(handle):
+    """The body runs through the executor, and the executor must reach the wrapper."""
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        handle.run(nbnd=-5)
+
+
+@pytest.mark.parametrize(
+    "handle",
+    [counted_bands, rebound_bands],
+    ids=["handle named apart", "handle rebound to the name"],
+)
+def test_the_write_reads_the_model_by_the_same_route(handle):
+    """The write checkpoint finds the model through the same executor."""
+    graph = Graph(name="named_apart")
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        graph.add_task(handle, "b", nbnd=-5)
+
+
+def test_the_function_itself_is_left_unstamped():
+    """What is bound is the wrapper: the function still enforces nothing."""
+    from node_graph.input_model import input_model_of_callable
+
+    assert input_model_of_callable(_band_body) is None
+    assert input_model_of_callable(counted_bands._spec.executor.callable) is BandCount
+
+
+def test_the_wrapper_keeps_the_name_a_process_is_labelled_with():
+    """Only the name the executor records changes, not the name of the callable."""
+    executor = counted_bands._spec.executor
+    assert executor.callable_name != "_band_body"
+    assert executor.callable.__name__ == "_band_body"
+
+
+def test_two_tasks_off_one_function_each_keep_their_own_model():
+    """Two wrappers cannot answer to one name, so each is bound under its own."""
+    assert counted_bands.run(nbnd=20) == 20
+    with pytest.raises(TaskInputValidationError, match="capped at 10"):
+        capped_bands.run(nbnd=20)
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        counted_bands.run(nbnd=-5)
+
+
+def test_a_wrapper_stored_by_value_carries_its_model_with_it():
+    """The other route out of this module: nothing to bind, and nothing lost."""
+
+    def nested(nbnd):
+        return nbnd
+
+    handle = task(input_model=BandCount)(nested)
+    assert handle._spec.executor.mode.value == "pickled_callable"
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        handle.run(nbnd=-5)
+
+
