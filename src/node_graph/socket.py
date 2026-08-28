@@ -928,9 +928,7 @@ def _raise_namespace_assignment_error(
     ]
     raise SocketValueError(
         "\n".join(msg),
-        loc=socket_loc(
-            getattr(target_ns, "_full_name", None), *([key] if key else [])
-        ),
+        loc=socket_loc(getattr(target_ns, "_full_name", None), *([key] if key else [])),
         error_type=error_type,
     )
 
