@@ -55,7 +55,7 @@ import functools
 import inspect
 import sys
 from copy import copy
-from dataclasses import replace
+from dataclasses import MISSING, replace
 from typing import (
     Annotated,
     Any,
@@ -97,6 +97,7 @@ __all__ = [
     "BODY_RECEIVES",
     "ContentSnapshot",
     "apply_models",
+    "body_inputs",
     "check_content_invariance",
     "content_snapshot",
     "check_signature_against_model",
@@ -452,7 +453,9 @@ def _mark_body_arrival(spec: Any, annotation: Any, label: str) -> Any:
     return replace(spec, meta=replace(spec.meta, extras=extras))
 
 
-def _fields_from_model(model: Type[BaseModel], spec: Any, api: Any) -> Any:
+def _fields_from_model(
+    model: Type[BaseModel], spec: Any, api: Any, *, defaults: bool = True
+) -> Any:
     """Overlay on ``spec`` what the model knows and ``from_model`` does not.
 
     Four things: a field's requiredness, which ``from_model`` leaves at
@@ -461,6 +464,11 @@ def _fields_from_model(model: Type[BaseModel], spec: Any, api: Any) -> Any:
     into a typed dynamic namespace, so each key of the mapping is a socket of
     its own and can be linked by name; and, on every leaf, what a body
     receives for it (:func:`_body_receives`).
+
+    ``defaults`` is false below a nested model: a member the caller left out
+    carries no default onto its socket, so nothing is collected for it and
+    the body is handed the members that were written. The member stays
+    optional, so a write may still name any subset of them.
     """
     fields = dict(spec.fields or {})
     for name, field in model.model_fields.items():
@@ -485,13 +493,17 @@ def _fields_from_model(model: Type[BaseModel], spec: Any, api: Any) -> Any:
         else:
             nested = _model_of_type(field.annotation)
             if nested is not None and child.is_namespace():
-                child = _fields_from_model(nested, child, api)
+                child = _fields_from_model(nested, child, api, defaults=False)
             else:
                 child = _mark_body_arrival(
                     child, field.annotation, f"{model.__name__}.{name}"
                 )
         child = replace(child, meta=replace(child.meta, required=field.is_required()))
-        if not field.is_required() and not child.is_namespace():
+        if child.is_namespace():
+            pass
+        elif not defaults:
+            child = replace(child, default=MISSING)
+        elif not field.is_required():
             child = replace(
                 child,
                 default=dump_model_field(
@@ -1596,6 +1608,45 @@ def _bind_validated_callable(
     setattr(module, name, wrapper)
 
 
+def _written_members(instance: BaseModel) -> Dict[str, Any]:
+    """Return the members written into ``instance``, in the types it made of them.
+
+    A member nobody wrote is left out at every depth. The values are the
+    model's own -- a ``Decimal`` field is a ``Decimal`` here, not the string
+    its serializer stores -- because this is what the body is called with,
+    not what storage keeps.
+    """
+    written = instance.__pydantic_fields_set__
+    members: Dict[str, Any] = {}
+    for name in type(instance).model_fields:
+        if name not in written:
+            continue
+        value = getattr(instance, name)
+        members[name] = (
+            _written_members(value) if isinstance(value, BaseModel) else value
+        )
+    return members
+
+
+def body_inputs(model: Type[BaseModel], validated: BaseModel) -> Dict[str, Any]:
+    """Return what the body is called with, field by field.
+
+    A field declaring a nested model is handed the members that were written
+    and no others, so a body reading ``system`` reads the keys its caller
+    named. Every other field is handed what the model made of it, default
+    included: a field the caller left out is one the model answers for.
+    """
+    inputs: Dict[str, Any] = {}
+    for name, value in dict(validated).items():
+        field = model.model_fields.get(name)
+        nested = _model_of_type(field.annotation) if field is not None else None
+        if nested is not None and isinstance(value, BaseModel):
+            inputs[name] = _written_members(value)
+        else:
+            inputs[name] = value
+    return inputs
+
+
 def validated_callable(
     func: Callable[..., Any],
     *,
@@ -1627,7 +1678,7 @@ def validated_callable(
                     errors=exc.errors(),
                 ) from exc
             check_content_invariance(input_model, before, validated, label=label)
-            kwargs = dict(validated)
+            kwargs = body_inputs(input_model, validated)
         result = func(**kwargs)
         if output_model is not None:
             _refuse_undeclared_outputs(output_model, result, label)

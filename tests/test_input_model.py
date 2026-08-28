@@ -19,6 +19,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    field_serializer,
     ValidationError,
     field_validator,
     model_validator,
@@ -2781,65 +2782,129 @@ def test_a_wrapper_stored_by_value_carries_its_model_with_it():
 # --------------------------------------------------------------------------
 
 
-class Defaulted(BaseModel):
-    """A namespace whose members both carry a default."""
+class System(BaseModel):
+    """Five members, each with a default the model answers for."""
+
+    nbnd: int = 1
+    nosym: bool = False
+    ecutwfc: float = 60.0
+    occupations: str = "fixed"
+    degauss: float = 0.0
+
+
+class Route(BaseModel):
+    spin: Color = Color.RED
+    system: System = System()
+
+
+@task(input_model=Route)
+def route_body(spin, system):
+    BODY_SAW["leaf"] = {"spin": spin, "system": dict(system)}
+    return 1
+
+
+@task.graph(input_model=Route)
+def route_graph(spin, system):
+    BODY_SAW["graph"] = {"spin": spin, "system": dict(system)}
+    return add(x=1, y=2)
+
+
+def test_the_body_is_handed_the_members_that_were_written_and_no_others():
+    """A member left out is nothing to hand on; a field left out the model answers for."""
+    BODY_SAW.clear()
+    route_body.run(system={"nbnd": 20})
+    assert BODY_SAW["leaf"]["system"] == {"nbnd": 20}
+    assert BODY_SAW["leaf"]["spin"] == Color.RED
+
+
+def test_the_graph_body_reads_the_same_write_the_same_way():
+    """The sockets decide what is collected, so both bodies see one write alike."""
+    BODY_SAW.clear()
+    route_graph.build(system={"nbnd": 20})
+    assert BODY_SAW["graph"]["system"] == {"nbnd": 20}
+    assert BODY_SAW["graph"]["spin"] == Color.RED
+
+
+class Structured(BaseModel):
+    """A member with no default, which a write cannot leave to the model."""
+
+    structure: str
+    nbnd: int = 1
+
+
+class HoldsStructured(BaseModel):
+    system: Structured = Structured(structure="si")
+
+
+@task(input_model=HoldsStructured)
+def structured_body(system):
+    return 1
+
+
+def test_a_member_with_no_default_is_still_refused_when_it_is_absent():
+    """Sockets free to be missing are how a write may be partial, not the model."""
+    with pytest.raises(TaskInputValidationError, match="Field required"):
+        structured_body.run(system={"nbnd": 3})
+
+
+class Coupled(BaseModel):
+    """A namespace whose rule reads a member the write need not name."""
 
     nbnd: int = 1
     nosym: bool = False
 
-
-class Absent(BaseModel):
-    """The same two, the second able to stand for what nobody wrote."""
-
-    nbnd: int = 1
-    nosym: Optional[bool] = None
-
-
-class HoldsDefaulted(BaseModel):
-    system: Defaulted = Defaulted()
+    @model_validator(mode="after")
+    def _large_counts_need_nosym(self):
+        if self.nbnd > 10 and not self.nosym:
+            raise ValueError("a large band count needs nosym")
+        return self
 
 
-class HoldsAbsent(BaseModel):
-    system: Absent = Absent()
+class HoldsCoupled(BaseModel):
+    system: Coupled = Coupled()
 
 
-@task.graph(input_model=HoldsDefaulted)
-def defaulted_route(system):
-    BODY_SAW["defaulted"] = dict(system)
-    return add(x=1, y=2)
-
-
-@task.graph(input_model=HoldsAbsent)
-def absent_route(system):
-    BODY_SAW["absent"] = dict(system)
-    return add(x=1, y=2)
-
-
-@task(input_model=HoldsAbsent)
-def absent_leaf(system):
-    BODY_SAW["absent_leaf"] = dict(system)
+@task(input_model=HoldsCoupled)
+def coupled_body(system):
     return 1
 
 
-def test_a_member_nobody_wrote_reaches_the_body_at_the_models_default():
-    """One written key, and the body is handed the whole namespace."""
+def test_a_rule_reading_an_unwritten_member_sees_its_default_and_may_refuse():
+    """What the body is handed is narrowed; what the model is given is not."""
+    with pytest.raises(TaskInputValidationError, match="needs nosym"):
+        coupled_body.run(system={"nbnd": 20})
+
+
+def test_the_same_write_naming_the_member_the_rule_reads_is_accepted():
+    """The control: the rule is answered on the write, not skipped by it."""
+    assert coupled_body.run(system={"nbnd": 20, "nosym": True}) == 1
+
+
+class Rendered(BaseModel):
+    """A member whose serializer decides its stored form, not its own type."""
+
+    value: Decimal = Decimal("0.10")
+
+    @field_serializer("value")
+    def _dump(self, value: Decimal) -> str:
+        return str(value)
+
+
+class HoldsRendered(BaseModel):
+    inner: Rendered = Rendered()
+
+
+@task(input_model=HoldsRendered)
+def rendered_body(inner):
+    BODY_SAW["rendered"] = inner
+    return 1
+
+
+def test_a_written_member_reaches_the_body_in_the_type_its_model_declares():
+    """Narrowing to what was written is not rendering it as storage would."""
     BODY_SAW.clear()
-    defaulted_route.build(system={"nbnd": 20})
-    assert BODY_SAW["defaulted"] == {"nbnd": 20, "nosym": False}
-
-
-def test_a_member_that_defaults_to_none_does_not_reach_the_graph_body():
-    """How a caller tells 'nobody wrote this' from 'this is the default'."""
-    BODY_SAW.clear()
-    absent_route.build(system={"nbnd": 20})
-    assert BODY_SAW["absent"] == {"nbnd": 20}
-
-
-def test_at_the_run_edge_the_same_member_arrives_as_the_none_it_defaults_to():
-    """The leaf's inputs go through the model, which fills every field it declares."""
-    BODY_SAW.clear()
-    absent_leaf.run(system={"nbnd": 20})
-    assert BODY_SAW["absent_leaf"] == {"nbnd": 20, "nosym": None}
+    rendered_body.run(inner={"value": "1.50"})
+    assert BODY_SAW["rendered"] == {"value": Decimal("1.50")}
 
 
 # --------------------------------------------------------------------------
