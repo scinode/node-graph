@@ -410,8 +410,18 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         """Execute the task."""
         executor = self.resolve_executor_callable(require=True)
         inputs = self.inputs._value
-        args = [inputs[arg] for arg in self.args_data["args"]]
-        kwargs = {key: inputs[key] for key in self.args_data["kwargs"]}
+        positional = list(self.args_data["args"])
+        keyword = list(self.args_data["kwargs"])
+        if all(name in inputs for name in positional):
+            args = [inputs[name] for name in positional]
+        else:
+            # A socket nothing was written into collects no value, and leaving
+            # one out of a positional call would shift the rest; everything the
+            # task does hold goes by name, and what is missing is the
+            # callable's own to answer for.
+            args = []
+            keyword = positional + keyword
+        kwargs = {key: inputs[key] for key in keyword if key in inputs}
         var_kwargs = (
             inputs[self.args_data["var_kwargs"]]
             if self.args_data["var_kwargs"]
@@ -463,7 +473,10 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
                 or "property" to force property values even when linked.
         """
 
+        from node_graph.input_model import validate_task_inputs
+
         data = deep_copy_only_dicts(data)
+        validate_task_inputs(self, data)
         if value_source is None:
             value_source = "property" if self._allow_input_overrides else "link"
         if value_source not in ("link", "property"):

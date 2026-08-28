@@ -17,6 +17,10 @@ class ExecutorMode(str, Enum):
     PICKLED_CALLABLE = "pickled_callable"  # A callable serialized using cloudpickle.
 
 
+#: Attribute holding the name a callable's module binds it under.
+BOUND_NAME_ATTR = "__node_graph_bound_name__"
+
+
 def serialize_callable(
     func: Callable, register_pickle_by_value: bool = False, include_source: bool = True
 ) -> Dict[str, Any]:
@@ -43,7 +47,10 @@ def serialize_callable(
     if not callable(func):
         raise TypeError("Provided object is not a callable function or class.")
     source_code = ""
-    callable_name = func.__name__
+    # A wrapper its module binds under a name of its own says so, because
+    # ``functools.wraps`` gives it the wrapped function's ``__name__`` and
+    # importing that name back would return the function, not the wrapper.
+    callable_name = getattr(func, BOUND_NAME_ATTR, None) or func.__name__
     if func.__module__ == "__main__" or "." in func.__qualname__.split(".", 1)[-1]:
         mode = ExecutorMode.PICKLED_CALLABLE
         pickled_data = cloudpickle.dumps(func)

@@ -85,6 +85,144 @@ class TaskLink:
             return self._format_union(union)
         return self._annotated_py_type(sock)
 
+    def _socket_extras(self, sock: "Socket") -> dict:
+        return getattr(getattr(sock, "_metadata", None), "extras", {}) or {}
+
+    def _allowed_values(self, sock: "Socket") -> list | None:
+        """Return the values this socket may carry, or None if unrestricted.
+
+        A ``Literal`` socket lists them outright; a plain ``Enum`` socket
+        carries all of its members' values.
+        """
+        extras = self._socket_extras(sock)
+        allowed = extras.get("allowed_values")
+        if isinstance(allowed, list):
+            return allowed
+        info = extras.get("structured_type")
+        if isinstance(info, dict) and info.get("kind") == "enum":
+            from node_graph.utils.struct_utils import import_structured_type
+
+            try:
+                return [member.value for member in import_structured_type(info["path"])]
+            except Exception:
+                return None
+        return None
+
+    def _literal_base(self, sock: "Socket") -> str | None:
+        base = self._socket_extras(sock).get("literal_base")
+        return str(base).lower() if base else None
+
+    def check_allowed_values(self) -> bool | None:
+        """Decide a link where either end restricts the values it carries.
+
+        Returns True to accept the link, None to leave the decision to the
+        remaining checks, and raises when the source can carry a value the
+        target forbids. Reached only for a source whose type is known: an
+        ``Any`` source is accepted earlier on type alone, which is what lets an
+        untyped parent pass a value on, and ``check_static_source_value`` reads
+        whatever value it already holds.
+        """
+        from node_graph.utils.struct_utils import value_is_allowed
+
+        from_allowed = self._allowed_values(self.from_socket)
+        to_allowed = self._allowed_values(self.to_socket)
+        if from_allowed is None and to_allowed is None:
+            return None
+
+        if from_allowed is not None and to_allowed is not None:
+            offending = [
+                value
+                for value in from_allowed
+                if not value_is_allowed(value, to_allowed)
+            ]
+            if not offending:
+                return True
+            self._raise_allowed_values_mismatch(
+                [repr(value) for value in offending], to_allowed
+            )
+
+        if to_allowed is not None:
+            # The source is unrestricted, so it can carry a forbidden value.
+            self._raise_allowed_values_mismatch(None, to_allowed)
+
+        # Only the source restricts: widening into its own base type is safe.
+        base = self._literal_base(self.from_socket)
+        if base is not None and self._lower_id(self.to_socket) == base:
+            return True
+        return None
+
+    def check_static_source_value(self) -> None:
+        """Reject a link whose source already holds a value the target forbids.
+
+        A source socket declared ``Any`` passes every type check, so a value
+        already sitting on it is read here, the last point before the run.
+        Everything else is decided at run time, when the value exists: a source
+        fed by an upstream task, a source assigned after this link was made,
+        and a value bound for a sub-graph one hop further out, whose restricted
+        socket only appears as that sub-graph expands.
+        """
+        from node_graph.socket import TaggedValue
+
+        from node_graph.utils.struct_utils import (
+            canonical_socket_value,
+            socket_loc,
+            socket_subject,
+        )
+
+        extras = self._socket_extras(self.to_socket)
+        structured_type = extras.get("structured_type") or {}
+        if "allowed_values" not in extras and structured_type.get("kind") != "enum":
+            return
+        if self._is_namespace(self.from_socket):
+            # A namespace carries a mapping; the shape check below reports it.
+            return
+        if any(link.to_socket is self.from_socket for link in self.from_socket._links):
+            # Fed by an upstream task: the value only exists at run time.
+            return
+        value = getattr(self.from_socket, "_value", None)
+        if value is None:
+            return
+        if isinstance(value, TaggedValue):
+            tagged_socket = value._socket
+            # ``is`` only: comparing sockets with ``==`` builds an operator task.
+            if tagged_socket is not None and tagged_socket is not self.from_socket:
+                return
+            value = value.__wrapped__
+        canonical_socket_value(
+            value,
+            structured_type=structured_type or None,
+            allowed=extras.get("allowed_values"),
+            subject=socket_subject(self.to_socket._full_name_with_task),
+            loc=socket_loc(self.to_socket._full_name),
+        )
+
+    def _raise_allowed_values_mismatch(
+        self, offending: list[str] | None, allowed: list
+    ) -> None:
+        src = f"{self.from_task.name}.{self.from_socket._scoped_name}"
+        dst = f"{self.to_task.name}.{self.to_socket._scoped_name}"
+        rendered = ", ".join(repr(value) for value in allowed)
+        detail = (
+            f"  Source can carry {', '.join(offending)}, which {dst} forbids."
+            if offending
+            else "  Source is not restricted to those values."
+        )
+        raise TypeError(
+            "\n".join(
+                [
+                    "Socket value range mismatch:",
+                    f"  {src} [{self._format_socket_id(self.from_socket)}] -> {dst} "
+                    f"[{self._format_socket_id(self.to_socket)}] is not allowed.",
+                    f"  {dst} accepts only {rendered}.",
+                    detail,
+                    "",
+                    "Suggestions:",
+                    "  • Widen the target annotation to include the source's values",
+                    "  • Or insert a task that narrows the value before the link",
+                ]
+            )
+        )
+
     def _namespace_item(self, sock: "Socket") -> dict | None:
         extras = getattr(getattr(sock, "_metadata", None), "extras", {}) or {}
         item = extras.get("item")
@@ -168,6 +306,8 @@ class TaskLink:
 
         from_id = self._lower_id(self.from_socket)
         to_id = self._lower_id(self.to_socket)
+
+        self.check_static_source_value()
 
         # "any" accepts anything
         if self._is_any(self.from_socket) or self._is_any(self.to_socket):
@@ -253,6 +393,9 @@ class TaskLink:
                 union, self.from_socket, union_is_source=False
             ):
                 return
+
+        if self.check_allowed_values():
+            return
 
         if self._is_annotated(self.from_socket) and self._is_annotated(self.to_socket):
             from_type = self._annotated_py_type(self.from_socket)

@@ -134,6 +134,60 @@ def _assign_graph_outputs(outputs: Any, graph: Graph) -> None:
         )
 
 
+def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
+    """Recursively apply ``adapter.deserialize`` to leaves of ``values`` so a
+    ``@task.graph`` body receives the primitive its signature declares, even
+    when the stored value was wrapped by the engine for provenance."""
+    from node_graph.socket import TaskSocketNamespace
+
+    if adapter is None or not hasattr(adapter, "deserialize"):
+        return values
+    if not isinstance(values, dict):
+        return values
+    from node_graph.utils.struct_utils import is_structured_instance
+
+    out = dict(values)
+    for name, item in namespace._sockets.items():
+        if name not in out:
+            continue
+        value = out[name]
+        if isinstance(item, TaskSocketNamespace):
+            if isinstance(value, dict):
+                out[name] = _deserialize_inputs(item, value, adapter)
+            elif is_structured_instance(value):
+                # The namespace was already materialised into a dataclass /
+                # Pydantic instance by ``coerce_inputs_from_spec`` (which
+                # runs before ``_deserialize_inputs`` in ``materialize_graph``).
+                # Without this branch, the adapter never sees the structured
+                # value, so a serialiser that auto-promotes primitive fields
+                # to engine-typed wrappers (e.g. ``aiida-workgraph``'s
+                # ``orm.Int`` / ``orm.Float``) leaves them wrapped inside
+                # the dataclass and downstream ``int``-typed code breaks.
+                out[name] = adapter.deserialize(value, item)
+        else:
+            out[name] = adapter.deserialize(value, item)
+    return out
+
+
+def _validate_graph_body_inputs(func: Callable, inputs: dict, name: str) -> dict:
+    """Return a graph's resolved inputs, checked against its input model.
+
+    Every expansion of a ``@task.graph`` passes through here -- ``build()`` on
+    a handle, the engine building a subgraph, and the workgraph task running
+    one -- so this is the one place a graph's whole payload is known.
+
+    A graph with no model gets its inputs back untouched; one with a model
+    gets them in the types the model declares, still under the tags its links
+    are drawn from.
+    """
+    from node_graph.input_model import input_model_of_callable, validate_graph_inputs
+
+    model = input_model_of_callable(func)
+    if model is None:
+        return inputs
+    return validate_graph_inputs(model, inputs, label=name)
+
+
 def materialize_graph(
     func: Callable,
     in_spec: SocketSpec,
@@ -173,6 +227,10 @@ def materialize_graph(
         tag_socket_value(graph.inputs)
         inputs = graph.inputs._collect_values(unwrap=False)
         inputs = coerce_inputs_from_spec(inputs, in_spec)
+        inputs = _deserialize_inputs(
+            graph.inputs, inputs, getattr(graph, "serialization", None)
+        )
+        inputs = _validate_graph_body_inputs(func, inputs, name)
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)
