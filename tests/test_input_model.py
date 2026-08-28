@@ -2022,3 +2022,74 @@ def test_the_declared_keys_alone_still_pass():
         return {"total": x + y, "product": x * y}
 
     assert emits_declared.run(x=3, y=2) == {"total": 5, "product": 6}
+
+
+# --------------------------------------------------------------------------
+# 20. A tag is judged by the value it carries
+# --------------------------------------------------------------------------
+
+
+class Cutoff(BaseModel):
+    """A constraint and no rule, so only the type pass can enforce it."""
+
+    structure: str
+    ecutwfc: float = Field(default=60.0, le=200)
+
+
+@task(input_model=Cutoff)
+def cutoff(structure, ecutwfc):
+    return ecutwfc
+
+
+class CutoffCaller(BaseModel):
+    structure: str = "si"
+    ecutwfc: float = 60.0
+
+
+@task.graph(input_model=CutoffCaller)
+def calls_cutoff(structure, ecutwfc):
+    return cutoff(structure=structure, ecutwfc=ecutwfc).result
+
+
+def test_a_constraint_is_enforced_on_a_value_a_graph_body_passes_on():
+    """A graph body hands its inputs on as tags, and a tag carries a value.
+
+    The graph itself admits any cutoff; the bound is the leaf's own, and it is
+    answered at the line inside the body that writes the value.
+    """
+    with pytest.raises(TaskInputValidationError, match="less than or equal to 200"):
+        calls_cutoff.build(structure="si", ecutwfc=500)
+
+
+def test_the_same_body_still_draws_the_link_for_a_value_the_bound_admits():
+    """The control: judging the tag costs neither the build nor the link.
+
+    A tag stripped to its value would leave the leaf holding a copy, so the
+    link is what says the tag survived the check.
+    """
+    graph = calls_cutoff.build(structure="si", ecutwfc=100)
+    assert "graph_inputs.outputs.ecutwfc -> cutoff.inputs.ecutwfc" in links_of(graph)
+
+
+def test_a_tagged_value_and_the_value_it_carries_are_judged_alike():
+    """The unit behind both: the type pass reads through the tag as the rules do."""
+    from node_graph.socket import TaggedValue
+
+    with Graph(name="tagged") as graph:
+        source = a_thousand()
+
+    tagged = TaggedValue(500, socket=source.result)
+    for written in (500, tagged):
+        with pytest.raises(TaskInputValidationError, match="less than or equal to 200"):
+            validate_wiring_inputs(
+                Cutoff, {"ecutwfc": written}, label="cutoff", complete=False
+            )
+    assert graph is not None
+
+
+def test_a_bare_socket_in_the_same_place_is_still_a_reference():
+    """The other half: what a link will deliver is not a value to judge."""
+    with Graph(name="reference") as graph:
+        source = a_thousand()
+        cutoff(structure="si", ecutwfc=source.result)
+    assert links_of(graph) == ["a_thousand.outputs.result -> cutoff.inputs.ecutwfc"]

@@ -623,14 +623,15 @@ def is_socket_reference(value: Any) -> bool:
     """Return True when ``value`` stands for something a link will deliver.
 
     A task counts: writing one into an input links its top-level output, so
-    what arrives is decided later, exactly as for a socket.
+    what arrives is decided later, exactly as for a socket. A tag does not:
+    it carries the value it stands for, and that value is here now.
     """
     from node_graph.socket import BaseSocket, TaggedValue
     from node_graph.task import Task
 
-    if isinstance(value, (BaseSocket, Task)):
-        return True
-    return isinstance(value, TaggedValue) and value._socket is not None
+    if isinstance(value, TaggedValue):
+        value = value.__wrapped__
+    return isinstance(value, (BaseSocket, Task))
 
 
 def _awaits_a_link(value: Any, depth: int = 0) -> bool:
@@ -665,7 +666,12 @@ def _awaits_a_link(value: Any, depth: int = 0) -> bool:
 
 
 def _accept_reference(value: Any, handler: Any, info: Any) -> Any:
-    """Let a socket reference through untouched; validate anything else."""
+    """Let a socket reference through untouched; validate anything else.
+
+    The test is :func:`is_socket_reference`, the one the rule pass uses too:
+    a field's type and its rules must judge the same write the same way, or a
+    value one of them refuses is a value the other never sees.
+    """
     from node_graph.socket import TaggedValue
 
     if is_socket_reference(value):
