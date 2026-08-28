@@ -2769,6 +2769,20 @@ def test_a_spec_rebuilt_from_its_stored_form_still_carries_the_model():
         rebuilt.set_inputs({"nbnd": -5})
 
 
+def test_the_run_edge_takes_what_an_engine_passes_positionally():
+    """An engine that calls the body positionally addresses the same fields.
+
+    AiiDA's process functions call the callable they wrap that way, so a
+    keyword-only wrapper would fail before the model ever ran.
+    """
+    from node_graph.input_model import validated_callable
+
+    ran = validated_callable(_band_body, input_model=BandCount)
+    assert ran(20) == 20
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        ran(-5)
+
+
 def test_a_wrapper_stored_by_value_carries_its_model_with_it():
     """The other route out of this module: nothing to bind, and nothing lost."""
 

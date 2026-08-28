@@ -1679,9 +1679,14 @@ def validated_callable(
     what the output model accepted.
     """
     label = label or getattr(func, "__name__", "task")
+    signature = inspect.signature(func)
 
     @functools.wraps(func)
-    def call(**kwargs: Any) -> Any:
+    def call(*args: Any, **kwargs: Any) -> Any:
+        if args:
+            # An engine that calls the body positionally -- AiiDA's process
+            # functions do -- addresses the same fields by name here.
+            kwargs = dict(signature.bind_partial(*args, **kwargs).arguments)
         if input_model is not None:
             before = content_snapshot(input_model, kwargs)
             try:
