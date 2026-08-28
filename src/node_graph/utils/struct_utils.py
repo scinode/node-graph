@@ -7,6 +7,8 @@ import importlib
 
 from pydantic import BaseModel
 
+from node_graph.errors import SocketValueError
+
 
 def is_enum_type(tp: Any) -> bool:
     """Return True for Enum subclasses (including ``str``- and ``int``-Enum)."""
@@ -133,13 +135,34 @@ def socket_subject(name: str) -> str:
     return f"socket '{name}'"
 
 
+def socket_loc(full_name: str | None, *keys: str) -> tuple:
+    """Return the path to a socket, spelled as an input model spells its errors.
+
+    ``full_name`` runs from the task's ``inputs`` or ``outputs``, which the
+    model's own path does not name, so the first segment is dropped. ``keys``
+    are the names below the socket that the value itself carries.
+    """
+    parts = [part for part in (full_name or "").split(".") if part]
+    if parts and parts[0] in ("inputs", "outputs"):
+        parts = parts[1:]
+    return tuple(parts) + keys
+
+
 def _invalid_value_error(
-    value: Any, allowed: Any, subject: str | None, hint: str
-) -> ValueError:
-    return ValueError(
+    value: Any,
+    allowed: Any,
+    subject: str | None,
+    hint: str,
+    *,
+    loc: tuple = (),
+    error_type: str = "literal_error",
+) -> SocketValueError:
+    return SocketValueError(
         f"Invalid value for {subject or 'this input'}.\n"
         f"  Input should be {format_allowed_values(allowed)}. Got {value!r}.\n"
-        f"  {hint}"
+        f"  {hint}",
+        loc=loc,
+        error_type=error_type,
     )
 
 
@@ -149,6 +172,7 @@ def canonical_enum_member(
     *,
     allowed: Any = None,
     subject: str | None = None,
+    loc: tuple = (),
 ) -> Any:
     """Return the ``cls`` member ``value`` names, raising if it names none.
 
@@ -179,6 +203,8 @@ def canonical_enum_member(
                 subject,
                 f"{structured_type_path(cls)} members are accepted by "
                 f"member{named} or by value.",
+                loc=loc,
+                error_type="enum",
             )
     if not value_is_allowed(member.value, permitted):
         raise _invalid_value_error(
@@ -186,6 +212,8 @@ def canonical_enum_member(
             permitted,
             subject,
             f"The socket admits only part of {structured_type_path(cls)}.",
+            loc=loc,
+            error_type="literal_error",
         )
     return member
 
@@ -195,6 +223,7 @@ def canonical_literal_value(
     allowed: Any,
     *,
     subject: str | None = None,
+    loc: tuple = (),
 ) -> Any:
     """Return ``value`` when it is one of ``allowed``, raising otherwise.
 
@@ -205,7 +234,12 @@ def canonical_literal_value(
     if value_is_allowed(candidate, allowed):
         return candidate
     raise _invalid_value_error(
-        value, allowed, subject, "Only the values listed above are accepted here."
+        value,
+        allowed,
+        subject,
+        "Only the values listed above are accepted here.",
+        loc=loc,
+        error_type="literal_error",
     )
 
 
@@ -215,6 +249,7 @@ def canonical_socket_value(
     structured_type: Dict[str, str] | None = None,
     allowed: Any = None,
     subject: str | None = None,
+    loc: tuple = (),
 ) -> Any:
     """Return the value a socket may store, raising when the socket forbids it.
 
@@ -222,9 +257,11 @@ def canonical_socket_value(
     """
     if structured_type is not None and structured_type.get("kind") == "enum":
         cls = import_structured_type(structured_type["path"])
-        return canonical_enum_member(value, cls, allowed=allowed, subject=subject)
+        return canonical_enum_member(
+            value, cls, allowed=allowed, subject=subject, loc=loc
+        )
     if allowed is not None:
-        return canonical_literal_value(value, allowed, subject=subject)
+        return canonical_literal_value(value, allowed, subject=subject, loc=loc)
     return value
 
 

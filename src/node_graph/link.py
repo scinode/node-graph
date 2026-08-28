@@ -165,6 +165,7 @@ class TaskLink:
 
         from node_graph.utils.struct_utils import (
             canonical_socket_value,
+            socket_loc,
             socket_subject,
         )
 
@@ -192,6 +193,7 @@ class TaskLink:
             structured_type=structured_type or None,
             allowed=extras.get("allowed_values"),
             subject=socket_subject(self.to_socket._full_name_with_task),
+            loc=socket_loc(self.to_socket._full_name),
         )
 
     def _raise_allowed_values_mismatch(

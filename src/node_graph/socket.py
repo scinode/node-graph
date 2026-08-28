@@ -740,6 +740,7 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
             canonical_socket_value,
             literal_value,
             retagged,
+            socket_loc,
             socket_subject,
         )
 
@@ -762,6 +763,7 @@ class TaskSocket(BaseSocket, OperatorSocketMixin):
                 structured_type=structured_type,
                 allowed=allowed,
                 subject=socket_subject(self._full_name_with_task),
+                loc=socket_loc(self._full_name),
             )
         )
         if canonical is raw:
@@ -896,8 +898,19 @@ def _raise_namespace_assignment_error(
     incoming_desc: str,
     reason: str,
     fixes: list[str],
+    error_type: str,
+    key: str | None = None,
 ) -> None:
-    """Raise a ValueError guiding users when setting/linking values into a namespace."""
+    """Raise the refusal of a value written or linked into a namespace.
+
+    ``error_type`` names the rule that refused and ``key``, where the refusal
+    is about one name below the namespace, is that name: together with the
+    namespace's own path they address the refused value the way an input
+    model's errors address it.
+    """
+    from node_graph.errors import SocketValueError
+    from node_graph.utils.struct_utils import socket_loc
+
     where = getattr(target_ns, "_full_name_with_task", "<namespace>")
     msg = [
         f"Invalid assignment into namespace socket: {where}",
@@ -913,7 +926,13 @@ def _raise_namespace_assignment_error(
         "How to fix:",
         *[f"  • {line}" for line in fixes],
     ]
-    raise ValueError("\n".join(msg))
+    raise SocketValueError(
+        "\n".join(msg),
+        loc=socket_loc(
+            getattr(target_ns, "_full_name", None), *([key] if key else [])
+        ),
+        error_type=error_type,
+    )
 
 
 class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
@@ -1260,6 +1279,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                     "Remove the builtin key from the assignment; or",
                     "link to an explicit leaf socket instead of the namespace.",
                 ],
+                error_type="reserved_key",
+                key=key,
             )
         if not self._metadata.dynamic:
             _raise_namespace_assignment_error(
@@ -1270,6 +1291,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                     "Add the field to the namespace spec; or",
                     "make the namespace dynamic if it should grow automatically.",
                 ],
+                error_type="extra_forbidden",
+                key=key,
             )
         self._append_dynamic_child(key, val)
         return self._sockets[key]
@@ -1287,6 +1310,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                             "Remove the builtin key from the assignment; or",
                             "link to an explicit leaf socket instead of the namespace.",
                         ],
+                        error_type="reserved_key",
+                        key=head,
                     )
                 if not self._metadata.dynamic:
                     _raise_namespace_assignment_error(
@@ -1298,6 +1323,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                             "mark this namespace dynamic if it must accept arbitrary keys;",
                             "or correct the key path being assigned.",
                         ],
+                        error_type="extra_forbidden",
+                        key=head,
                     )
                 self._new(
                     self._SocketPool["namespace"],
@@ -1317,6 +1344,8 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                         "Use a namespace socket for hierarchical data; update your SocketSpec accordingly; or",
                         "flatten your assignment to target a leaf socket directly.",
                     ],
+                    error_type="not_a_namespace",
+                    key=head,
                 )
             child._set_socket_value({tail: val}, value_source=value_source)
             return
@@ -1343,6 +1372,7 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                         "Link a specific leaf socket instead of the namespace; or",
                         "make the namespace dynamic if it should accept multiple links.",
                     ],
+                    error_type="namespace_link_forbidden",
                 )
             if isinstance(val, (dict, TaskSocketNamespace)):
                 target._set_socket_value(val, value_source=value_source)
@@ -1354,6 +1384,7 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                 fixes=[
                     "Provide a dict like {'x': 1, 'y': 2} that matches the namespace shape.",
                 ],
+                error_type="namespace_expects_mapping",
             )
         else:
             target._set_socket_value(val, value_source=value_source)
@@ -1401,6 +1432,7 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                     "        add_multiply(data=data)",
                     "",
                 ],
+                error_type="namespace_tagged_value",
             )
 
         if not isinstance(value, dict):
@@ -1412,6 +1444,7 @@ class TaskSocketNamespace(BaseSocket, OperatorSocketMixin):
                     "Provide a dict with keys matching the namespace fields;",
                     "or link another socket/namespace; or declare the graph input as a namespace.",
                 ],
+                error_type="namespace_expects_mapping",
             )
 
         for key, val in value.items():

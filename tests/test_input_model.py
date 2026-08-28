@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import enum
 from decimal import Decimal
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 import pytest
 from pydantic import (
@@ -2393,3 +2393,107 @@ def test_a_model_written_in_a_script_that_cannot_be_rebuilt_is_refused(tmp_path)
     assert finished.returncode != 0
     assert "ModelContractError" in finished.stderr
     assert "importable module" in finished.stderr
+
+
+# --------------------------------------------------------------------------
+# 24. A socket refusal and a model refusal address the same value alike
+# --------------------------------------------------------------------------
+
+
+class Control(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    calculation: Literal["nscf"] = "nscf"
+
+
+class Parameters(BaseModel):
+    CONTROL: Control = Control()
+
+
+class Forced(BaseModel):
+    """A namelist whose one keyword the route decides, so no field declares it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class Overrides(BaseModel):
+    nscf: Forced = Forced()
+
+
+class RouteInputs(BaseModel):
+    parameters: Parameters = Parameters()
+    overrides: Overrides = Overrides()
+
+
+@task(input_model=RouteInputs)
+def route_leaf(parameters, overrides):
+    return 1
+
+
+@task.graph(input_model=RouteInputs)
+def route(parameters, overrides):
+    return route_leaf(parameters=parameters, overrides=overrides).result
+
+
+@pytest.mark.parametrize(
+    "written, loc, error_type",
+    [
+        (
+            {"parameters": {"CONTROL": {"calculation": "scf"}}},
+            ("parameters", "CONTROL", "calculation"),
+            "literal_error",
+        ),
+        (
+            {"overrides": {"nscf": {"nosym": False}}},
+            ("overrides", "nscf", "nosym"),
+            "extra_forbidden",
+        ),
+    ],
+    ids=["outside the literal", "no field to write to"],
+)
+def test_a_graphs_own_input_is_refused_with_the_path_that_was_refused(
+    written, loc, error_type
+):
+    """A graph's own inputs are written into sockets, and a socket says where.
+
+    Written into the graph, the value never reaches a model: the refusal comes
+    from the socket layer, which now carries the same two facts a model's
+    refusal carries.
+    """
+    from node_graph.errors import SocketValueError
+
+    with pytest.raises(SocketValueError) as caught:
+        route.build(**written)
+    assert caught.value.loc == loc
+    assert caught.value.type == error_type
+
+
+@pytest.mark.parametrize(
+    "written, loc",
+    [
+        (
+            {"parameters": {"CONTROL": {"calculation": "scf"}}},
+            ("parameters", "CONTROL", "calculation"),
+        ),
+        (
+            {"overrides": {"nscf": {"nosym": False}}},
+            ("overrides", "nscf", "nosym"),
+        ),
+    ],
+    ids=["outside the literal", "no field to write to"],
+)
+def test_the_model_refuses_the_same_write_at_the_same_path(written, loc):
+    """The reference: what the leaf's model says about the same two writes."""
+    graph = Graph(name="model_side")
+    with pytest.raises(TaskInputValidationError) as caught:
+        graph.add_task(route_leaf, "leaf", **written)
+    assert [error["loc"] for error in caught.value.__cause__.errors()] == [loc]
+
+
+def test_a_socket_refusal_is_still_a_value_error():
+    """The carrier is added to the refusal, not put in place of it."""
+    from node_graph.errors import SocketValueError
+
+    assert issubclass(SocketValueError, ValueError)
+    with pytest.raises(ValueError):
+        route.build(parameters={"CONTROL": {"calculation": "scf"}})
