@@ -2884,6 +2884,81 @@ def test_the_same_write_naming_the_member_the_rule_reads_is_accepted():
     assert coupled_body.run(system={"nbnd": 20, "nosym": True}) == 1
 
 
+class Block(BaseModel):
+    """One member of a mapping, with defaults of its own."""
+
+    num_iter: int = 100
+    dis_froz_max: float = 0.0
+    num_wann: int = 4
+
+
+class Blocks(BaseModel):
+    blocks: dict[str, Block] = {}
+
+
+@task(input_model=Blocks)
+def blocks_body(blocks):
+    BODY_SAW["blocks"] = {key: dict(item) for key, item in blocks.items()}
+    return 1
+
+
+def test_a_mapping_hands_each_item_over_on_the_same_terms():
+    """A mapping is one namespace per key, so the rule holds one level down."""
+    BODY_SAW.clear()
+    blocks_body.run(blocks={"occ_1": {"num_iter": 42}})
+    assert BODY_SAW["blocks"] == {"occ_1": {"num_iter": 42}}
+
+
+class LabelledBlock(BaseModel):
+    """An item member with no default, which a write cannot leave out."""
+
+    label: str
+    num_iter: int = 100
+
+
+class LabelledBlocks(BaseModel):
+    blocks: dict[str, LabelledBlock] = {}
+
+
+@task(input_model=LabelledBlocks)
+def labelled_blocks_body(blocks):
+    return 1
+
+
+def test_an_item_member_with_no_default_is_still_refused_when_absent():
+    """The model reads the whole item, whatever the sockets collect."""
+    with pytest.raises(TaskInputValidationError, match="Field required"):
+        labelled_blocks_body.run(blocks={"occ_1": {"num_iter": 42}})
+
+
+class CoupledBlock(BaseModel):
+    """An item whose rule reads a member the write need not name."""
+
+    num_iter: int = 100
+    frozen: bool = False
+
+    @model_validator(mode="after")
+    def _long_runs_need_freezing(self):
+        if self.num_iter > 500 and not self.frozen:
+            raise ValueError("a long run needs frozen")
+        return self
+
+
+class CoupledBlocks(BaseModel):
+    blocks: dict[str, CoupledBlock] = {}
+
+
+@task(input_model=CoupledBlocks)
+def coupled_blocks_body(blocks):
+    return 1
+
+
+def test_an_items_rule_reads_the_member_the_write_left_out():
+    """The narrowing is what the body is handed, not what the item is judged as."""
+    with pytest.raises(TaskInputValidationError, match="needs frozen"):
+        coupled_blocks_body.run(blocks={"occ_1": {"num_iter": 900}})
+
+
 class Rendered(BaseModel):
     """A member whose serializer decides its stored form, not its own type."""
 

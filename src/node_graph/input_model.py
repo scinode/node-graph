@@ -465,10 +465,11 @@ def _fields_from_model(
     its own and can be linked by name; and, on every leaf, what a body
     receives for it (:func:`_body_receives`).
 
-    ``defaults`` is false below a nested model: a member the caller left out
-    carries no default onto its socket, so nothing is collected for it and
-    the body is handed the members that were written. The member stays
-    optional, so a write may still name any subset of them.
+    ``defaults`` is false below a nested model and below a mapping's item
+    model: a member the caller left out carries no default onto its socket,
+    so nothing is collected for it and the body is handed the members that
+    were written. The member stays optional, so a write may still name any
+    subset of them.
     """
     fields = dict(spec.fields or {})
     for name, field in model.model_fields.items():
@@ -481,7 +482,10 @@ def _fields_from_model(
             item_model = _model_of_type(item_type)
             if item_model is not None and child.item is not None:
                 child = replace(
-                    child, item=_fields_from_model(item_model, child.item, api)
+                    child,
+                    item=_fields_from_model(
+                        item_model, child.item, api, defaults=False
+                    ),
                 )
             elif child.item is not None:
                 child = replace(
@@ -1633,17 +1637,29 @@ def body_inputs(model: Type[BaseModel], validated: BaseModel) -> Dict[str, Any]:
 
     A field declaring a nested model is handed the members that were written
     and no others, so a body reading ``system`` reads the keys its caller
-    named. Every other field is handed what the model made of it, default
-    included: a field the caller left out is one the model answers for.
+    named, and a ``dict[str, T]`` field is handed each of its items on those
+    same terms -- a mapping is one namespace per key, so the rule holds one
+    level further down. Every other field is handed what the model made of
+    it, default included: a field the caller left out is one the model
+    answers for.
     """
     inputs: Dict[str, Any] = {}
     for name, value in dict(validated).items():
         field = model.model_fields.get(name)
-        nested = _model_of_type(field.annotation) if field is not None else None
+        annotation = field.annotation if field is not None else None
+        nested = _model_of_type(annotation) if annotation is not None else None
         if nested is not None and isinstance(value, BaseModel):
             inputs[name] = _written_members(value)
-        else:
-            inputs[name] = value
+            continue
+        item_type = _container_item_type(annotation) if annotation is not None else None
+        item_model = _model_of_type(item_type) if item_type is not None else None
+        if item_model is not None and isinstance(value, dict):
+            inputs[name] = {
+                key: _written_members(item) if isinstance(item, BaseModel) else item
+                for key, item in value.items()
+            }
+            continue
+        inputs[name] = value
     return inputs
 
 
