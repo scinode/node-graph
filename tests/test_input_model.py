@@ -912,7 +912,7 @@ def test_a_cross_field_rule_passes_without_checkpoint_b(monkeypatch):
     monkeypatch.setattr(
         graph_utils,
         "_validate_graph_body_inputs",
-        lambda func, inputs, name, adapter=None: None,
+        lambda func, inputs, name: inputs,
     )
     assert span.build(low=9, high=3) is not None
 
@@ -2497,3 +2497,68 @@ def test_a_socket_refusal_is_still_a_value_error():
     assert issubclass(SocketValueError, ValueError)
     with pytest.raises(ValueError):
         route.build(parameters={"CONTROL": {"calculation": "scf"}})
+
+
+# --------------------------------------------------------------------------
+# 25. A graph body is handed the types its model declares
+# --------------------------------------------------------------------------
+
+
+#: What the graph bodies below were handed, read back after the build.
+BODY_SAW: dict = {}
+
+
+class SpinInputs(BaseModel):
+    spin: Color = Color.RED
+    ratio: Decimal = Decimal("0.10")
+
+
+@task.graph(input_model=SpinInputs)
+def spun(spin, ratio):
+    BODY_SAW["spin"] = spin
+    BODY_SAW["ratio"] = ratio
+    return add(x=1, y=2)
+
+
+def test_a_graph_body_is_handed_the_member_its_field_declares():
+    """The body runs the model's rules, so it should run on the model's values."""
+    BODY_SAW.clear()
+    spun.build(spin="blue", ratio="0.25")
+    assert BODY_SAW["spin"] == Color.BLUE
+    assert BODY_SAW["spin"] in (Color.RED, Color.BLUE)
+    assert BODY_SAW["ratio"] == Decimal("0.25")
+
+
+def test_the_rebuilt_value_still_carries_the_tag_its_link_is_drawn_from():
+    """The control: rebuilding a value must not cost the body its link."""
+    from node_graph.socket import TaggedValue
+
+    BODY_SAW.clear()
+    graph = spun.build(spin="blue", ratio="0.25")
+    assert isinstance(BODY_SAW["spin"], TaggedValue)
+    assert "add.outputs.result -> graph_outputs.outputs.result" in links_of(graph)
+
+
+class NestedSpin(BaseModel):
+    spin: Color = Color.RED
+
+
+class HoldsNestedSpin(BaseModel):
+    inner: NestedSpin = NestedSpin()
+    ratio: Decimal = Decimal("0.10")
+
+
+@task.graph(input_model=HoldsNestedSpin)
+def nested_spun(inner, ratio):
+    BODY_SAW["inner"] = inner
+    return add(x=1, y=2)
+
+
+def test_a_member_below_a_namespace_is_rebuilt_and_still_tagged():
+    """A namespace's members carry tags of their own, so the walk goes in."""
+    from node_graph.socket import TaggedValue
+
+    BODY_SAW.clear()
+    nested_spun.build(inner={"spin": "blue"}, ratio="0.25")
+    assert BODY_SAW["inner"]["spin"] == Color.BLUE
+    assert isinstance(BODY_SAW["inner"]["spin"], TaggedValue)

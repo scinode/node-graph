@@ -1363,21 +1363,49 @@ def check_content_invariance(
 # --------------------------------------------------------------------------
 
 
+def _under_the_original_tags(written: Any, rebuilt: Any) -> Any:
+    """Return ``rebuilt`` wearing the tags ``written`` wore, leaf by leaf.
+
+    A tag is what a graph body turns into a link, so a value rebuilt without
+    one would leave the body holding a copy of the graph's input. A mapping is
+    walked rather than replaced, because its members carry tags of their own.
+    """
+    from node_graph.socket import TaggedValue
+    from node_graph.utils.struct_utils import retagged
+
+    if isinstance(written, TaggedValue):
+        return retagged(_under_the_original_tags(written.__wrapped__, rebuilt), written)
+    if isinstance(written, dict):
+        if isinstance(rebuilt, BaseModel):
+            return {
+                key: _under_the_original_tags(value, getattr(rebuilt, key, value))
+                for key, value in written.items()
+            }
+        if isinstance(rebuilt, dict):
+            return {
+                key: _under_the_original_tags(value, rebuilt.get(key, value))
+                for key, value in written.items()
+            }
+    return rebuilt
+
+
 def validate_graph_inputs(
     model: Type[BaseModel],
     inputs: Dict[str, Any],
     *,
     label: str,
-) -> None:
-    """Raise unless a graph's resolved inputs satisfy ``model``.
+) -> Dict[str, Any]:
+    """Return a graph's inputs in the types ``model`` declares, or raise.
 
     The graph's inputs are values by the time its body runs, so the real model
-    runs here, cross-field rules included. The instance is discarded and the
-    caller keeps the tagged values it had: the body turns those tags into
-    links, and a fresh object carries none.
+    runs here, cross-field rules included, and the body is handed what the
+    model made of each field: an ``Enum`` field arrives as the member, a
+    ``Decimal`` field as a ``Decimal``. Every value comes back under the tag
+    the caller wrote it with, and under that tag's uuid, because the body
+    turns a tag into a link and provenance identifies a value by the uuid.
 
     ``inputs`` arrive as the body will see them: the engine's read edge has
-    already given each leaf the form its field declares.
+    already taken off the node each leaf was stored in.
     """
     from node_graph.utils import untagged_copy
 
@@ -1390,6 +1418,10 @@ def validate_graph_inputs(
             f"Graph '{label}' got inputs {model.__name__} rejects:\n{exc}"
         ) from exc
     check_content_invariance(model, before, validated, label=label)
+    return {
+        name: _under_the_original_tags(value, getattr(validated, name, value))
+        for name, value in inputs.items()
+    }
 
 
 # --------------------------------------------------------------------------

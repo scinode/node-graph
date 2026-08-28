@@ -169,19 +169,23 @@ def _deserialize_inputs(namespace: Any, values: Any, adapter: Any) -> Any:
     return out
 
 
-def _validate_graph_body_inputs(func: Callable, inputs: dict, name: str) -> None:
-    """Check a graph's resolved inputs against its input model, if it has one.
+def _validate_graph_body_inputs(func: Callable, inputs: dict, name: str) -> dict:
+    """Return a graph's resolved inputs, checked against its input model.
 
     Every expansion of a ``@task.graph`` passes through here -- ``build()`` on
     a handle, the engine building a subgraph, and the workgraph task running
-    one -- so this is the one place a graph's whole payload is known and still
-    the caller's to hand on unchanged.
+    one -- so this is the one place a graph's whole payload is known.
+
+    A graph with no model gets its inputs back untouched; one with a model
+    gets them in the types the model declares, still under the tags its links
+    are drawn from.
     """
     from node_graph.input_model import input_model_of_callable, validate_graph_inputs
 
     model = input_model_of_callable(func)
-    if model is not None:
-        validate_graph_inputs(model, inputs, label=name)
+    if model is None:
+        return inputs
+    return validate_graph_inputs(model, inputs, label=name)
 
 
 def materialize_graph(
@@ -226,7 +230,7 @@ def materialize_graph(
         inputs = _deserialize_inputs(
             graph.inputs, inputs, getattr(graph, "serialization", None)
         )
-        _validate_graph_body_inputs(func, inputs, name)
+        inputs = _validate_graph_body_inputs(func, inputs, name)
         raw = func(**inputs)
         _assign_graph_outputs(raw, graph)
         tag_socket_value(graph.inputs, only_uuid=True)
