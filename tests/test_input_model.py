@@ -2874,6 +2874,28 @@ def test_the_graph_body_reads_the_same_write_the_same_way():
     assert BODY_SAW["graph"]["spin"] == Color.RED
 
 
+def test_a_namespace_nobody_wrote_at_all_reaches_the_body_empty():
+    """A field left out is a namespace with nothing written into it, not a hole."""
+    BODY_SAW.clear()
+    route_body.run(spin=Color.BLUE)
+    assert BODY_SAW["leaf"]["system"] == {}
+    assert BODY_SAW["leaf"]["spin"] == Color.BLUE
+
+
+def test_the_graph_body_is_handed_the_same_empty_namespace():
+    """The graph checkpoint answers for every field, not only those that arrived."""
+    BODY_SAW.clear()
+    route_graph.build(spin=Color.BLUE)
+    assert BODY_SAW["graph"]["system"] == {}
+
+
+def test_a_mapping_nobody_wrote_reaches_the_body_empty_too():
+    """Same rule, same shape: a mapping left out has no keys to hand over."""
+    BODY_SAW.clear()
+    blocks_body.run()
+    assert BODY_SAW["blocks"] == {}
+
+
 class Structured(BaseModel):
     """A member with no default, which a write cannot leave to the model."""
 

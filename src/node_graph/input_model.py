@@ -1497,6 +1497,11 @@ def validate_graph_inputs(
     the caller wrote it with, and under that tag's uuid, because the body
     turns a tag into a link and provenance identifies a value by the uuid.
 
+    Every field of the model is handed over, whether or not a value arrived
+    for it: a scalar nobody wrote arrives at its default and a nested model or
+    a mapping arrives as the members that were written, which is nothing at
+    all when the field itself was left out.
+
     ``inputs`` arrive as the body will see them: the engine's read edge has
     already taken off the node each leaf was stored in.
     """
@@ -1514,9 +1519,10 @@ def validate_graph_inputs(
             errors=exc.errors(),
         ) from exc
     check_content_invariance(model, before, validated, label=label)
+    handed = body_inputs(model, validated)
     return {
-        name: _under_the_original_tags(value, getattr(validated, name, value))
-        for name, value in inputs.items()
+        name: _under_the_original_tags(inputs[name], value) if name in inputs else value
+        for name, value in handed.items()
     }
 
 

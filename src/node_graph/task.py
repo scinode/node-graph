@@ -410,8 +410,18 @@ class Task(WidgetRenderableMixin, IOOwnerMixin, WaitableMixin):
         """Execute the task."""
         executor = self.resolve_executor_callable(require=True)
         inputs = self.inputs._value
-        args = [inputs[arg] for arg in self.args_data["args"]]
-        kwargs = {key: inputs[key] for key in self.args_data["kwargs"]}
+        positional = list(self.args_data["args"])
+        keyword = list(self.args_data["kwargs"])
+        if all(name in inputs for name in positional):
+            args = [inputs[name] for name in positional]
+        else:
+            # A socket nothing was written into collects no value, and leaving
+            # one out of a positional call would shift the rest; everything the
+            # task does hold goes by name, and what is missing is the
+            # callable's own to answer for.
+            args = []
+            keyword = positional + keyword
+        kwargs = {key: inputs[key] for key in keyword if key in inputs}
         var_kwargs = (
             inputs[self.args_data["var_kwargs"]]
             if self.args_data["var_kwargs"]
