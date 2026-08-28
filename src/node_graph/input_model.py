@@ -818,26 +818,34 @@ def _by_field_name(model: Type[BaseModel]) -> Type[BaseModel]:
     return cast(Type[BaseModel], twin)
 
 
-def _reference_tolerant(annotation: Any, depth: int = 0) -> Any:
+def _reference_tolerant(
+    annotation: Any, depth: int = 0, *, partial: bool = False
+) -> Any:
     """Return ``annotation`` with every level willing to hold a reference.
 
     Wrapping only the outermost level is not enough: a reference written into
     one member of a ``dict[str, int]`` reaches the ``int`` validator, which
     refuses it. Every level is wrapped, so a reference is accepted wherever it
     is written and every literal beside it is still checked.
+
+    ``partial`` says the write names some of what will be written, and it
+    reaches every model below as well: a member of a nested namespace is as
+    free to arrive by a later link as a field of the model itself.
     """
     if depth > _MAX_ANNOTATION_DEPTH:
         return Annotated[annotation, WrapValidator(_accept_reference)]
     rebuilt = _rebuild_generic(
-        annotation, lambda arg: _reference_tolerant(arg, depth + 1)
+        annotation, lambda arg: _reference_tolerant(arg, depth + 1, partial=partial)
     )
     if rebuilt is not None:
         return Annotated[rebuilt, WrapValidator(_accept_reference)]
     if _is_model(annotation):
-        return Annotated[
-            _wiring_shadow(annotation, depth + 1),
-            WrapValidator(_accepting_instances_of(annotation)),
-        ]
+        shadow = (
+            _partial_wiring_shadow(annotation, depth + 1)
+            if partial
+            else _wiring_shadow(annotation, depth + 1)
+        )
+        return Annotated[shadow, WrapValidator(_accepting_instances_of(annotation))]
     return Annotated[annotation, WrapValidator(_accept_reference)]
 
 
@@ -880,16 +888,23 @@ def _optional_field(field: Any) -> Any:
 
 
 @functools.lru_cache(maxsize=None)
-def _partial_wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
-    """Return the wiring shadow with every field free to be missing.
+def _partial_wiring_shadow(model: Type[BaseModel], depth: int = 0) -> Type[BaseModel]:
+    """Return the wiring shadow with every field, at every depth, free to be missing.
 
     Inputs may be written a few at a time and a link may supply the rest, so
-    a write that names some of the fields says nothing about the others. What
-    it does say is checked exactly as at a call: each value against the field
-    it is written to.
+    a write that names some of the fields says nothing about the others --
+    the members of a namespace it reaches into included. What it does say is
+    checked exactly as at a call: each value against the field it is written
+    to.
+
+    ``depth`` bounds the rebuild where :func:`_wiring_shadow`'s does, so a
+    model that names itself terminates here too.
     """
     fields = {
-        name: (_reference_tolerant(field.annotation), _optional_field(field))
+        name: (
+            _reference_tolerant(field.annotation, depth, partial=True),
+            _optional_field(field),
+        )
         for name, field in model.model_fields.items()
     }
     return create_model(  # type: ignore[call-overload]

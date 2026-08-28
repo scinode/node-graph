@@ -2831,3 +2831,49 @@ def test_at_the_run_edge_the_same_member_arrives_as_the_none_it_defaults_to():
     assert BODY_SAW["absent_leaf"] == {"nbnd": 20, "nosym": None}
 
 
+# --------------------------------------------------------------------------
+# 29. A write that names some of a namespace's members
+# --------------------------------------------------------------------------
+
+
+class Pair(BaseModel):
+    """Two members with no default, one of which a link may deliver."""
+
+    n: int
+    m: int
+
+
+class HoldsPair(BaseModel):
+    pair: Pair
+    top: int = 0
+
+
+@task(input_model=HoldsPair)
+def paired(pair, top):
+    return 1
+
+
+def test_a_write_may_name_some_of_a_namespaces_members():
+    """A member arriving by a later link is as ordinary as a field arriving by one."""
+    graph = Graph(name="partial_nested")
+    assert graph.add_task(paired, "p", pair={"n": 2}) is not None
+
+
+def test_the_same_write_at_the_top_level_is_the_reference():
+    """The control: the outer fields have always been free to be written apart."""
+    graph = Graph(name="partial_top")
+    assert graph.add_task(paired, "p", top=3) is not None
+
+
+def test_what_a_partial_write_does_name_is_still_checked():
+    """Free to be missing is not free to be anything."""
+    graph = Graph(name="partial_typed")
+    with pytest.raises(TaskInputValidationError) as caught:
+        graph.add_task(paired, "p", pair={"n": "two"})
+    assert [error["loc"] for error in caught.value.errors] == [("pair", "n")]
+
+
+def test_a_call_that_names_everything_it_will_write_still_wants_it_all():
+    """The other checkpoint is unchanged: a call is the whole of what is written."""
+    with pytest.raises(TaskInputValidationError, match="Field required"):
+        validate_wiring_inputs(HoldsPair, {"pair": {"n": 2}}, label="p")
