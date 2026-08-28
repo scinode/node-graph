@@ -13,12 +13,15 @@ Three checkpoints, three questions:
   passes untouched -- what flows through it is not known yet. The model's own
   ``mode='after'`` ``@field_validator``s then run over the fields whose value
   is resolved: a tagged value is judged by the value it carries, and a field
-  holding a socket or a task waits. A ``@model_validator`` waits in every
-  case, because it may read a field no one has written yet.
+  holding a socket or a task waits, as does one rule reaching through
+  ``info.data`` for a field the write did not name. A ``@model_validator``
+  waits in every case -- the model's own and those of the models its fields
+  declare -- because it may read a field no one has written yet.
 - **graph expansion** (:func:`validate_graph_inputs`): a ``@task.graph``'s
   inputs are resolved by then, so the real model runs, cross-field rules
-  included. The body still receives the original tagged values, because
-  validation builds fresh objects and a fresh object draws no link.
+  included, and the body receives what the model made of each field, wearing
+  the tag that field was written with -- the tag, because it is what the body
+  turns into a link.
 - **run edge** (:func:`validated_callable`): a leaf task's inputs are
   validated once the engine has assembled and deserialized them, and the body
   receives the rich objects ``M`` declares.
