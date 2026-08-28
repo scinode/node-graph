@@ -2562,3 +2562,63 @@ def test_a_member_below_a_namespace_is_rebuilt_and_still_tagged():
     nested_spun.build(inner={"spin": "blue"}, ratio="0.25")
     assert BODY_SAW["inner"]["spin"] == Color.BLUE
     assert isinstance(BODY_SAW["inner"]["spin"], TaggedValue)
+
+
+# --------------------------------------------------------------------------
+# 26. A model that names itself
+# --------------------------------------------------------------------------
+
+
+class Chain(BaseModel):
+    """A model whose field names the model itself."""
+
+    n: int = 0
+    next: Optional["Chain"] = None
+
+    @field_validator("n")
+    @classmethod
+    def _small(cls, value):
+        if value > 10:
+            raise ValueError("n is capped at 10")
+        return value
+
+
+Chain.model_rebuild()
+
+
+def test_a_model_that_names_itself_is_refused_where_it_is_declared():
+    """A namespace holds one socket per field, and this one has no bottom.
+
+    Nothing else could answer: the walk that builds the sockets, and every
+    rebuild the checkpoints make, would each follow the chain forever.
+    """
+    with pytest.raises(ModelContractError, match="Chain -> Chain"):
+
+        @task(input_model=Chain)
+        def chained(n, next):
+            return n
+
+
+def test_the_same_model_one_link_shorter_is_a_namespace_with_a_bottom():
+    """The control: what is refused is the cycle, not the nesting."""
+
+    class Link(BaseModel):
+        n: int = 0
+
+    class Head(BaseModel):
+        n: int = 0
+        next: Optional[Link] = None
+
+    @task(input_model=Head)
+    def headed(n, next):
+        return n
+
+    graph = Graph(name="headed")
+    assert graph.add_task(headed, "h", n=1, next={"n": 2}) is not None
+
+
+def test_the_shadows_a_write_is_judged_by_end_at_the_same_bound():
+    """The rebuilds terminate on their own, so no other entry point can hang."""
+    validate_wiring_inputs(Chain, {"n": 1, "next": {"n": 2}}, label="c", complete=False)
+    with pytest.raises(TaskInputValidationError, match="n is capped at 10"):
+        validate_wiring_inputs(Chain, {"n": 99}, label="c", complete=False)

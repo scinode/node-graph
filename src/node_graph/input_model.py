@@ -512,16 +512,39 @@ def _refuse_open_models(model: Type[BaseModel], seen: set, depth: int = 0) -> No
             _refuse_open_models(nested, seen, depth + 1)
 
 
+def _refuse_models_that_name_themselves(
+    model: Type[BaseModel], path: Tuple[Type[BaseModel], ...] = ()
+) -> None:
+    """Raise when a model reachable from ``model`` is reachable from itself.
+
+    A namespace holds one socket per field, so a model whose field names a
+    model already on the way to it describes a namespace with no bottom.
+    """
+    if model in path:
+        cycle = " -> ".join(item.__name__ for item in (*path, model))
+        raise ModelContractError(
+            f"{cycle} names a model already on the way to it, and a socket "
+            "namespace has to end somewhere.\n"
+            "How to fix: give the recursive part its own task, or declare the "
+            "field as plain data the body reads for itself."
+        )
+    for field in model.model_fields.values():
+        for nested in _models_reached_by(field.annotation):
+            _refuse_models_that_name_themselves(nested, (*path, model))
+
+
 def spec_from_model(model: Type[BaseModel], api: Any = None) -> Any:
     """Return the socket namespace ``model`` describes.
 
     An open-topped model is refused, at any depth: ``extra='allow'`` accepts
     fields nothing declared, which is the one shape a contract cannot
-    describe. A mapping whose size is only known at runtime is written as a
-    typed container field, ``dict[str, T]``.
+    describe. So is a model that names itself, which describes a namespace
+    with no bottom. A mapping whose size is only known at runtime is written
+    as a typed container field, ``dict[str, T]``.
     """
     api = _socket_api(api)
     _refuse_open_models(model, set())
+    _refuse_models_that_name_themselves(model)
     return _strip_structured_types(
         _fields_from_model(model, api.from_model(model), api)
     )
@@ -790,14 +813,14 @@ def _reference_tolerant(annotation: Any, depth: int = 0) -> Any:
         return Annotated[rebuilt, WrapValidator(_accept_reference)]
     if _is_model(annotation):
         return Annotated[
-            _wiring_shadow(annotation),
+            _wiring_shadow(annotation, depth + 1),
             WrapValidator(_accepting_instances_of(annotation)),
         ]
     return Annotated[annotation, WrapValidator(_accept_reference)]
 
 
 @functools.lru_cache(maxsize=None)
-def _wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
+def _wiring_shadow(model: Type[BaseModel], depth: int = 0) -> Type[BaseModel]:
     """Return the model checking types at the call, references included.
 
     The shadow is built with no base class, so the user's ``@field_validator``
@@ -808,9 +831,14 @@ def _wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
     accepts -- an alias reachable by field name, a class pydantic would
     otherwise refuse to build a schema for -- and a shadow that judged those
     differently would refuse calls the model accepts.
+
+    ``depth`` counts the models the rebuild has walked through, so a model
+    that names itself terminates: past ``_MAX_ANNOTATION_DEPTH`` the field
+    keeps the class it declares, which is the same bound the resolved-value
+    walk stops at.
     """
     fields = {
-        name: (_reference_tolerant(field.annotation), field)
+        name: (_reference_tolerant(field.annotation, depth), field)
         for name, field in model.model_fields.items()
     }
     return create_model(  # type: ignore[call-overload]
@@ -1168,7 +1196,7 @@ def _plain_annotation(annotation: Any, depth: int = 0) -> Any:
     if rebuilt is not None:
         return rebuilt
     if _is_model(annotation):
-        return _plain_twin(annotation)
+        return _plain_twin(annotation, depth + 1)
     return annotation
 
 
@@ -1193,7 +1221,7 @@ def _comparable_field(field: Any) -> Any:
 
 
 @functools.lru_cache(maxsize=None)
-def _plain_twin(model: Type[BaseModel]) -> Type[BaseModel]:
+def _plain_twin(model: Type[BaseModel], depth: int = 0) -> Type[BaseModel]:
     """Return ``model``'s fields with its validators and serializers left out.
 
     Built with no base class, so what survives is the field types and their
@@ -1201,9 +1229,14 @@ def _plain_twin(model: Type[BaseModel]) -> Type[BaseModel]:
     Coercion is therefore identical to the model's and every rule the user
     wrote is absent, which is what makes the twin a reference for what the
     input said before any rule ran.
+
+    ``depth`` counts the models the rebuild has walked through, so a model
+    that names itself terminates.
     """
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return model
     fields = {
-        name: (_plain_annotation(field.annotation), _comparable_field(field))
+        name: (_plain_annotation(field.annotation, depth), _comparable_field(field))
         for name, field in model.model_fields.items()
     }
     return create_model(  # type: ignore[call-overload]
