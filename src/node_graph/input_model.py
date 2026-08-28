@@ -147,7 +147,29 @@ class ModelContractError(TypeError):
 
 
 class TaskInputValidationError(ValueError):
-    """Raised when a task's assembled inputs fail its input model."""
+    """Raised when a task's assembled inputs fail its input model.
+
+    ``task`` names what the value was written to and ``model`` is the model
+    that refused it. ``errors`` is pydantic's own report, one entry per
+    refused value carrying the ``loc``, ``type`` and ``msg`` pydantic spells
+    them with, so a caller reads a refusal rather than parsing its message --
+    the same two facts :class:`~node_graph.errors.SocketValueError` carries
+    for a value the socket layer refuses. It is empty when the refusal was
+    raised without a pydantic report behind it.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        task: str = "",
+        model: Optional[Type[BaseModel]] = None,
+        errors: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
+        super().__init__(message)
+        self.task = task
+        self.model = model
+        self.errors: List[Dict[str, Any]] = list(errors or ())
 
 
 class TaskOutputValidationError(ValueError):
@@ -1103,7 +1125,10 @@ def _rejected_wiring(
 ) -> TaskInputValidationError:
     """Return the error reporting what ``model`` refused at ``label``."""
     return TaskInputValidationError(
-        f"Task '{label}' got inputs {model.__name__} rejects:\n{exc}"
+        f"Task '{label}' got inputs {model.__name__} rejects:\n{exc}",
+        task=label,
+        model=model,
+        errors=exc.errors(),
     )
 
 
@@ -1451,7 +1476,10 @@ def validate_graph_inputs(
         validated = _by_field_name(model).model_validate(given)
     except ValidationError as exc:
         raise TaskInputValidationError(
-            f"Graph '{label}' got inputs {model.__name__} rejects:\n{exc}"
+            f"Graph '{label}' got inputs {model.__name__} rejects:\n{exc}",
+            task=label,
+            model=model,
+            errors=exc.errors(),
         ) from exc
     check_content_invariance(model, before, validated, label=label)
     return {
@@ -1581,7 +1609,10 @@ def validated_callable(
                 validated = _by_field_name(input_model).model_validate(kwargs)
             except ValidationError as exc:
                 raise TaskInputValidationError(
-                    f"Task '{label}' got inputs {input_model.__name__} rejects:\n{exc}"
+                    f"Task '{label}' got inputs {input_model.__name__} rejects:\n{exc}",
+                    task=label,
+                    model=input_model,
+                    errors=exc.errors(),
                 ) from exc
             check_content_invariance(input_model, before, validated, label=label)
             kwargs = dict(validated)

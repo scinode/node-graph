@@ -2490,6 +2490,42 @@ def test_the_model_refuses_the_same_write_at_the_same_path(written, loc):
     assert [error["loc"] for error in caught.value.__cause__.errors()] == [loc]
 
 
+@pytest.mark.parametrize(
+    "written, loc, error_type",
+    [
+        (
+            {"parameters": {"CONTROL": {"calculation": "scf"}}},
+            ("parameters", "CONTROL", "calculation"),
+            "literal_error",
+        ),
+        (
+            {"overrides": {"nscf": {"nosym": False}}},
+            ("overrides", "nscf", "nosym"),
+            "extra_forbidden",
+        ),
+    ],
+    ids=["outside the literal", "no field to write to"],
+)
+def test_a_models_refusal_is_read_the_way_a_sockets_is(written, loc, error_type):
+    """Where and why, off the refusal itself: neither caller parses a message."""
+    graph = Graph(name="model_side_read")
+    with pytest.raises(TaskInputValidationError) as caught:
+        graph.add_task(route_leaf, "leaf", **written)
+    assert [(error["loc"], error["type"]) for error in caught.value.errors] == [
+        (loc, error_type)
+    ]
+    assert caught.value.task == "leaf"
+    assert caught.value.model is RouteInputs
+
+
+def test_a_refusal_raised_with_no_report_behind_it_still_answers():
+    """The attributes are there to read whether or not pydantic filled them."""
+    refusal = TaskInputValidationError("nothing pydantic said")
+    assert refusal.errors == []
+    assert refusal.task == ""
+    assert refusal.model is None
+
+
 def test_a_socket_refusal_is_still_a_value_error():
     """The carrier is added to the refusal, not put in place of it."""
     from node_graph.errors import SocketValueError
