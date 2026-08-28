@@ -2765,3 +2765,69 @@ def test_a_wrapper_stored_by_value_carries_its_model_with_it():
         handle.run(nbnd=-5)
 
 
+# --------------------------------------------------------------------------
+# 28. What a field nobody wrote is worth by the time the body runs
+# --------------------------------------------------------------------------
+
+
+class Defaulted(BaseModel):
+    """A namespace whose members both carry a default."""
+
+    nbnd: int = 1
+    nosym: bool = False
+
+
+class Absent(BaseModel):
+    """The same two, the second able to stand for what nobody wrote."""
+
+    nbnd: int = 1
+    nosym: Optional[bool] = None
+
+
+class HoldsDefaulted(BaseModel):
+    system: Defaulted = Defaulted()
+
+
+class HoldsAbsent(BaseModel):
+    system: Absent = Absent()
+
+
+@task.graph(input_model=HoldsDefaulted)
+def defaulted_route(system):
+    BODY_SAW["defaulted"] = dict(system)
+    return add(x=1, y=2)
+
+
+@task.graph(input_model=HoldsAbsent)
+def absent_route(system):
+    BODY_SAW["absent"] = dict(system)
+    return add(x=1, y=2)
+
+
+@task(input_model=HoldsAbsent)
+def absent_leaf(system):
+    BODY_SAW["absent_leaf"] = dict(system)
+    return 1
+
+
+def test_a_member_nobody_wrote_reaches_the_body_at_the_models_default():
+    """One written key, and the body is handed the whole namespace."""
+    BODY_SAW.clear()
+    defaulted_route.build(system={"nbnd": 20})
+    assert BODY_SAW["defaulted"] == {"nbnd": 20, "nosym": False}
+
+
+def test_a_member_that_defaults_to_none_does_not_reach_the_graph_body():
+    """How a caller tells 'nobody wrote this' from 'this is the default'."""
+    BODY_SAW.clear()
+    absent_route.build(system={"nbnd": 20})
+    assert BODY_SAW["absent"] == {"nbnd": 20}
+
+
+def test_at_the_run_edge_the_same_member_arrives_as_the_none_it_defaults_to():
+    """The leaf's inputs go through the model, which fills every field it declares."""
+    BODY_SAW.clear()
+    absent_leaf.run(system={"nbnd": 20})
+    assert BODY_SAW["absent_leaf"] == {"nbnd": 20, "nosym": None}
+
+
