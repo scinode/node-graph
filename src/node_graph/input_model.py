@@ -1565,19 +1565,16 @@ def _bind_validated_callable(
     """Bind ``wrapper`` in ``func``'s module under the name its executor records.
 
     A task records its executor as ``<module>.<callable name>`` and resolves
-    it by importing that path again. ``functools.wraps`` copies ``func``'s
-    name onto the wrapper, so the recorded path names ``func`` -- which
-    carries no model and enforces nothing -- and only the spelling that
-    rebinds the decorated name to the task handle resolves back to something
-    stamped. The wrapper takes a name of its own here and its module answers
-    to it, so the recorded path reaches the wrapper whatever the caller does
-    with the name it decorated.
+    it by importing that path again, so the name recorded has to reach the
+    wrapper rather than ``func``, which carries no model and enforces
+    nothing. ``functools.wraps`` gives the wrapper ``func``'s own name, so
+    the wrapper is bound here under a name of its own and that is the name
+    the executor records.
 
-    The wrapper keeps the name it was given, so what an engine labels a
-    process with does not change; the bound name is recorded separately, for
-    the executor to store. ``__qualname__`` is left alone as well: it is what
-    decides that a callable defined in ``__main__`` or nested in another scope
-    travels as a pickle instead, and a pickle carries the stamp with it.
+    ``__name__`` is left as it was, because it is what an engine labels a
+    process with, and so is ``__qualname__``: it decides that a callable
+    defined in ``__main__`` or nested in another scope travels as a pickle
+    instead, and a pickle carries the models with it.
     """
     from node_graph.executor import BOUND_NAME_ATTR
 

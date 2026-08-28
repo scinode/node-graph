@@ -17,7 +17,7 @@ class ExecutorMode(str, Enum):
     PICKLED_CALLABLE = "pickled_callable"  # A callable serialized using cloudpickle.
 
 
-#: Attribute naming the module attribute a callable is reachable through.
+#: Attribute holding the name a callable's module binds it under.
 BOUND_NAME_ATTR = "__node_graph_bound_name__"
 
 
