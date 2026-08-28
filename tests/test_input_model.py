@@ -2192,3 +2192,109 @@ def test_that_rule_does_not_silence_the_write_it_shares():
     graph = Graph(name="keyed_ok")
     with pytest.raises(TaskInputValidationError, match="other must be positive"):
         graph.add_task(keyed, "k", key="a", other=-1)
+
+
+# --------------------------------------------------------------------------
+# 22. A nested model's cross-field rule waits too
+# --------------------------------------------------------------------------
+
+
+class Agreeing(BaseModel):
+    n: int = 1
+    m: int = 1
+
+    @model_validator(mode="after")
+    def _agree(self):
+        if self.n != self.m:
+            raise ValueError("n and m must agree")
+        return self
+
+
+class HoldsAgreeing(BaseModel):
+    """No rule of its own, so nothing of this model's runs at a write."""
+
+    pair: Agreeing = Agreeing()
+    note: str = "x"
+
+
+class HoldsAgreeingAndARule(BaseModel):
+    """The same shape with one field rule, unrelated to the nested model."""
+
+    pair: Agreeing = Agreeing()
+    note: str = "x"
+
+    @field_validator("note")
+    @classmethod
+    def _short(cls, value):
+        if len(value) > 10:
+            raise ValueError("note is capped at 10")
+        return value
+
+
+@task(input_model=HoldsAgreeing)
+def holds_agreeing(pair, note):
+    return note
+
+
+@task(input_model=HoldsAgreeingAndARule)
+def holds_agreeing_and_a_rule(pair, note):
+    return note
+
+
+@pytest.mark.parametrize(
+    "handle", [holds_agreeing, holds_agreeing_and_a_rule], ids=["bare", "ruled"]
+)
+def test_a_nested_cross_field_rule_waits_whatever_else_the_model_carries(handle):
+    """A write is a write: what the outer model happens to declare cannot decide it.
+
+    The nested rule may read a field a later write or a link supplies, so it
+    waits exactly as the outer model's own cross-field rules do.
+    """
+    graph = Graph(name=f"nested_{handle.identifier}")
+    assert graph.add_task(handle, "h", pair={"n": 1, "m": 2}) is not None
+
+
+@pytest.mark.parametrize(
+    "handle", [holds_agreeing, holds_agreeing_and_a_rule], ids=["bare", "ruled"]
+)
+def test_the_same_nested_rule_is_answered_at_the_run_edge(handle):
+    """The other half: the rule is enforced, one checkpoint later, in both models."""
+    with pytest.raises(TaskInputValidationError, match="n and m must agree"):
+        handle.run(pair={"n": 1, "m": 2}, note="x")
+
+
+def test_a_field_rule_inside_a_nested_model_still_runs_at_the_write():
+    """What waits is the cross-field rule; a rule on one field is answerable."""
+
+    class Capped(BaseModel):
+        n: int = 1
+
+        @field_validator("n")
+        @classmethod
+        def _small(cls, value):
+            if value > 100:
+                raise ValueError("n is capped at 100")
+            return value
+
+    class HoldsCapped(BaseModel):
+        inner: Capped = Capped()
+
+    @task(input_model=HoldsCapped)
+    def holds_capped(inner):
+        return inner
+
+    graph = Graph(name="nested_field_rule")
+    with pytest.raises(TaskInputValidationError, match="n is capped at 100"):
+        graph.add_task(holds_capped, "h", inner={"n": 999})
+    assert graph.add_task(holds_capped, "ok", inner={"n": 3}) is not None
+
+
+def test_the_private_name_a_models_cross_field_rules_are_read_from_still_answers():
+    """One canary: the twin is the model with that record emptied, and only there."""
+    from node_graph.input_model import _field_rules_only
+
+    assert set(Agreeing.__pydantic_decorators__.model_validators) == {"_agree"}
+    twin = _field_rules_only(Agreeing)
+    assert issubclass(twin, Agreeing)
+    assert twin.__pydantic_decorators__.model_validators == {}
+    assert set(Agreeing.__pydantic_decorators__.model_validators) == {"_agree"}

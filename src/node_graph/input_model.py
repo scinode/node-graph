@@ -954,25 +954,106 @@ def _fields_named_by(model: Type[BaseModel], written: FrozenSet[str]) -> FrozenS
     )
 
 
+def _rule_annotation(annotation: Any, depth: int = 0) -> Any:
+    """Return ``annotation`` with every model in it judged by its field rules alone.
+
+    A nested model is replaced by :func:`_field_rules_only`, wherever it
+    stands -- alone, or inside a ``list[M]`` or ``dict[str, M]``. The class
+    the field names is still accepted where it is written: an instance was
+    validated when it was built.
+    """
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return annotation
+    rebuilt = _rebuild_generic(annotation, lambda arg: _rule_annotation(arg, depth + 1))
+    if rebuilt is not None:
+        return rebuilt
+    if _is_model(annotation):
+        return Annotated[
+            _field_rules_only(annotation, depth + 1),
+            WrapValidator(_accepting_instances_of(annotation)),
+        ]
+    return annotation
+
+
+@functools.lru_cache(maxsize=None)
+def _field_rules_only(model: Type[BaseModel], depth: int = 0) -> Type[BaseModel]:
+    """Return a twin of ``model`` running its field rules and not its model rules.
+
+    A ``@model_validator`` reads the whole model, and at a write the whole
+    model is not there: the field it reads may be one a later write or a link
+    supplies. That is true of a model a field declares exactly as it is of the
+    model the task declares, so neither runs here.
+
+    The twin subclasses ``model``, so a rule reading the field still gets a
+    value ``isinstance`` places in the class the field names and whose methods
+    answer. Only the annotations that name a model of their own are
+    redeclared, each by its own twin, so the same holds at every depth.
+    """
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return model
+    annotations: Dict[str, Any] = {}
+    namespace: Dict[str, Any] = {
+        "__annotations__": annotations,
+        "__module__": model.__module__,
+    }
+    for name, field in model.model_fields.items():
+        rebuilt = _rule_annotation(field.annotation, depth)
+        if rebuilt is not field.annotation:
+            annotations[name] = rebuilt
+            namespace[name] = field
+    twin = cast(
+        Type[BaseModel], type(f"{model.__name__}__FieldRules", (model,), namespace)
+    )
+    decorators = copy(twin.__pydantic_decorators__)
+    decorators.model_validators = {}
+    twin.__pydantic_decorators__ = decorators
+    twin.model_rebuild(force=True)
+    return twin
+
+
+def _declares_field_rules(model: Type[BaseModel], depth: int = 0) -> bool:
+    """Return True when ``model`` or a model it declares carries a field rule."""
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return False
+    if _own_field_validators(model):
+        return True
+    return any(
+        _declares_field_rules(nested, depth + 1)
+        for field in model.model_fields.values()
+        for nested in _models_within(field.annotation)
+    )
+
+
+def _models_within(annotation: Any, depth: int = 0) -> List[Type[BaseModel]]:
+    """Return every model ``annotation`` names, however deep its containers go."""
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return []
+    if _is_model(annotation):
+        return [annotation]
+    found: List[Type[BaseModel]] = []
+    for arg in get_args(annotation):
+        found.extend(_models_within(arg, depth + 1))
+    return found
+
+
 @functools.lru_cache(maxsize=None)
 def _rule_shadow(
     model: Type[BaseModel], written: FrozenSet[str]
 ) -> Optional[Type[BaseModel]]:
     """Return the shadow running ``model``'s rules over ``written``, or None if none apply.
 
-    Only the named fields are built, and each keeps the annotation its model
+    Only the named fields are built, and each keeps the type its model
     declares: a rule reads the value its field declares, so a nested model
     reaches it as an instance of the class the field names. A field left out
     is absent from ``info.data`` rather than standing there as a placeholder.
 
-    ``@model_validator``s are left out: one may read a field nobody has
-    written.
+    ``@model_validator``s are left out, this model's own and those of the
+    models its fields declare: one may read a field nobody has written.
     """
-    validators = _own_field_validators(model)
-    if not validators:
+    if not _declares_field_rules(model):
         return None
     fields = {
-        name: (field.annotation, _optional_field(field))
+        name: (_rule_annotation(field.annotation), _optional_field(field))
         for name, field in model.model_fields.items()
         if name in written
     }
@@ -981,7 +1062,7 @@ def _rule_shadow(
     return create_model(  # type: ignore[call-overload]
         f"{model.__name__}__Rules",
         __config__=_shadow_config(model),
-        __validators__=validators,
+        __validators__=_own_field_validators(model),
         **fields,
     )
 
