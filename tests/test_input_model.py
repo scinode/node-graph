@@ -2093,3 +2093,102 @@ def test_a_bare_socket_in_the_same_place_is_still_a_reference():
         source = a_thousand()
         cutoff(structure="si", ecutwfc=source.result)
     assert links_of(graph) == ["a_thousand.outputs.result -> cutoff.inputs.ecutwfc"]
+
+
+# --------------------------------------------------------------------------
+# 21. One rule waiting does not silence the rest of the write
+# --------------------------------------------------------------------------
+
+
+class Job(BaseModel):
+    """Two rules, one of which reads a sibling."""
+
+    low: int = 0
+    high: int = 10
+    cores: int = 1
+
+    @field_validator("high")
+    @classmethod
+    def _above_low(cls, value, info):
+        if value <= info.data["low"]:
+            raise ValueError("high must exceed low")
+        return value
+
+    @field_validator("cores")
+    @classmethod
+    def _at_least_one(cls, value):
+        if value < 1:
+            raise ValueError("cores must be at least 1")
+        return value
+
+
+@task(input_model=Job)
+def job(low, high, cores):
+    return cores
+
+
+def test_a_rule_waiting_for_a_sibling_leaves_its_neighbours_running():
+    """``high``'s rule has no ``low`` to read; ``cores``'s rule is answerable."""
+    graph = Graph(name="job")
+    with pytest.raises(TaskInputValidationError, match="cores must be at least 1"):
+        graph.add_task(job, "j", high=5, cores=-4)
+
+
+def test_the_same_two_rules_still_answer_when_the_sibling_is_there():
+    """The control: nothing waits, and the write is refused for the same reason."""
+    graph = Graph(name="job_whole")
+    with pytest.raises(TaskInputValidationError, match="cores must be at least 1"):
+        graph.add_task(job, "j", low=0, high=5, cores=-4)
+
+
+def test_the_rule_that_waited_is_answered_at_the_run_edge():
+    """The other half: what waits is judged once the whole payload is in hand."""
+    with pytest.raises(TaskInputValidationError, match="high must exceed low"):
+        job.run(low=9, high=5, cores=1)
+
+
+#: The table the rule below reads, so a missing key is the rule's own error.
+KNOWN_KEYS = {"a": 1}
+
+
+class Keyed(BaseModel):
+    key: str = "a"
+    other: int = 0
+
+    @field_validator("key")
+    @classmethod
+    def _known(cls, value):
+        KNOWN_KEYS[value]
+        return value
+
+    @field_validator("other")
+    @classmethod
+    def _positive(cls, value):
+        if value < 0:
+            raise ValueError("other must be positive")
+        return value
+
+
+@task(input_model=Keyed)
+def keyed(key, other):
+    return key
+
+
+def test_a_key_error_of_the_rules_own_making_refuses_the_write():
+    """A rule that raises is a rule that answered, whatever it raised.
+
+    The model itself raises ``KeyError`` on the same value, so a write the
+    wiring check waves through would be a write the model refuses.
+    """
+    with pytest.raises(KeyError):
+        Keyed(key="zzz")
+    graph = Graph(name="keyed")
+    with pytest.raises(KeyError):
+        graph.add_task(keyed, "k", key="zzz")
+
+
+def test_that_rule_does_not_silence_the_write_it_shares():
+    """The control: the neighbouring rule is reached on a key the table has."""
+    graph = Graph(name="keyed_ok")
+    with pytest.raises(TaskInputValidationError, match="other must be positive"):
+        graph.add_task(keyed, "k", key="a", other=-1)

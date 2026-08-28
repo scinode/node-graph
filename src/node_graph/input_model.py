@@ -846,12 +846,72 @@ def _partial_wiring_shadow(model: Type[BaseModel]) -> Type[BaseModel]:
     )
 
 
+class _UnwrittenSibling(Exception):
+    """A rule read a field the write it is judging did not name."""
+
+
+class _WrittenFields(dict):
+    """The fields a write named, refusing a lookup of any other.
+
+    ``info.data`` is a mapping and a rule reads it like one. A field this
+    write left out is not in it, and reading it raises rather than returning
+    a default or a stand-in, because the value a link will deliver is not
+    knowable here. ``get`` keeps its own contract and answers ``None``.
+    """
+
+    def __missing__(self, key: str) -> Any:
+        raise _UnwrittenSibling(key)
+
+
+class _RuleInfo:
+    """A pydantic ``ValidationInfo`` whose ``data`` refuses an unwritten field."""
+
+    __slots__ = ("_info",)
+
+    def __init__(self, info: Any) -> None:
+        self._info = info
+
+    @property
+    def data(self) -> Dict[str, Any]:
+        return _WrittenFields(self._info.data)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._info, name)
+
+
+def _waiting_on_unwritten_siblings(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Return ``func`` letting its field wait when it reads a field nobody wrote.
+
+    Only that one field waits. Every other rule in the same write still runs,
+    and every other error the rule raises -- a ``KeyError`` of the rule's own
+    making included -- travels on and refuses the write.
+    """
+    try:
+        takes_info = len(inspect.signature(func).parameters) > 1
+    except (TypeError, ValueError):
+        takes_info = False
+    if not takes_info:
+        return func
+
+    def waiting(value: Any, info: Any) -> Any:
+        try:
+            return func(value, _RuleInfo(info))
+        except _UnwrittenSibling:
+            return value
+
+    waiting.__name__ = getattr(func, "__name__", "waiting")
+    waiting.__qualname__ = getattr(func, "__qualname__", waiting.__name__)
+    return waiting
+
+
 def _own_field_validators(model: Type[BaseModel]) -> Dict[str, Any]:
     """Return ``model``'s ``mode='after'`` field validators, ready for a twin.
 
     Each is taken as the model bound it, so ``cls`` inside it is still the
     class the user wrote it on, and ``check_fields`` is off because the twin
-    may be handed a subset of the fields.
+    may be handed a subset of the fields. One reading ``info.data`` is wrapped
+    so that a field the write left out makes that one rule wait
+    (:func:`_waiting_on_unwritten_siblings`).
 
     Only ``mode='after'`` is taken. It judges a value the field's type has
     already accepted, which is the value every later checkpoint judges too; a
@@ -865,7 +925,7 @@ def _own_field_validators(model: Type[BaseModel]) -> Dict[str, Any]:
         if info.mode != "after":
             continue
         rebuilt[name] = field_validator(*info.fields, mode="after", check_fields=False)(
-            decorator.func
+            _waiting_on_unwritten_siblings(decorator.func)
         )
     return rebuilt
 
@@ -951,8 +1011,8 @@ def validate_wiring_inputs(
     ``mode='after'`` field validators then run over the fields whose value is
     resolved; a field holding a socket or a task is checked for its shape
     alone, because what flows through it is not known yet. A rule reading a
-    field nobody wrote raises ``KeyError`` from ``info.data``, and that rule
-    waits for the later checkpoints, where the whole payload is in hand.
+    field nobody wrote waits for the later checkpoints, where the whole
+    payload is in hand -- that one rule, and not the others in the same write.
 
     The validated instance is discarded and ``inputs`` is passed on untouched.
     That is not tidiness: pydantic strips the proxy a tagged value wears for
@@ -978,8 +1038,6 @@ def validate_wiring_inputs(
         rules.model_validate(untagged_copy(resolved))
     except ValidationError as exc:
         raise _rejected_wiring(model, exc, label) from exc
-    except KeyError:
-        return
 
 
 def validate_task_inputs(task: Any, inputs: Dict[str, Any]) -> None:
