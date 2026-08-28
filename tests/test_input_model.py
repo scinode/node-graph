@@ -886,7 +886,11 @@ SEEN: dict[str, str] = {}
 
 @task.graph(input_model=SpanInputs)
 def watched(low, high):
-    SEEN["low"] = type(low).__name__
+    from node_graph.socket import TaggedValue
+
+    # By kind, not by class name: what a tagged value is spelled as is the
+    # tagging layer's business, and it has more than one class.
+    SEEN["low"] = "tagged" if isinstance(low, TaggedValue) else type(low).__name__
     return add(x=low, y=high)
 
 
@@ -936,7 +940,7 @@ def test_the_body_still_receives_the_tagged_values_it_needs():
     """Validation builds fresh objects; the body is handed the originals, so links survive."""
     SEEN.clear()
     graph = watched.build(low=1, high=3)
-    assert SEEN["low"] == "TaggedValue"
+    assert SEEN["low"] == "tagged"
     assert "graph_inputs.inputs.low -> add.inputs.x" in links_of(graph)
 
 
