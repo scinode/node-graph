@@ -2753,6 +2753,17 @@ def test_two_tasks_off_one_function_each_keep_their_own_model():
         counted_bands.run(nbnd=-5)
 
 
+def test_a_spec_rebuilt_from_its_stored_form_still_carries_the_model():
+    """What is stored is a module path, so the path has to name what enforces it."""
+    from node_graph.input_model import _input_model_of_task
+    from node_graph.task_spec import TaskSpec
+
+    rebuilt = TaskSpec.from_dict(counted_bands._spec.to_dict()).to_task(name="b")
+    assert _input_model_of_task(rebuilt) is BandCount
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        rebuilt.set_inputs({"nbnd": -5})
+
+
 def test_a_wrapper_stored_by_value_carries_its_model_with_it():
     """The other route out of this module: nothing to bind, and nothing lost."""
 
