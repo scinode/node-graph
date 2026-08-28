@@ -2068,7 +2068,7 @@ def test_the_same_body_still_draws_the_link_for_a_value_the_bound_admits():
     link is what says the tag survived the check.
     """
     graph = calls_cutoff.build(structure="si", ecutwfc=100)
-    assert "graph_inputs.outputs.ecutwfc -> cutoff.inputs.ecutwfc" in links_of(graph)
+    assert "graph_inputs.inputs.ecutwfc -> cutoff.inputs.ecutwfc" in links_of(graph)
 
 
 def test_a_tagged_value_and_the_value_it_carries_are_judged_alike():
