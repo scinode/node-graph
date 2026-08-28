@@ -104,6 +104,7 @@ __all__ = [
     "dump_model_field",
     "input_model_of_callable",
     "model_dumper_for_socket",
+    "rebind_executor_callable",
     "spec_from_model",
     "validate_graph_inputs",
     "validate_task_inputs",
@@ -1661,6 +1662,27 @@ def body_inputs(model: Type[BaseModel], validated: BaseModel) -> Dict[str, Any]:
             continue
         inputs[name] = value
     return inputs
+
+
+def rebind_executor_callable(
+    outer: Callable[..., Any], inner: Callable[..., Any]
+) -> None:
+    """Move the name ``inner`` is bound under onto ``outer``.
+
+    A callable wrapping a validated callable -- an engine's own decorator over
+    it -- is what a task's executor has to resolve to, while the validated
+    callable goes on enforcing the models from inside. The binding moves, so
+    the name the executor records reaches the outer callable.
+    """
+    from node_graph.executor import BOUND_NAME_ATTR
+
+    name = getattr(inner, BOUND_NAME_ATTR, None)
+    if name is None:
+        return
+    module = sys.modules.get(getattr(inner, "__module__", "") or "")
+    if module is not None and getattr(module, name, None) is inner:
+        setattr(module, name, outer)
+    setattr(outer, BOUND_NAME_ATTR, name)
 
 
 def validated_callable(

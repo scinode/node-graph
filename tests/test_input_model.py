@@ -2783,6 +2783,37 @@ def test_the_run_edge_takes_what_an_engine_passes_positionally():
         ran(-5)
 
 
+def _rebound_body(nbnd):
+    """Stand for a body an engine's own decorator wraps after validation."""
+    return nbnd
+
+
+def test_a_wrapper_over_the_validated_one_takes_over_its_name():
+    """An engine's decorator is what the executor resolves to; the checks stay inside."""
+    import functools
+    import sys
+
+    from node_graph.executor import BOUND_NAME_ATTR
+    from node_graph.input_model import (
+        input_model_of_callable,
+        rebind_executor_callable,
+        validated_callable,
+    )
+
+    inner = validated_callable(_rebound_body, input_model=BandCount)
+
+    @functools.wraps(inner)
+    def outer(*args, **kwargs):
+        return inner(*args, **kwargs)
+
+    rebind_executor_callable(outer, inner)
+    bound = getattr(outer, BOUND_NAME_ATTR)
+    assert getattr(sys.modules[_rebound_body.__module__], bound) is outer
+    assert input_model_of_callable(outer) is BandCount
+    with pytest.raises(TaskInputValidationError, match="cannot be negative"):
+        outer(nbnd=-5)
+
+
 def test_a_wrapper_stored_by_value_carries_its_model_with_it():
     """The other route out of this module: nothing to bind, and nothing lost."""
 
