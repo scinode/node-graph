@@ -1530,7 +1530,16 @@ def output_model_of_callable(func: Any) -> Optional[Type[BaseModel]]:
 
 
 def _input_model_of_task(task: Any) -> Optional[Type[BaseModel]]:
-    """Return the input model of ``task``, resolving its executor once."""
+    """Return the input model of ``task``, resolving its executor once.
+
+    A task whose executor names a callable that cannot be reached from here --
+    a module that is not importable, a spec with no executor at all -- has no
+    contract to apply, and the generic path runs as it did before models.
+
+    Any other failure is a model this process cannot read, and a model it
+    cannot read is one it cannot enforce: that is a
+    :class:`ModelContractError`, not a task that quietly loses its checks.
+    """
     cached = getattr(task, _TASK_MODEL_CACHE, _UNRESOLVED)
     if cached is not _UNRESOLVED:
         return cast(Optional[Type[BaseModel]], cached)
@@ -1540,11 +1549,16 @@ def _input_model_of_task(task: Any) -> Optional[Type[BaseModel]]:
         callable_obj = executor.callable if executor is not None else None
         callable_obj = getattr(callable_obj, "_callable", callable_obj)
         model = input_model_of_callable(callable_obj)
-    except Exception:
-        # A task whose executor cannot be resolved here (a pickled callable
-        # restored through SafeExecutor, say) simply has no model contract to
-        # apply; the generic serialization path still runs.
+    except (ImportError, AttributeError):
         model = None
+    except Exception as exc:
+        raise ModelContractError(
+            f"Task '{getattr(task, 'name', '?')}' carries a callable this process "
+            f"cannot rebuild, so no input model can be read from it: "
+            f"{type(exc).__name__}: {exc}\n"
+            "How to fix: move the task's function and the models it declares "
+            "into an importable module."
+        ) from exc
     try:
         setattr(task, _TASK_MODEL_CACHE, model)
     except AttributeError:

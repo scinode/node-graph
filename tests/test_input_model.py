@@ -2298,3 +2298,98 @@ def test_the_private_name_a_models_cross_field_rules_are_read_from_still_answers
     assert issubclass(twin, Agreeing)
     assert twin.__pydantic_decorators__.model_validators == {}
     assert set(Agreeing.__pydantic_decorators__.model_validators) == {"_agree"}
+
+
+# --------------------------------------------------------------------------
+# 23. A model this process cannot read is not a task without rules
+# --------------------------------------------------------------------------
+
+
+class _RaisingExecutor:
+    """An executor whose callable cannot be produced."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    @property
+    def callable(self):
+        raise self._error
+
+
+class _SpecWith:
+    def __init__(self, executor) -> None:
+        self.executor = executor
+
+
+class _TaskWith:
+    def __init__(self, executor) -> None:
+        self.name = "t"
+        self.spec = _SpecWith(executor)
+
+
+def test_a_callable_this_process_cannot_rebuild_is_refused_by_name():
+    """Reading the model is how the checks are found; failing to read it is loud."""
+    from node_graph.input_model import _input_model_of_task
+
+    task_like = _TaskWith(_RaisingExecutor(RuntimeError("no schema")))
+    with pytest.raises(ModelContractError, match="importable module"):
+        _input_model_of_task(task_like)
+
+
+def test_a_callable_that_is_simply_not_here_still_has_no_contract():
+    """The control, and the documented case: nothing to import is nothing to enforce."""
+    from node_graph.input_model import _input_model_of_task
+
+    task_like = _TaskWith(_RaisingExecutor(ImportError("no such module")))
+    assert _input_model_of_task(task_like) is None
+
+
+def test_a_task_whose_callable_is_here_reads_its_model():
+    """The other control: the ordinary path still finds the model it enforces."""
+    from node_graph.input_model import _input_model_of_task
+
+    graph = Graph(name="resolves")
+    assert _input_model_of_task(graph.add_task(bounded, "b")) is Bounded
+
+
+def test_a_model_written_in_a_script_that_cannot_be_rebuilt_is_refused(tmp_path):
+    """The route this reaches in practice, run as a script rather than described.
+
+    Under ``from __future__ import annotations``, a model declaring a nested
+    model that carries a ``@model_validator`` does not survive the round trip
+    a ``__main__`` callable is stored through, and a model that cannot be read
+    is a task whose every write would go unchecked.
+    """
+    import subprocess
+    import sys
+
+    script = tmp_path / "run.py"
+    script.write_text(
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel, model_validator\n"
+        "from node_graph import Graph, task\n"
+        "\n"
+        "class Pair(BaseModel):\n"
+        "    n: int = 1\n"
+        "    m: int = 1\n"
+        "    @model_validator(mode='after')\n"
+        "    def _agree(self):\n"
+        "        if self.n != self.m:\n"
+        "            raise ValueError('n and m must agree')\n"
+        "        return self\n"
+        "\n"
+        "class Holder(BaseModel):\n"
+        "    pair: Pair = Pair()\n"
+        "\n"
+        "@task(input_model=Holder)\n"
+        "def holder(pair):\n"
+        "    return pair\n"
+        "\n"
+        "Graph(name='s').add_task(holder, 'h')\n"
+    )
+    finished = subprocess.run(
+        [sys.executable, str(script)], capture_output=True, text=True
+    )
+    assert finished.returncode != 0
+    assert "ModelContractError" in finished.stderr
+    assert "importable module" in finished.stderr
