@@ -1,4 +1,4 @@
-from node_graph import Graph, task, namespace
+from node_graph import Graph, task, namespace, dynamic
 from node_graph.config import INPUT_SOCKET_NAME, OUTPUT_SOCKET_NAME
 import pytest
 from typing import Any
@@ -186,6 +186,56 @@ def test_load_graph():
     ng1 = Graph.from_dict(ngdata)
     assert "sum" in ng1.tasks.test1.outputs.nested
     assert ng1.tasks.test1.inputs._value == ng.tasks.test1.inputs._value
+
+
+def test_load_graph_mixed_dynamic_static_namespace():
+    @task(
+        outputs=namespace(
+            set1=namespace(a=Any, b=Any),
+            set2=namespace(a=Any, b=Any),
+        )
+    )
+    def generate_sets():
+        return {
+            "set1": {"a": 1, "b": 5},
+            "set2": {"a": -3, "b": 2},
+        }
+
+    @task(
+        outputs=dynamic(namespace(sum=Any, product=Any)),
+    )
+    def test(nested: dynamic(namespace(a=Any, b=Any)) = {}):
+        return {
+            k: {
+                "sum": v["a"] + v["b"],
+                "product": v["a"] * v["b"],
+            }
+            for k, v in nested.items()
+        }
+
+    ng = Graph()
+    test1 = ng.add_task(generate_sets, "test1")
+    test2 = ng.add_task(test, "test2")
+    test2.set_inputs(
+        {
+            "nested": {
+                "set1": {
+                    "a": test1.outputs.set1.a,
+                    "b": test1.outputs.set1.b,
+                },
+                "set2": {
+                    "a": test1.outputs.set2.a,
+                    "b": test1.outputs.set2.b,
+                },
+            }
+        }
+    )
+    ngdata = ng.to_dict()
+    # load graph
+    ng1 = Graph.from_dict(ngdata)
+    assert ng1.tasks.test2.outputs._metadata.extras["dynamic"]
+    assert "sum" in ng1.tasks.test2.outputs._metadata.extras["item"]["fields"]
+    assert ng1.tasks.test2.inputs._value == ng.tasks.test2.inputs._value
 
 
 def test_expose_inputs(test_ng):

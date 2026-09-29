@@ -716,23 +716,24 @@ class Graph(IOOwnerMixin, WidgetRenderableMixin):
                         )
                     parent._append_dynamic_child(part, {})
                     parent = parent[part]
-                if not isinstance(parent, TaskSocketNamespace):
-                    raise ValueError(
-                        f"Cannot create socket '{socket_path}' under leaf "
-                        f"{parent._full_name_with_task}."
-                    )
-                if not parent._metadata.dynamic:
-                    raise ValueError(
-                        f"Missing socket '{socket_path}' in {task.name}.inputs and "
-                        "parent namespace is not dynamic."
-                    )
-                if (
-                    isinstance(source, TaskSocketNamespace)
-                    or getattr(source, "_scoped_name", None) == OUTPUT_SOCKET_NAME
-                ):
-                    parent._append_dynamic_child(parts[-1], {})
-                else:
-                    parent._append_dynamic_child(parts[-1], None)
+                if parts[-1] not in parent:
+                    if not isinstance(parent, TaskSocketNamespace):
+                        raise ValueError(
+                            f"Cannot create socket '{socket_path}' under leaf "
+                            f"{parent._full_name_with_task}."
+                        )
+                    if not parent._metadata.dynamic:
+                        raise ValueError(
+                            f"Missing socket '{socket_path}' in {task.name}.inputs and "
+                            "parent namespace is not dynamic."
+                        )
+                    if (
+                        isinstance(source, TaskSocketNamespace)
+                        or getattr(source, "_scoped_name", None) == OUTPUT_SOCKET_NAME
+                    ):
+                        parent._append_dynamic_child(parts[-1], {})
+                    else:
+                        parent._append_dynamic_child(parts[-1], None)
                 target = parent[parts[-1]]
             self.add_link(source, target, allow_skip_linked=True)
 
